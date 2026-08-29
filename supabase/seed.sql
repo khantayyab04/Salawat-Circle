@@ -1,0 +1,1 @@
+-- Synthetische lokale Seed-Daten werden mit dem Datenmodell in WP05 ergänzt.
