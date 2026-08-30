@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 const mobileRoot = new URL("../apps/mobile/", import.meta.url);
+const repositoryRoot = new URL("../", import.meta.url);
 
 function readExpoConfig(platform) {
   const result = spawnSync(
@@ -57,4 +58,21 @@ test("the MVP02 app declares rotation and separate German and English locales", 
   assert.equal(config.orientation, "default");
   assert.deepEqual(localization[1].supportedLocales.ios, ["de", "en"]);
   assert.deepEqual(localization[1].supportedLocales.android, ["de", "en"]);
+});
+
+test("Expo-generated environment declarations stay out of Git", () => {
+  const result = spawnSync(
+    "git",
+    ["check-ignore", "--no-index", "apps/mobile/expo-env.d.ts"],
+    {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+    },
+  );
+
+  assert.equal(
+    result.status,
+    0,
+    "apps/mobile/expo-env.d.ts must be ignored because Expo rewrites it during development.",
+  );
 });
