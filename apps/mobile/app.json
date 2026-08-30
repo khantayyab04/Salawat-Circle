@@ -20,12 +20,19 @@
         "expo-localization",
         {
           "supportedLocales": {
-            "ios": ["de", "en"],
-            "android": ["de", "en"]
+            "ios": [
+              "de",
+              "en"
+            ],
+            "android": [
+              "de",
+              "en"
+            ]
           }
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

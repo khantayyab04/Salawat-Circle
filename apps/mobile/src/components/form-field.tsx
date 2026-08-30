@@ -18,6 +18,7 @@ export function FormField({
         {label}
       </Text>
       <TextInput
+        accessibilityLabel={props.accessibilityLabel ?? label}
         accessibilityLabelledBy={`${id}-label`}
         accessibilityHint={error ?? hint}
         placeholderTextColor={colors.textDisabled}

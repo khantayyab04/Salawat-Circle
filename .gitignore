@@ -12,6 +12,11 @@ web-build/
 *.key
 *.mobileprovision
 
+# Skills and agents local state
+.agents/
+agent/
+.claude/
+
 # Environment and secrets
 .env
 .env.*

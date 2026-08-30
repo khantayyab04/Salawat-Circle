@@ -25,12 +25,12 @@ sql_paths = ["./seed.sql"]
 enabled = false
 
 [studio]
-enabled = true
+enabled = false
 port = 54323
 api_url = "http://127.0.0.1"
 
 [local_smtp]
-enabled = true
+enabled = false
 port = 54324
 
 [storage]
