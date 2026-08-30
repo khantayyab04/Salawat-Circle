@@ -1,3 +1,4 @@
 # Mobile App
 
-Platzhalter für die Expo-/React-Native-App. Die Initialisierung erfolgt in WP01.
+Die Expo-App für iOS und Android. Lokale Einrichtung und Startbefehle stehen in der
+[Entwickleranleitung](../../README.md#lokale-entwicklung).

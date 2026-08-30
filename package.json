@@ -1,0 +1,24 @@
+{
+  "name": "salawat-circle",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @salawat-circle/mobile start",
+    "dev:android": "pnpm --filter @salawat-circle/mobile android",
+    "dev:ios": "pnpm --filter @salawat-circle/mobile ios",
+    "lint": "pnpm --filter @salawat-circle/mobile lint",
+    "test": "node --test scripts/mvp01-smoke.test.mjs && pnpm --filter @salawat-circle/mobile test",
+    "typecheck": "pnpm --filter @salawat-circle/mobile typecheck",
+    "supabase:start": "supabase start",
+    "supabase:status": "supabase status",
+    "supabase:stop": "supabase stop",
+    "verify": "pnpm test && pnpm lint && pnpm typecheck"
+  },
+  "devDependencies": {
+    "supabase": "2.116.0"
+  }
+}

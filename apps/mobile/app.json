@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Salawat Circle",
+    "slug": "salawat-circle",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "salawat-circle",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "de.salawatcircle.app",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "de.salawatcircle.app",
+      "predictiveBackGestureEnabled": true
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}
