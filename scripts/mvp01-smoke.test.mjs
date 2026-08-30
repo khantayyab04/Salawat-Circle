@@ -7,12 +7,7 @@ const mobileRoot = new URL("../apps/mobile/", import.meta.url);
 function readExpoConfig(platform) {
   const result = spawnSync(
     "./node_modules/.bin/expo",
-    [
-      "config",
-      "--type",
-      "public",
-      "--json",
-    ],
+    ["config", "--type", "public", "--json"],
     {
       cwd: mobileRoot,
       encoding: "utf8",
@@ -51,4 +46,15 @@ test("the managed app resolves an Android development configuration", () => {
 
   assert.equal(config.name, "Salawat Circle");
   assert.equal(config.android.package, "de.salawatcircle.app");
+});
+
+test("the MVP02 app declares rotation and separate German and English locales", () => {
+  const config = readExpoConfig("ios");
+  const localization = config.plugins.find(
+    (plugin) => Array.isArray(plugin) && plugin[0] === "expo-localization",
+  );
+
+  assert.equal(config.orientation, "default");
+  assert.deepEqual(localization[1].supportedLocales.ios, ["de", "en"]);
+  assert.deepEqual(localization[1].supportedLocales.android, ["de", "en"]);
 });

@@ -1,11 +1,5 @@
-import { FoundationScreen } from "@/screens/foundation";
-import { StatusBar } from "expo-status-bar";
+import { Redirect } from "expo-router";
 
-export default function FoundationRoute() {
-  return (
-    <>
-      <FoundationScreen />
-      <StatusBar style="auto" />
-    </>
-  );
+export default function IndexRoute() {
+  return <Redirect href="/welcome" />;
 }
