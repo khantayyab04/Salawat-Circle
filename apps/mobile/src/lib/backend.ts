@@ -48,7 +48,7 @@ export async function checkBackendHealth(config: BackendConfig) {
   }
 }
 
-export function checkConfiguredBackend() {
+export async function checkConfiguredBackend() {
   const platform = process.env.EXPO_OS === "android" ? "android" : "ios";
   const config = resolveBackendConfig(
     {

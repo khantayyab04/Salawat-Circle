@@ -1,8 +1,16 @@
 import { once } from "node:events";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { describe, expect, it } from "vitest";
-import { checkBackendHealth, resolveBackendConfig } from "./backend";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  checkBackendHealth,
+  checkConfiguredBackend,
+  resolveBackendConfig,
+} from "./backend";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe("resolveBackendConfig", () => {
   it("uses the Android emulator URL on Android", () => {
@@ -104,5 +112,17 @@ describe("checkBackendHealth", () => {
     } finally {
       server.close();
     }
+  });
+});
+
+describe("checkConfiguredBackend", () => {
+  it("rejects missing configuration through its promise contract", async () => {
+    vi.stubEnv("EXPO_PUBLIC_SUPABASE_ANON_KEY", "");
+    vi.stubEnv("EXPO_PUBLIC_SUPABASE_URL_ANDROID", "");
+    vi.stubEnv("EXPO_PUBLIC_SUPABASE_URL_IOS", "");
+
+    await expect(checkConfiguredBackend()).rejects.toThrow(
+      "Backend-Konfiguration fehlt.",
+    );
   });
 });
