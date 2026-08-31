@@ -89,6 +89,21 @@ pnpm dev:android
 Der Foundation-Screen zeigt den Zustand der lokalen REST-Verbindung. Die App verwendet Expo Go;
 native `ios/`- und `android/`-Projekte werden in MVP01 nicht erzeugt oder eingecheckt.
 
+Der lokale E-Mail-OTP wird von Supabase an Mailpit zugestellt. Mailpit ist unter
+`http://127.0.0.1:54324` erreichbar; es werden ausschließlich synthetische Adressen verwendet.
+Der lokale Code ist sechs Stellen lang, zehn Minuten gültig und kann frühestens nach 60
+Sekunden erneut angefordert werden. Eigener SMTP und Bot-Schutz sind Voraussetzungen für die
+spätere Produktionsumgebung und nicht Teil von MVP03.
+
+Migration, RLS-Tests und der lokale OTP-Vertrag lassen sich reproduzierbar prüfen:
+
+```bash
+pnpm supabase:reset
+pnpm supabase:test
+pnpm supabase:types
+pnpm test:auth-integration
+```
+
 ### Qualitätsprüfung
 
 ```bash

@@ -5,6 +5,7 @@ import {
   AppText,
   FormField,
 } from "@/components";
+import { useAuth } from "@/lib/auth";
 import { useTranslation, type LanguagePreference } from "@/localization";
 import { spacing } from "@/theme";
 import { Host, List, ListItem, Picker } from "@expo/ui";
@@ -13,7 +14,16 @@ import { useState } from "react";
 
 export function SettingsScreen() {
   const { t, preference, setPreference } = useTranslation();
+  const auth = useAuth();
   const router = useRouter();
+  const handleSignOut = async () => {
+    try {
+      await auth.signOut();
+      router.replace("/welcome");
+    } catch {
+      // The provider still performs local cleanup and exposes a stable error.
+    }
+  };
   return (
     <AppScreen>
       <AppCard>
@@ -51,6 +61,17 @@ export function SettingsScreen() {
           </ListItem>
         </List>
       </Host>
+      {auth.errorCode === "SIGN_OUT_FAILED" ? (
+        <AppText accessibilityLiveRegion="polite">
+          {t("settingsSignOutFailed")}
+        </AppText>
+      ) : null}
+      <AppButton
+        label={t("settingsSignOut")}
+        loading={auth.busy}
+        variant="destructive"
+        onPress={() => void handleSignOut()}
+      />
     </AppScreen>
   );
 }

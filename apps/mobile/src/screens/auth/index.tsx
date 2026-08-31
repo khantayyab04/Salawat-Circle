@@ -5,11 +5,17 @@ import {
   AppText,
   FormField,
 } from "@/components";
+import { useAuth } from "@/lib/auth";
+import {
+  parseDisplayName,
+  parseEmail,
+  parseOtp,
+  parseTimeZone,
+} from "@/lib/auth/validation";
 import { useTranslation } from "@/localization";
-import { spacing, useAppTheme } from "@/theme";
-import { useRouter } from "expo-router";
-import { useState } from "react";
-import { Pressable, View } from "react-native";
+import { Host, Checkbox } from "@expo/ui";
+import { Redirect, useRouter } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
 
 export function WelcomeScreen() {
   const { t } = useTranslation();
@@ -33,8 +39,25 @@ export function WelcomeScreen() {
 
 export function EmailScreen() {
   const { t } = useTranslation();
+  const auth = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState("");
+  const emailValid = useMemo(() => {
+    try {
+      parseEmail(email);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [email]);
+  const handleSubmit = async () => {
+    try {
+      await auth.requestOtp(email);
+      router.push("/auth/code");
+    } catch {
+      // The provider exposes only stable, non-enumerating error codes.
+    }
+  };
   return (
     <AppScreen>
       <FormField
@@ -43,12 +66,23 @@ export function EmailScreen() {
         keyboardType="email-address"
         label={t("authEmailLabel")}
         hint={t("authEmailHint")}
+        error={email.length > 0 && !emailValid ? t("authEmailInvalid") : undefined}
         value={email}
-        onChangeText={setEmail}
+        onChangeText={(value) => {
+          auth.clearError();
+          setEmail(value);
+        }}
       />
+      {auth.errorCode === "OTP_REQUEST_FAILED" ? (
+        <AppText accessibilityLiveRegion="polite">
+          {t("authRequestFailed")}
+        </AppText>
+      ) : null}
       <AppButton
+        disabled={!emailValid}
         label={t("authEmailAction")}
-        onPress={() => router.push("/auth/code")}
+        loading={auth.busy}
+        onPress={() => void handleSubmit()}
       />
     </AppScreen>
   );
@@ -56,89 +90,191 @@ export function EmailScreen() {
 
 export function CodeScreen() {
   const { t } = useTranslation();
+  const auth = useAuth();
   const router = useRouter();
   const [code, setCode] = useState("");
+  const [secondsRemaining, setSecondsRemaining] = useState(
+    auth.nextOtpRequestAt ? 60 : 0,
+  );
+  useEffect(() => {
+    if (!auth.nextOtpRequestAt) return;
+    const timer = setInterval(
+      () =>
+        setSecondsRemaining(
+          Math.max(
+            0,
+            Math.ceil((auth.nextOtpRequestAt! - Date.now()) / 1_000),
+          ),
+        ),
+      1_000,
+    );
+    return () => clearInterval(timer);
+  }, [auth.nextOtpRequestAt]);
+  if (!auth.pendingEmail) return <Redirect href="/auth/email" />;
+  const codeValid = (() => {
+    try {
+      parseOtp(code);
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+  const handleVerify = async () => {
+    try {
+      await auth.verifyOtp(code);
+      router.replace("/");
+    } catch {
+      // The same visible error is used for invalid, expired and reused codes.
+    }
+  };
+  const handleResend = async () => {
+    try {
+      await auth.requestOtp(auth.pendingEmail!);
+      setSecondsRemaining(60);
+    } catch {
+      // The provider maps upstream failures to a stable generic error.
+    }
+  };
   return (
     <AppScreen>
+      <AppText>{t("authCodeSent")}</AppText>
       <FormField
         keyboardType="number-pad"
         maxLength={6}
         label={t("authCodeLabel")}
         hint={t("authCodeHint")}
         value={code}
-        onChangeText={setCode}
+        onChangeText={(value) => {
+          auth.clearError();
+          setCode(value.replace(/\D/gu, ""));
+        }}
+      />
+      {auth.errorCode === "OTP_INVALID" ? (
+        <AppText accessibilityLiveRegion="polite">{t("authCodeInvalid")}</AppText>
+      ) : auth.errorCode === "OTP_REQUEST_FAILED" ? (
+        <AppText accessibilityLiveRegion="polite">{t("authRequestFailed")}</AppText>
+      ) : null}
+      <AppButton
+        disabled={!codeValid}
+        label={t("authCodeAction")}
+        loading={auth.busy}
+        onPress={() => void handleVerify()}
       />
       <AppButton
-        label={t("commonContinue")}
-        onPress={() => router.push("/onboarding/profile")}
+        label={
+          secondsRemaining > 0
+            ? `${t("authCodeResendIn")} ${secondsRemaining} s`
+            : t("authCodeResend")
+        }
+        variant="ghost"
+        disabled={secondsRemaining > 0}
+        onPress={() => void handleResend()}
       />
-      <AppButton label={t("authCodeResend")} variant="ghost" disabled />
     </AppScreen>
   );
 }
 
 export function ProfileOnboardingScreen() {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
+  const auth = useAuth();
   const router = useRouter();
   const [name, setName] = useState("");
+  const timeZone = useMemo(() => {
+    const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    try {
+      return parseTimeZone(detected);
+    } catch {
+      return "UTC";
+    }
+  }, []);
+  if (auth.status !== "profile_required") return <Redirect href="/" />;
+  const nameValid = (() => {
+    try {
+      parseDisplayName(name);
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+  const handleSave = async () => {
+    try {
+      await auth.saveProfile(name, timeZone, locale);
+      router.replace("/onboarding/consent");
+    } catch {
+      // A localized stable error is rendered from provider state.
+    }
+  };
   return (
     <AppScreen>
       <FormField
         label={t("profileNameLabel")}
+        hint={t("profileNameHint")}
+        error={name.length > 0 && !nameValid ? t("profileNameInvalid") : undefined}
         value={name}
-        onChangeText={setName}
+        onChangeText={(value) => {
+          auth.clearError();
+          setName(value);
+        }}
       />
       <FormField
         editable={false}
         label={t("profileTimezoneLabel")}
-        value={Intl.DateTimeFormat().resolvedOptions().timeZone}
+        hint={t("profileTimezoneHint")}
+        value={timeZone}
       />
+      {auth.errorCode === "PROFILE_SAVE_FAILED" ? (
+        <AppText accessibilityLiveRegion="polite">{t("profileSaveFailed")}</AppText>
+      ) : null}
       <AppButton
+        disabled={!nameValid}
         label={t("commonContinue")}
-        onPress={() => router.push("/onboarding/consent")}
+        loading={auth.busy}
+        onPress={() => void handleSave()}
       />
     </AppScreen>
   );
 }
 
 export function ConsentScreen() {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
+  const auth = useAuth();
   const router = useRouter();
-  const { colors } = useAppTheme();
   const [accepted, setAccepted] = useState(false);
+  if (auth.status !== "consent_required") return <Redirect href="/" />;
+  const handleConsent = async () => {
+    try {
+      const inviteToken = await auth.grantConsent(locale);
+      router.replace(
+        inviteToken
+          ? { pathname: "/join/[token]", params: { token: inviteToken } }
+          : "/today",
+      );
+    } catch {
+      // A localized stable error is rendered from provider state.
+    }
+  };
   return (
     <AppScreen>
+      <AppText>{t("consentBody")}</AppText>
       <AppCard>
-        <Pressable
-          accessibilityHint={t("consentHint")}
-          accessibilityLabel={t("consentLabel")}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: accepted }}
-          onPress={() => setAccepted((value) => !value)}
-          style={{
-            minHeight: 48,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: spacing.md,
-          }}
-        >
-          <View
-            style={{
-              width: 24,
-              height: 24,
-              borderWidth: 2,
-              borderColor: colors.accent,
-              backgroundColor: accepted ? colors.accent : "transparent",
-            }}
+        <Host matchContents>
+          <Checkbox
+            value={accepted}
+            onValueChange={setAccepted}
+            label={t("consentLabel")}
+            testID="core-consent-checkbox"
           />
-          <AppText style={{ flex: 1 }}>{t("consentLabel")}</AppText>
-        </Pressable>
+        </Host>
         <AppText variant="caption">{t("consentHint")}</AppText>
       </AppCard>
+      {auth.errorCode === "CONSENT_SAVE_FAILED" ? (
+        <AppText accessibilityLiveRegion="polite">{t("consentSaveFailed")}</AppText>
+      ) : null}
       <AppButton
         disabled={!accepted}
         label={t("commonContinue")}
-        onPress={() => router.replace("/today")}
+        loading={auth.busy}
+        onPress={() => void handleConsent()}
       />
     </AppScreen>
   );

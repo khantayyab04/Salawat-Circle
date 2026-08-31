@@ -1,5 +1,6 @@
 export type BackendEnvironment = {
   EXPO_PUBLIC_SUPABASE_ANON_KEY?: string;
+  EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY?: string;
   EXPO_PUBLIC_SUPABASE_URL_ANDROID?: string;
   EXPO_PUBLIC_SUPABASE_URL_IOS?: string;
 };
@@ -15,7 +16,9 @@ export function resolveBackendConfig(
   environment: BackendEnvironment,
   platform: MobilePlatform,
 ) {
-  const anonKey = environment.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  const anonKey =
+    environment.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+    environment.EXPO_PUBLIC_SUPABASE_ANON_KEY;
   const url =
     platform === "android"
       ? environment.EXPO_PUBLIC_SUPABASE_URL_ANDROID
@@ -54,6 +57,8 @@ export async function checkConfiguredBackend() {
     {
       EXPO_PUBLIC_SUPABASE_ANON_KEY:
         process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+      EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
+        process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
       EXPO_PUBLIC_SUPABASE_URL_ANDROID:
         process.env.EXPO_PUBLIC_SUPABASE_URL_ANDROID,
       EXPO_PUBLIC_SUPABASE_URL_IOS:
