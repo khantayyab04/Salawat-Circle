@@ -3,7 +3,9 @@ import { render, waitFor } from "@testing-library/react-native";
 import JoinRoute from "@/app/join/[token]";
 
 let mockStatus = "signed_out";
-const mockRememberInvite = jest.fn<() => Promise<void>>();
+let mockTokenParam: string | string[] | undefined =
+  "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+const mockRememberInvite = jest.fn<(token: string) => Promise<void>>();
 
 jest.mock("@/lib/auth", () => ({
   useAuth: () => ({
@@ -31,13 +33,19 @@ jest.mock("@/screens/main", () => {
   );
   return { JoinScreen: () => <Text>join-preview</Text> };
 });
+jest.mock("@/screens/groups", () => {
+  const { Text } = jest.requireActual<typeof import("react-native")>(
+    "react-native",
+  );
+  return { JoinScreen: () => <Text>join-preview</Text> };
+});
 jest.mock("expo-router", () => {
   const { Text } = jest.requireActual<typeof import("react-native")>(
     "react-native",
   );
   return {
     Redirect: ({ href }: { href: string }) => <Text>{href}</Text>,
-    useLocalSearchParams: () => ({ token: "invite-secret" }),
+    useLocalSearchParams: () => ({ token: mockTokenParam }),
   };
 });
 jest.mock("expo-router/stack", () => ({
@@ -47,6 +55,7 @@ jest.mock("expo-router/stack", () => ({
 beforeEach(() => {
   jest.clearAllMocks();
   mockStatus = "signed_out";
+  mockTokenParam = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
   mockRememberInvite.mockResolvedValue(undefined);
 });
 
@@ -55,7 +64,9 @@ describe("MVP03 join route", () => {
     const view = await render(<JoinRoute />);
 
     await waitFor(() =>
-      expect(mockRememberInvite).toHaveBeenCalledWith("invite-secret"),
+      expect(mockRememberInvite).toHaveBeenCalledWith(
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      ),
     );
     expect(view.getByText("/")).toBeTruthy();
   });
@@ -84,5 +95,17 @@ describe("MVP03 join route", () => {
       expect(view.getByText("invite-storage-error")).toBeTruthy(),
     );
     expect(view.queryByText("/")).toBeNull();
+  });
+
+  it("ignores invalid or ambiguous token params without persisting secrets", async () => {
+    mockTokenParam = [
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    ];
+
+    const view = await render(<JoinRoute />);
+
+    await waitFor(() => expect(view.getByText("/")).toBeTruthy());
+    expect(mockRememberInvite).not.toHaveBeenCalled();
   });
 });

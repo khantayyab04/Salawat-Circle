@@ -20,7 +20,10 @@ type Value = {
   localeTag: string;
   preference: LanguagePreference;
   setPreference: (value: LanguagePreference) => void;
-  t: (key: TranslationKey) => string;
+  t: (
+    key: TranslationKey,
+    options?: Record<string, string | number>,
+  ) => string;
 };
 const Context = createContext<Value | null>(null);
 export function I18nProvider({ children }: PropsWithChildren) {
@@ -40,7 +43,8 @@ export function I18nProvider({ children }: PropsWithChildren) {
     return value;
   }, [locale]);
   const t = useCallback(
-    (key: TranslationKey) => i18n.t(key, { defaultValue: de[key] }),
+    (key: TranslationKey, options?: Record<string, string | number>) =>
+      i18n.t(key, { defaultValue: de[key], ...(options ?? {}) }),
     [i18n],
   );
   const value = useMemo(

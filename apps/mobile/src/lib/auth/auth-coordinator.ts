@@ -105,6 +105,7 @@ export class AuthCoordinator {
       const user = await this.gateway.verifyOtp(email, parseOtp(token));
       this.snapshot.userId = user.id;
       await this.refreshOnboardingStatus();
+      return this.snapshot.status;
     } catch {
       throw new Error("OTP_INVALID");
     }

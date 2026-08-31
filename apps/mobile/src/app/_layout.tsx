@@ -27,6 +27,7 @@ function RootNavigator() {
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="entry/[id]/edit" />
             </Stack.Protected>
+            <Stack.Screen name="join/index" />
             <Stack.Screen name="join/[token]" />
           </Stack>
         </GroupsProvider>

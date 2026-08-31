@@ -200,6 +200,11 @@ export function GroupsScreen() {
       }
     >
       <AppButton label={t("groupsCreate")} onPress={() => push("/groups/create")} />
+      <AppButton
+        label={t("groupsJoinManualCode")}
+        variant="secondary"
+        onPress={() => push("/join")}
+      />
       {showOfflineBanner ? (
         <StatusBanner
           title={t("groupsListOfflineTitle")}
