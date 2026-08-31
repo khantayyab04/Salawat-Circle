@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(31);
+select plan(33);
 
 select has_column(
   'public',
@@ -33,6 +33,11 @@ select col_not_null(
   'groups',
   'alias_epoch',
   'private alias epoch is always present on groups'
+);
+select is(
+  pg_catalog.has_column_privilege('authenticated', 'public.groups', 'alias_epoch', 'SELECT'),
+  false,
+  'authenticated clients have no direct SELECT privilege on groups.alias_epoch'
 );
 
 select col_is_null(
@@ -86,6 +91,17 @@ values ('20202020-2020-4020-8020-202020202020', '80808080-8080-4080-8080-8080808
 
 insert into public.group_memberships (group_id, user_id, sharing_consent_version, alias_name, alias_normalized)
 values ('20202020-2020-4020-8020-202020202020', '80808080-8080-4080-8080-808080808080', 'mvp08-owner-v1', 'Alpha', 'alpha');
+
+set local role authenticated;
+set local "request.jwt.claim.role" = 'authenticated';
+set local "request.jwt.claim.sub" = '80808080-8080-4080-8080-808080808080';
+select throws_ok(
+  $$ select alias_epoch from public.groups where id = '20202020-2020-4020-8020-202020202020' $$,
+  '42501',
+  null,
+  'authenticated members cannot select private groups.alias_epoch values'
+);
+reset role;
 
 select lives_ok(
   $$

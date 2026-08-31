@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(80);
+select plan(88);
 
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at
@@ -215,6 +215,12 @@ select throws_ok(
 set local role authenticated;
 set local "request.jwt.claim.role" = 'authenticated';
 set local "request.jwt.claim.sub" = '71000000-0000-4000-8000-000000000001';
+select throws_ok(
+  $$ select alias_epoch from public.groups where id = '7a7a7a7a-7a7a-47a7-87a7-7a7a7a7a7a70' $$,
+  '42501',
+  null,
+  'authenticated members cannot directly select private groups.alias_epoch values'
+);
 
 create temp table named_week as
 select public.get_group_leaderboard('7a7a7a7a-7a7a-47a7-87a7-7a7a7a7a7a70', 'week', null, null, null, 20) as response;
@@ -222,9 +228,22 @@ select public.get_group_leaderboard('7a7a7a7a-7a7a-47a7-87a7-7a7a7a7a7a70', 'wee
 create temp table named_all_time as
 select public.get_group_leaderboard('7a7a7a7a-7a7a-47a7-87a7-7a7a7a7a7a70', 'all_time', null, null, null, 20) as response;
 
+create temp table named_groups as
+select public.list_my_groups() as response;
+
 select ok(
   (select response->'group' ?& array['id', 'name', 'timezone', 'leaderboard_anonymous'] from named_week),
   'leaderboard group metadata includes anonymity flag with id/name/timezone'
+);
+select is(
+  (select jsonb_path_exists(response, '$.**.alias_epoch') from named_week),
+  false,
+  'leaderboard payload never includes private alias_epoch metadata'
+);
+select is(
+  (select jsonb_path_exists(response, '$.**.alias_epoch') from named_groups),
+  false,
+  'list_my_groups payload never includes private alias_epoch metadata'
 );
 select is(
   (select response->'group'->>'leaderboard_anonymous' from named_week),
@@ -387,6 +406,11 @@ select is(
   (select (response->'group'->>'revision')::integer from toggle_enable),
   2,
   'enabling anonymity increments revision exactly once'
+);
+select is(
+  (select jsonb_path_exists(response, '$.**.alias_epoch') from toggle_enable),
+  false,
+  'anonymity toggle payload never includes private alias_epoch metadata'
 );
 
 reset role;
@@ -1016,6 +1040,118 @@ select is(
     where id = '7b000000-0000-4000-8000-000000000008'
   ),
   'anonymous leaderboard exposes current-epoch joiners via alias row_id keys'
+);
+
+insert into public.group_memberships (
+  id, group_id, user_id, joined_at, left_at, sharing_consent_version, alias_name, alias_normalized, alias_key
+) values (
+  '7b000000-0000-4000-8000-000000000009',
+  '7a7a7a7a-7a7a-47a7-87a7-7a7a7a7a7a70',
+  '71000000-0000-4000-8000-000000000006',
+  clock_timestamp() - interval '6 days',
+  clock_timestamp() - interval '2 days',
+  'mvp08-leaderboard-v1',
+  null,
+  null,
+  null
+);
+
+update public.group_memberships
+set sharing_consent_version = 'mvp08-leaderboard-v2'
+where id = '7b000000-0000-4000-8000-000000000009'
+  and left_at is not null;
+
+select results_eq(
+  $$
+    select count(*)
+    from public.group_memberships
+    where id = '7b000000-0000-4000-8000-000000000009'
+      and left_at is not null
+      and alias_name is null
+      and alias_normalized is null
+      and alias_key is null
+  $$,
+  array[1::bigint],
+  'inactive membership rows keep null alias identity while they remain historical'
+);
+
+update public.group_memberships
+set left_at = null,
+    joined_at = clock_timestamp() - interval '3 hours'
+where id = '7b000000-0000-4000-8000-000000000009';
+
+insert into public.salawat_entries (id, user_id, amount, entry_date, timezone, recorded_at_client)
+values (
+  '7c000000-0000-4000-8000-000000000008',
+  '71000000-0000-4000-8000-000000000006',
+  150,
+  current_date,
+  'Europe/Berlin',
+  clock_timestamp() - interval '1 hour'
+);
+
+select results_eq(
+  $$
+    select (
+      left_at is null
+      and alias_name is not null
+      and alias_normalized = pg_catalog.lower(private.normalise_name(alias_name))
+      and alias_key is not null
+    )::boolean
+    from public.group_memberships
+    where id = '7b000000-0000-4000-8000-000000000009'
+  $$,
+  array[true],
+  'reactivating a historical membership assigns complete alias identity for active anonymity mode'
+);
+
+set local role authenticated;
+set local "request.jwt.claim.role" = 'authenticated';
+set local "request.jwt.claim.sub" = '71000000-0000-4000-8000-000000000001';
+create temp table anon_reactivated_page_one as
+select public.get_group_leaderboard('7a7a7a7a-7a7a-47a7-87a7-7a7a7a7a7a70', 'all_time', null, null, null, 2) as response;
+create temp table anon_reactivated_page_two as
+select public.get_group_leaderboard(
+  '7a7a7a7a-7a7a-47a7-87a7-7a7a7a7a7a70',
+  'all_time',
+  (select (response->'next_cursor'->>'rank')::integer from anon_reactivated_page_one),
+  (select response->'next_cursor'->>'sort_name' from anon_reactivated_page_one),
+  (select (response->'next_cursor'->>'row_id')::uuid from anon_reactivated_page_one),
+  2
+) as response;
+
+reset role;
+select is(
+  (
+    select item->>'row_id'
+    from anon_reactivated_page_two,
+    lateral jsonb_array_elements(response->'items') item
+    where item->>'display_name' = (
+      select alias_name
+      from public.group_memberships
+      where id = '7b000000-0000-4000-8000-000000000009'
+    )
+  ),
+  (
+    select alias_key::text
+    from public.group_memberships
+    where id = '7b000000-0000-4000-8000-000000000009'
+  ),
+  'anonymous pagination exposes reactivated members via current alias row_id keys'
+);
+select isnt(
+  (
+    select item->>'row_id'
+    from anon_reactivated_page_two,
+    lateral jsonb_array_elements(response->'items') item
+    where item->>'display_name' = (
+      select alias_name
+      from public.group_memberships
+      where id = '7b000000-0000-4000-8000-000000000009'
+    )
+  ),
+  '7b000000-0000-4000-8000-000000000009',
+  'anonymous pagination must not expose reactivated membership ids'
 );
 
 update public.groups

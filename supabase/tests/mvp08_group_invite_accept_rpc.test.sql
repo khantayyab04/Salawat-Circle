@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(55);
+select plan(57);
 
 select has_function(
   'public',
@@ -210,6 +210,11 @@ select ok(
   ),
   'invite preview exposes only safe group metadata fields'
 );
+select is(
+  (select jsonb_path_exists(response, '$.**.alias_epoch') from preview_token),
+  false,
+  'invite preview payload never includes private alias_epoch metadata'
+);
 select ok(
   (
     select not (response ?| array['token', 'code', 'token_hash', 'code_hash'])
@@ -369,6 +374,11 @@ select ok(
     from accepted_joiner
   ),
   'accept response includes only safe group metadata fields'
+);
+select is(
+  (select jsonb_path_exists(response, '$.**.alias_epoch') from accepted_joiner),
+  false,
+  'invite acceptance payload never includes private alias_epoch metadata'
 );
 select ok(
   (

@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(16);
+select plan(22);
 
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at
@@ -232,6 +232,130 @@ select results_eq(
   $$,
   array[1::bigint],
   'backfill preserves historical membership row keys'
+);
+
+update public.group_memberships
+set sharing_consent_version = 'mvp08-backfill-historical-v2'
+where id = '34343434-3434-4434-8434-343434343434'
+  and left_at is not null;
+
+select results_eq(
+  $$
+    select count(*)
+    from public.group_memberships
+    where id = '34343434-3434-4434-8434-343434343434'
+      and left_at is not null
+      and alias_name is null
+      and alias_normalized is null
+      and alias_key is null
+  $$,
+  array[1::bigint],
+  'inactive membership updates do not backfill alias identity while membership stays inactive'
+);
+
+update public.group_memberships
+set left_at = null,
+    joined_at = now() - interval '3 hours'
+where id = '34343434-3434-4434-8434-343434343434';
+
+select results_eq(
+  $$
+    select (
+      left_at is null
+      and alias_name is not null
+      and alias_normalized = pg_catalog.lower(private.normalise_name(alias_name))
+      and alias_key is not null
+    )::boolean
+    from public.group_memberships
+    where id = '34343434-3434-4434-8434-343434343434'
+  $$,
+  array[true],
+  'reactivating a historical membership assigns complete active alias identity'
+);
+
+create temp table alias_target_before as
+select alias_name, alias_normalized
+from public.group_memberships
+where id = '33333333-3333-4333-8333-333333333333';
+
+alter table public.group_memberships disable trigger group_memberships_assign_alias_after_update;
+update public.group_memberships
+set alias_key = null
+where id = '33333333-3333-4333-8333-333333333333';
+alter table public.group_memberships enable trigger group_memberships_assign_alias_after_update;
+
+create temp table alias_key_collision_attempts (
+  attempt_count integer not null default 0
+);
+insert into alias_key_collision_attempts default values;
+
+create or replace function private.force_alias_key_collision_for_test()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_attempt_count integer;
+  v_conflict_key uuid;
+begin
+  if new.id = '33333333-3333-4333-8333-333333333333'::uuid
+     and new.alias_key is not null then
+    update pg_temp.alias_key_collision_attempts
+    set attempt_count = attempt_count + 1
+    returning attempt_count into v_attempt_count;
+
+    if v_attempt_count <= 65 then
+      select membership.alias_key
+      into v_conflict_key
+      from public.group_memberships membership
+      where membership.id = '31313131-3131-4131-8131-313131313131'::uuid;
+
+      new.alias_key := v_conflict_key;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger mvp08_force_alias_key_collision
+before update of alias_key on public.group_memberships
+for each row execute function private.force_alias_key_collision_for_test();
+
+select throws_ok(
+  $$
+    select private.assign_membership_alias(
+      '33333333-3333-4333-8333-333333333333'::uuid,
+      (select alias_normalized from pg_temp.alias_target_before)
+    )
+  $$,
+  'P0001',
+  'INTERNAL',
+  'alias-key exhaustion must fail closed instead of falling through to alias rotation attempts'
+);
+
+drop trigger mvp08_force_alias_key_collision on public.group_memberships;
+drop function private.force_alias_key_collision_for_test();
+
+select is(
+  (select alias_name from public.group_memberships where id = '33333333-3333-4333-8333-333333333333'),
+  (select alias_name from pg_temp.alias_target_before),
+  'failed alias-key assignment preserves existing alias_name'
+);
+select is(
+  (select alias_normalized from public.group_memberships where id = '33333333-3333-4333-8333-333333333333'),
+  (select alias_normalized from pg_temp.alias_target_before),
+  'failed alias-key assignment preserves existing alias_normalized'
+);
+select results_eq(
+  $$
+    select count(*)
+    from public.group_memberships
+    where id = '33333333-3333-4333-8333-333333333333'
+      and alias_key is null
+  $$,
+  array[1::bigint],
+  'failed alias-key assignment keeps alias_key null instead of mutating identity'
 );
 
 set local role authenticated;
