@@ -74,13 +74,13 @@ von Einladungen.
 - **Einladungslinks & Deep-Links:** Einladungslinks verwenden optional die
   Umgebungsvariable `EXPO_PUBLIC_JOIN_BASE_URL` (z. B. `https://salawat.app/join/`,
   öffentliche HTTPS-URL ohne Geheimwerte) oder fallen auf das App-Schema
-  `salawatcircle://join/<token>` zurück.
+  `salawat-circle://join/<token>` zurück.
 - **Ausstehende Einladungen (Pending Invite Tokens):** Wird ein Einladungslink vor
   vollständiger Anmeldung oder Profilerstellung geöffnet, speichert die App das
-  Token verschlüsselt in SecureStore (`pending_invite_token_v1`) und führt den
+  Token verschlüsselt in SecureStore (`salawat-circle.pending-invite`) und führt den
   Beitrittsprozess nach Abschluss der Registrierung automatisch fort.
 - **Clipboard-Unterstützung:** Links und 10-stellige Einladungscodes können über
-  das installierte Paket `expo-clipboard` in die Zwischenablage kopiert werden.
+  das aktiv genutzte Paket `expo-clipboard` in die Zwischenablage kopiert werden.
 
 Der Integrationstest für Gruppen und Einladungen läuft mit:
 

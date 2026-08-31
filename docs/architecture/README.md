@@ -93,18 +93,19 @@ Ranglisten verwendet.
 
 Sämtliche Gruppen- und Einladungsfunktionen sind strikt über geschützte Supabase
 RPCs gekapselt (`list_my_groups`, `create_group`, `get_group_leaderboard`,
-`update_group_anonymity`, `create_group_invite`, `list_group_invites`,
-`revoke_group_invite`, `preview_group_invite`, `join_group_by_invite`). Direct SQL-
-oder RLS-Schreib- und Lesezugriffe auf die Gruppentabellen (`groups`,
-`group_memberships`, `group_invites`, `group_invite_hashes`) sind für die Data-API
-entzogen beziehungsweise vollständig blockiert.
+`public.set_group_leaderboard_anonymity`, `create_group_invite`, `list_group_invites`,
+`revoke_group_invite`, `preview_group_invite`, `public.accept_group_invite`). Direkte
+Lesezugriffe auf Gruppentabellen (`groups`, `group_memberships`) sind per RLS auf eigene
+aktive Mitgliedschaften beschränkt. Sämtliche Schreibzugriffe sind entzogen; Mutationen
+sowie Zugriffe auf private Einladungstabellen (`private.group_invites`) sind ausschließlich
+serverseitig per RPC möglich.
 
 ### Einladungs-Hashspeicherung
 
-Roh-Einladungstokens (10-stellige alphanumerische Codes) werden serverseitig
-ausschließlich als SHA-256-Hash in `group_invite_hashes` gespeichert (`sha256(token)`).
-Das Klartext-Token wird dem Ersteller bei der Erzeugung genau einmal zurückgegeben und
-im Backend weder in Tabellen noch in Serverlogs abgelegt.
+Roh-Einladungstokens (10-stellige alphanumerische Codes) und Einladungscodes werden serverseitig
+ausschließlich als SHA-256-Hashes (`token_hash` / `code_hash`) in `private.group_invites`
+gespeichert (`sha256(token)` / `sha256(code)`). Das Klartext-Token wird dem Ersteller bei der Erzeugung genau
+einmal zurückgegeben und im Backend weder in Tabellen noch in Serverlogs abgelegt.
 
 ### Mitgliedschafts-Zeitstempel (`joined_at`) und keine rückwirkenden Summen
 
@@ -126,16 +127,17 @@ Netzwerkverbindung zeigt die UI den entsprechenden Offline-Status.
 
 Wird ein Einladungslink geöffnet, während die App unangemeldet ist oder das Profil/die
 Einwilligung noch fehlt, wird das Token temporär in SecureStore unter dem Schlüssel
-`pending_invite_token_v1` hinterlegt. Nach Abschluss der Registrierung und Profilerstellung
+`salawat-circle.pending-invite` hinterlegt. Nach Abschluss der Registrierung und Profilerstellung
 wird das ausstehende Token gelesen, die Beitrittsvorschau automatisch geöffnet und der
 Schlüssel nach Verwendung oder Abbruch umgehend aus SecureStore gelöscht.
 
 ### Anonymitätsmodell (`alias_epoch` / `alias_key`)
 
 Der Gruppeninhaber kann die Anonymisierung der Rangliste aktivieren. Wenn aktiv,
-berechnet das Backend stabile Gruppenaliase (z. B. `Teilnehmer #A1B2` / `Member #A1B2`)
-unter Verwendung von `alias_key` und `alias_epoch`. Ein Mitglied sieht stets seinen
-eigenen echten Anzeigenamen, während andere Mitglieder nur den Alias sehen.
+berechnet das Backend stabile servergenerierte Gruppenaliase aus Adjektiv und Nomen
+(z. B. `Ruhiger Garten`, optional mit numerischem Suffix wie `Ruhiger Garten 2` bei Kollisionen,
+aktuell sprachunabhängig vom Server vorgegeben) unter Verwendung von `alias_key` und `alias_epoch`.
+Ein Mitglied sieht stets seinen eigenen echten Anzeigenamen, während andere Mitglieder nur den Alias sehen.
 Anonymisierung wirkt **nicht rückwirkend**: Mitglieder, die die Rangliste zuvor mit
 echten Anzeigenamen eingesehen haben, können historische Zuordnungen nicht rückwirkend
 "vergessen".
@@ -143,15 +145,15 @@ echten Anzeigenamen eingesehen haben, können historische Zuordnungen nicht rüc
 ### Keyset-Pagination (`sort_name` / `row_id`)
 
 Die Gruppenrangliste nutzt Keyset-Pagination zur effizienten und stabilen Anzeige
-großer Ranglisten. Der composite Cursor baut auf `(score, sort_name, row_id)` auf, um
+großer Ranglisten. Der composite Cursor baut auf `(rank, sort_name, row_id)` auf, um
 bei identischen Summenwerten eine absolut deterministische Sortierung ohne doppelte
 oder übersprungene Einträge über Seitengrenzen hinweg zu garantieren.
 
 ### Strukturiertes Rate-Limiting
 
 Aktionen wie Einladungserstellung, Beitrittsvorschau, Beitritt und Gruppenerstellung
-werden serverseitig über die Funktion `check_rate_limit` und die Tabelle
-`rate_limit_buckets` geschützt. Bei Überschreiten der Limits liefert die RPC einen
+werden serverseitig über die Hilfsfunktion `private.enforce_rate_limit` und die Tabelle
+`private.rate_limit_buckets` geschützt. Bei Überschreiten der Limits liefert die RPC einen
 strukturierten Fehlercode (`RATE_LIMITED` / HTTP 429), der vom Gateway sauber gefangen
 und in eine benutzerfreundliche Warten-Statusansicht übersetzt wird.
 
