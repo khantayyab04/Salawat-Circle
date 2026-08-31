@@ -5,7 +5,7 @@ import {
   use,
   useEffect,
   useMemo,
-  useState,
+  useSyncExternalStore,
 } from "react";
 import { getSupabaseClient } from "@/lib/auth/supabase-client";
 import {
@@ -15,6 +15,7 @@ import {
 import { EntriesStore } from "./entries-store";
 
 type EntriesContextValue = EntriesStore["snapshot"] & {
+  revision: number;
   create(amount: number): Promise<void>;
   update(id: string, amount: number, entryDate: string): Promise<void>;
   delete(id: string): Promise<void>;
@@ -63,7 +64,6 @@ export function EntriesProvider({
   createId?: () => string;
   enabled?: boolean;
 }>) {
-  const [revision, render] = useState(0);
   const gateway = useMemo(
     () => providedGateway ?? defaultGateway(),
     [providedGateway],
@@ -73,14 +73,17 @@ export function EntriesProvider({
     [createId, gateway],
   );
 
-  useEffect(() => store.subscribe(() => render((value) => value + 1)), [store]);
+  const revision = useSyncExternalStore(
+    (listener) => store.subscribe(listener),
+    () => store.getVersion(),
+  );
   useEffect(() => {
     if (enabled) void store.load();
   }, [enabled, store]);
 
-  void revision;
   const value: EntriesContextValue = {
     ...store.snapshot,
+    revision,
     create: (amount) => store.create(amount),
     update: (id, amount, entryDate) => store.update(id, amount, entryDate),
     delete: (id) => store.delete(id),

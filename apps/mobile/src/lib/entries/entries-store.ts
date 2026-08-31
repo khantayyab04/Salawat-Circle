@@ -24,6 +24,7 @@ export class EntriesStore {
   };
 
   private readonly listeners = new Set<() => void>();
+  private version = 0;
 
   constructor(
     private readonly gateway: EntriesGateway,
@@ -39,7 +40,12 @@ export class EntriesStore {
     };
   }
 
+  getVersion() {
+    return this.version;
+  }
+
   private notify() {
+    this.version += 1;
     this.listeners.forEach((listener) => listener());
   }
 
