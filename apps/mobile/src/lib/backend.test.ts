@@ -5,6 +5,22 @@ import { describe, expect, it } from "vitest";
 import { checkBackendHealth, resolveBackendConfig } from "./backend";
 
 describe("resolveBackendConfig", () => {
+  it("prefers the public publishable key for the authenticated client", () => {
+    expect(
+      resolveBackendConfig(
+        {
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_synthetic",
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: "legacy-local-key",
+          EXPO_PUBLIC_SUPABASE_URL_IOS: "http://127.0.0.1:54321",
+        },
+        "ios",
+      ),
+    ).toEqual({
+      anonKey: "sb_publishable_synthetic",
+      url: "http://127.0.0.1:54321",
+    });
+  });
+
   it("uses the Android emulator URL on Android", () => {
     expect(
       resolveBackendConfig(

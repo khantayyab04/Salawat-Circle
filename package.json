@@ -14,8 +14,12 @@
     "test": "node --test scripts/mvp01-smoke.test.mjs && pnpm --filter @salawat-circle/mobile test",
     "typecheck": "pnpm --filter @salawat-circle/mobile typecheck",
     "supabase:start": "supabase start",
+    "supabase:reset": "supabase db reset --local",
     "supabase:status": "supabase status",
+    "supabase:test": "supabase test db",
     "supabase:stop": "supabase stop",
+    "supabase:types": "supabase gen types typescript --local --schema public > apps/mobile/src/types/database.types.ts",
+    "test:auth-integration": "node --test scripts/mvp03-auth.integration.test.mjs",
     "verify": "pnpm test && pnpm lint && pnpm typecheck"
   },
   "devDependencies": {
