@@ -130,6 +130,25 @@ pnpm typecheck
 Einladungsannahme, Offline-Queue, Tracking-UI, Gruppenverwaltung und produktive
 Einladungs-Edge-Functions gehören ausdrücklich nicht zu MVP04.
 
+### MVP05 – Einträge, Heute-Ansicht und Verlauf
+
+Die Heute-Ansicht speichert eigene Salawat-Einträge über die authentifizierten
+MVP04-RPCs optimistisch im Speicher. Sie zeigt die heutige Summe sowie Gesamt-
+und Wochenwert, lädt den Verlauf cursorbasiert nach und erlaubt das Bearbeiten
+und bestätigte Löschen eigener Einträge. Beträge werden zwischen 1 und
+10.000.000 validiert; Summen werden als Dezimalstrings mit `BigInt` verarbeitet.
+Die für neue Einträge maßgebliche Zeitzone wird aus den eigenen Einstellungen
+gelesen und fällt nur bei fehlendem lokalem Zugriff auf die Gerätezeitzone zurück.
+
+Der lokale End-to-End-Vertrag lässt sich zusätzlich ausführen:
+
+```bash
+pnpm test:entries-integration
+```
+
+Die persistente, verschlüsselte Offline-Queue folgt erst mit MVP07. Tagesziel
+und Zielerfolg bleiben Teil von MVP06.
+
 ### Qualitätsprüfung
 
 ```bash

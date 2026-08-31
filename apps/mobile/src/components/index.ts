@@ -3,5 +3,6 @@ export { AppCard } from "./app-card";
 export { AppScreen } from "./app-screen";
 export { AppText } from "./app-text";
 export { FormField } from "./form-field";
+export { EntryRow } from "./entry-row";
 export { StateFeedback, type ViewState } from "./state-feedback";
 export { StatusBanner } from "./status-banner";

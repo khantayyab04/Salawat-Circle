@@ -14,9 +14,17 @@ Oberflächen liegen unter `src/screens`, gemeinsam genutzte Bausteine unter
 - `/groups` – Gruppen
 - `/settings` – Einstellungen
 
-Der Einstieg `/` leitet in MVP02 auf `/welcome` weiter. Authentifizierung,
-Onboarding und fachliche Aktionen sind bewusst nur navigierbare Shells und führen
-keine Backend-Mutation aus.
+Der Einstieg `/` leitet auf `/welcome` weiter. Nach Anmeldung, Profil und
+Einwilligung ist die Heute-Ansicht nutzbar: Einträge werden über die geschützten
+RPCs erstellt, im Verlauf cursorbasiert geladen, bearbeitet und nach Bestätigung
+gelöscht. Die Anzeige nutzt die gespeicherte IANA-Zeitzone; nur wenn sie lokal
+nicht verfügbar ist, wird automatisch die Gerätezeitzone verwendet.
+
+`src/lib/entries` kapselt Betrags- und Kalenderlogik, exakte BigInt-Summen,
+den Supabase-Gateway, den optimistischen Store und dessen React-Provider.
+`src/screens/today` und `src/screens/entry` enthalten die jeweiligen
+Oberflächen. Persistente Offline-Queues gehören nicht zu MVP05, sondern MVP07;
+Tagesziel und Zielerfolg folgen in MVP06.
 
 ## Theme
 
@@ -46,6 +54,7 @@ pnpm --filter @salawat-circle/mobile test
 pnpm --filter @salawat-circle/mobile lint
 pnpm --filter @salawat-circle/mobile typecheck
 pnpm verify
+pnpm test:entries-integration
 pnpm exec expo install --check
 pnpm exec expo-doctor
 ```

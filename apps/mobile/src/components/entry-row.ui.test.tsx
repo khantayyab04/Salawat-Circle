@@ -1,0 +1,56 @@
+import { describe, expect, it, jest } from "@jest/globals";
+import { fireEvent, render } from "@testing-library/react-native";
+import { EntryRow } from "./entry-row";
+
+jest.mock("@/localization", () => ({
+  formatAppNumber: (value: string) => value,
+  formatAppTime: () => "10:00",
+  useTranslation: () => ({
+    localeTag: "de-DE",
+    t: (key: string) =>
+      ({
+        entryEdit: "Bearbeiten",
+        entryDelete: "Löschen",
+        entryDeleteTitle: "Eintrag löschen?",
+        entryDeleteBody: "Dieser Eintrag wird endgültig gelöscht.",
+        commonCancel: "Abbrechen",
+        entryDeleteConfirm: "Löschen",
+      })[key] ?? key,
+  }),
+}));
+jest.mock("@/theme", () => {
+  const actual = jest.requireActual<typeof import("@/theme")>("@/theme");
+  return {
+    ...actual,
+    useAppTheme: () => ({ colors: actual.lightColors, isDark: false }),
+  };
+});
+
+describe("EntryRow", () => {
+  it("offers edit and confirmed delete actions for an entry", async () => {
+    const onEdit = jest.fn();
+    const onDelete = jest.fn();
+    const view = await render(
+      <EntryRow
+        entry={{
+          id: "entry-1",
+          amount: "42",
+          entryDate: "2026-08-31",
+          timezone: "Europe/Berlin",
+          recordedAtClient: "2026-08-31T10:00:00.000Z",
+          createdAt: "2026-08-31T10:00:00.000Z",
+          updatedAt: "2026-08-31T10:00:00.000Z",
+          revision: 1,
+        }}
+        onDelete={onDelete}
+        onEdit={onEdit}
+        showTime
+      />,
+    );
+
+    fireEvent.press(view.getByRole("button", { name: "Bearbeiten" }));
+
+    expect(onEdit).toHaveBeenCalledWith("entry-1");
+    expect(view.getByText(/10:00/u)).toBeTruthy();
+  });
+});
