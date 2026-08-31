@@ -1,6 +1,9 @@
 import type { AppLocale, LanguagePreference } from "./types";
 
 type DeviceLanguageTags = string | readonly string[];
+const numberFormatterCache = new Map<string, Intl.NumberFormat>();
+const dateFormatterCache = new Map<string, Intl.DateTimeFormat>();
+const timeFormatterCache = new Map<string, Intl.DateTimeFormat>();
 
 function asTags(tags: DeviceLanguageTags) {
   return typeof tags === "string" ? [tags] : tags;
@@ -30,9 +33,15 @@ export function resolveLocaleTag(
 }
 
 export function formatAppNumber(value: number | bigint, localeTag: string) {
-  return new Intl.NumberFormat(localeTag, { maximumFractionDigits: 0 }).format(
-    value,
-  );
+  const cached = numberFormatterCache.get(localeTag);
+  if (cached) {
+    return cached.format(value);
+  }
+  const formatter = new Intl.NumberFormat(localeTag, {
+    maximumFractionDigits: 0,
+  });
+  numberFormatterCache.set(localeTag, formatter);
+  return formatter.format(value);
 }
 
 export function formatAppDate(
@@ -40,12 +49,19 @@ export function formatAppDate(
   localeTag: string,
   timeZone?: string,
 ) {
-  return new Intl.DateTimeFormat(localeTag, {
+  const key = `${localeTag}::${timeZone ?? "system"}`;
+  const cached = dateFormatterCache.get(key);
+  if (cached) {
+    return cached.format(value);
+  }
+  const formatter = new Intl.DateTimeFormat(localeTag, {
     day: "numeric",
     month: "long",
     year: "numeric",
     timeZone,
-  }).format(value);
+  });
+  dateFormatterCache.set(key, formatter);
+  return formatter.format(value);
 }
 
 export function formatAppTime(
@@ -53,9 +69,16 @@ export function formatAppTime(
   localeTag: string,
   timeZone?: string,
 ) {
-  return new Intl.DateTimeFormat(localeTag, {
+  const key = `${localeTag}::${timeZone ?? "system"}`;
+  const cached = timeFormatterCache.get(key);
+  if (cached) {
+    return cached.format(value);
+  }
+  const formatter = new Intl.DateTimeFormat(localeTag, {
     hour: "2-digit",
     minute: "2-digit",
     timeZone,
-  }).format(value);
+  });
+  timeFormatterCache.set(key, formatter);
+  return formatter.format(value);
 }

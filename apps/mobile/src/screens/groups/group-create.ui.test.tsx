@@ -1,7 +1,15 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react-native";
+import { GroupsError } from "@/lib/groups/errors";
 import { GroupCreateScreen } from "@/screens/groups";
 
+const mockPush = jest.fn();
 const mockReplace = jest.fn();
 const mockCreateGroup = jest.fn<
   (
@@ -15,7 +23,7 @@ const mockUseGroups = jest.fn();
 const mockUseEntries = jest.fn();
 
 jest.mock("expo-router", () => ({
-  useRouter: () => ({ push: jest.fn(), replace: mockReplace }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
 }));
 
 jest.mock("@/lib/groups", () => ({
@@ -73,17 +81,24 @@ const copy: Record<string, string> = {
     "Andere Mitglieder sehen dann stabile Aliasnamen statt Anzeigenamen.",
   groupCreateAnonymousCaveat:
     "Hinweis: Wenn jemand die Rangliste vorher mit Anzeigenamen gesehen hat, wirkt die Anonymisierung nicht rückwirkend.",
-  groupCreateRulesLabel:
-    "Ich bestätige die Gruppenregeln und die freiwillige Teilnahme.",
-  groupCreateRulesHint: "Ohne Zustimmung kann die Gruppe nicht erstellt werden.",
+  groupCreateRulesLabel: "Ich akzeptiere die Nutzungsbedingungen und Gruppenregeln.",
+  groupCreateRulesHint:
+    "Mein Anzeigename und aggregierte Salawat-Werte werden mit aktiven Gruppenmitgliedern geteilt.",
+  groupCreateLegalAction: "Nutzungsbedingungen und Regeln öffnen",
+  groupCreateLegalActionHint:
+    "Öffnet die rechtlichen Hinweise und Nutzungsbedingungen.",
   groupCreateErrorOffline:
     "Du bist offline. Verbinde dich und versuche es erneut.",
   groupCreateErrorNameRejected:
     "Dieser Gruppenname ist nicht zulässig. Bitte wähle einen anderen Namen.",
+  groupCreateErrorGroupLimitReached:
+    "Du hast das Gruppenlimit erreicht. Verlasse eine bestehende Gruppe oder versuche es später erneut.",
   groupCreateErrorConsentRequired:
     "Bitte bestätige die Gruppenregeln, um fortzufahren.",
   groupCreateErrorRateLimited:
     "Zu viele Versuche. Bitte warte kurz und versuche es erneut.",
+  groupCreateErrorInvalidInput:
+    "Diese Zeitzone wurde nicht akzeptiert. Prüfe das Format, z. B. Europe/Berlin.",
   groupCreateErrorGeneral:
     "Die Gruppe konnte nicht erstellt werden. Bitte versuche es erneut.",
 };
@@ -131,7 +146,8 @@ function createGroupsState(overrides: Record<string, unknown> = {}) {
 }
 
 function submitButton(view: Awaited<ReturnType<typeof render>>) {
-  return view.getAllByRole("button")[0];
+  const buttons = view.getAllByRole("button");
+  return buttons[buttons.length - 1];
 }
 
 async function changeText(
@@ -173,6 +189,7 @@ async function fillValidCreateForm(view: Awaited<ReturnType<typeof render>>) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockPush.mockClear();
   mockCreateGroup.mockResolvedValue({ group: { id: "group-123" } });
   mockUseEntries.mockReturnValue({ timeZone: "Europe/Berlin" });
   mockUseGroups.mockReturnValue(createGroupsState());
@@ -207,6 +224,13 @@ describe("MVP08 group create screen", () => {
       ).toBeTruthy(),
     );
 
+    fireEvent.press(
+      view.getByRole("button", {
+        name: "Nutzungsbedingungen und Regeln öffnen",
+      }),
+    );
+    expect(mockPush).toHaveBeenCalledWith("/settings/legal");
+
     expect(mockCreateGroup).not.toHaveBeenCalled();
   });
 
@@ -237,26 +261,92 @@ describe("MVP08 group create screen", () => {
       "NAME_REJECTED",
       "Dieser Gruppenname ist nicht zulässig. Bitte wähle einen anderen Namen.",
     ],
+    [
+      "GROUP_LIMIT_REACHED",
+      "Du hast das Gruppenlimit erreicht. Verlasse eine bestehende Gruppe oder versuche es später erneut.",
+    ],
     ["CONSENT_REQUIRED", "Bitte bestätige die Gruppenregeln, um fortzufahren."],
     [
       "RATE_LIMITED",
       "Zu viele Versuche. Bitte warte kurz und versuche es erneut.",
     ],
     [
+      "INVALID_INPUT",
+      "Diese Zeitzone wurde nicht akzeptiert. Prüfe das Format, z. B. Europe/Berlin.",
+    ],
+    [
       "INTERNAL",
       "Die Gruppe konnte nicht erstellt werden. Bitte versuche es erneut.",
     ],
   ])("maps create failure %s to clear feedback", async (code, message) => {
-    mockCreateGroup.mockRejectedValueOnce(new Error(code));
+    mockCreateGroup.mockRejectedValueOnce(new GroupsError(code as never));
 
     const view = await render(<GroupCreateScreen />);
     await fillValidCreateForm(view);
     await press(view, "submit");
 
-    await waitFor(() => expect(view.getByText(message)).toBeTruthy());
+    await waitFor(() =>
+      expect(view.queryAllByText(message).length).toBeGreaterThan(0),
+    );
   });
 
-  it("disables submit while mutation is pending to prevent double submit", async () => {
+  it("prefers the caught GroupsError code over stale mutation snapshot errors", async () => {
+    const groupsState = createGroupsState({
+      mutation: {
+        pending: false,
+        kind: null,
+        errorCode: "NAME_REJECTED",
+      },
+    });
+    mockUseGroups.mockImplementation(() => groupsState);
+    mockCreateGroup
+      .mockRejectedValueOnce(new GroupsError("NAME_REJECTED"))
+      .mockRejectedValueOnce(new GroupsError("GROUP_LIMIT_REACHED"));
+
+    const view = await render(<GroupCreateScreen />);
+    await fillValidCreateForm(view);
+    await press(view, "submit");
+    await waitFor(() =>
+      expect(
+        view.getByText(
+          "Dieser Gruppenname ist nicht zulässig. Bitte wähle einen anderen Namen.",
+        ),
+      ).toBeTruthy(),
+    );
+
+    await press(view, "submit");
+
+    await waitFor(() =>
+      expect(
+        view.getByText(
+          "Du hast das Gruppenlimit erreicht. Verlasse eine bestehende Gruppe oder versuche es später erneut.",
+        ),
+      ).toBeTruthy(),
+    );
+  });
+
+  it("surfaces INVALID_INPUT as actionable timezone field feedback", async () => {
+    mockCreateGroup.mockRejectedValueOnce(new GroupsError("INVALID_INPUT"));
+
+    const view = await render(<GroupCreateScreen />);
+    await fillValidCreateForm(view);
+    await press(view, "submit");
+
+    await waitFor(() =>
+      expect(
+        view.queryAllByText(
+          "Diese Zeitzone wurde nicht akzeptiert. Prüfe das Format, z. B. Europe/Berlin.",
+        ).length,
+      ).toBeGreaterThan(0),
+    );
+    expect(
+      view.getByTestId("group-create-timezone-input").props.accessibilityHint,
+    ).toBe(
+      "Diese Zeitzone wurde nicht akzeptiert. Prüfe das Format, z. B. Europe/Berlin.",
+    );
+  });
+
+  it("disables submit while the create mutation is pending", async () => {
     const groupsState = createGroupsState();
     mockUseGroups.mockImplementation(() => groupsState);
 
@@ -280,5 +370,87 @@ describe("MVP08 group create screen", () => {
     await press(view, "submit");
 
     expect(mockCreateGroup).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps submit enabled when a different mutation kind is pending", async () => {
+    const groupsState = createGroupsState();
+    mockUseGroups.mockImplementation(() => groupsState);
+
+    const view = await render(<GroupCreateScreen />);
+    await fillValidCreateForm(view);
+
+    groupsState.mutation = {
+      pending: true,
+      kind: "set_anonymity",
+      errorCode: null,
+    };
+
+    view.rerender(<GroupCreateScreen />);
+
+    await waitFor(() =>
+      expect(submitButton(view).props.accessibilityState.disabled).toBe(false),
+    );
+  });
+
+  it("validates timezone only when timezone changes or submit occurs", async () => {
+    const originalDateTimeFormat = Intl.DateTimeFormat;
+    const dateTimeFormatSpy = jest
+      .spyOn(Intl, "DateTimeFormat")
+      .mockImplementation(((...args: unknown[]) => {
+        return new originalDateTimeFormat(
+          ...(args as ConstructorParameters<typeof Intl.DateTimeFormat>),
+        );
+      }) as unknown as typeof Intl.DateTimeFormat);
+
+    try {
+      await render(<GroupCreateScreen />);
+      const callsAfterInitialRender = dateTimeFormatSpy.mock.calls.length;
+
+      fireEvent.changeText(screen.getByTestId("group-create-name-input"), "Alpha Circle");
+      await waitFor(() =>
+        expect(dateTimeFormatSpy.mock.calls.length).toBe(callsAfterInitialRender),
+      );
+
+      fireEvent.changeText(
+        screen.getByTestId("group-create-timezone-input"),
+        "Europe/Berlin",
+      );
+      await waitFor(() =>
+        expect(dateTimeFormatSpy.mock.calls.length).toBeGreaterThan(
+          callsAfterInitialRender,
+        ),
+      );
+    } finally {
+      dateTimeFormatSpy.mockRestore();
+    }
+  });
+
+  it("prevents rapid double submit before provider pending state updates", async () => {
+    mockCreateGroup.mockResolvedValue({ group: { id: "group-123" } });
+
+    const view = await render(<GroupCreateScreen />);
+    fireEvent.changeText(view.getByTestId("group-create-name-input"), "Alpha Circle");
+    fireEvent.changeText(
+      view.getByTestId("group-create-timezone-input"),
+      "Europe/Berlin",
+    );
+    fireEvent.press(view.getByTestId("group-create-rules-switch"));
+    await waitFor(() =>
+      expect(submitButton(view).props.accessibilityState.disabled).toBe(false),
+    );
+
+    fireEvent.press(submitButton(view));
+    fireEvent.press(submitButton(view));
+
+    await waitFor(() => expect(mockCreateGroup).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: "/groups/[id]",
+        params: { id: "group-123" },
+      }),
+    );
+    await waitFor(() =>
+      expect(submitButton(view).props.accessibilityState.disabled).toBe(false),
+    );
   });
 });

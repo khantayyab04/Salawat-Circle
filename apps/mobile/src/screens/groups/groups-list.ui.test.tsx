@@ -1,10 +1,22 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
 import { GroupsScreen } from "@/screens/groups";
 
 const mockPush = jest.fn();
 const mockRefreshGroups = jest.fn<() => Promise<void>>();
 const mockUseGroups = jest.fn();
+const mockFormatAppNumber = jest.fn(
+  (value: number | bigint, _localeTag?: string, _timeZone?: string) =>
+    String(value),
+);
+const mockFormatAppDate = jest.fn(
+  (value: Date, _localeTag?: string, _timeZone?: string) =>
+    `date:${value.toISOString().slice(0, 10)}`,
+);
+const mockFormatAppTime = jest.fn(
+  (value: Date, _localeTag?: string, _timeZone?: string) =>
+    `time:${value.toISOString().slice(11, 16)}`,
+);
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush, replace: jest.fn() }),
@@ -35,12 +47,26 @@ const copy: Record<string, string> = {
   groupsListUpdatedLabel: "Aktualisiert",
   groupsListAnonymousOn: "Anonyme Rangliste aktiv",
   groupsListAnonymousOff: "Rangliste mit Anzeigenamen",
+  statePartialErrorTitle: "Nicht alles konnte geladen werden",
+  statePartialErrorBody: "Die vorhandenen Inhalte bleiben sichtbar.",
 };
 
 jest.mock("@/localization", () => ({
-  formatAppNumber: (value: number | bigint) => String(value),
-  formatAppDate: (value: Date) => `date:${value.toISOString().slice(0, 10)}`,
-  formatAppTime: (value: Date) => `time:${value.toISOString().slice(11, 16)}`,
+  formatAppNumber: (
+    value: number | bigint,
+    localeTag: string,
+    timeZone?: string,
+  ) => mockFormatAppNumber(value, localeTag, timeZone),
+  formatAppDate: (
+    value: Date,
+    localeTag: string,
+    timeZone?: string,
+  ) => mockFormatAppDate(value, localeTag, timeZone),
+  formatAppTime: (
+    value: Date,
+    localeTag: string,
+    timeZone?: string,
+  ) => mockFormatAppTime(value, localeTag, timeZone),
   useTranslation: () => ({
     localeTag: "de-DE",
     t: (key: string) => copy[key] ?? key,
@@ -86,6 +112,9 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockRefreshGroups.mockResolvedValue(undefined);
   mockUseGroups.mockReturnValue(createGroupsState());
+  mockFormatAppNumber.mockClear();
+  mockFormatAppDate.mockClear();
+  mockFormatAppTime.mockClear();
 });
 
 describe("MVP08 groups list screen", () => {
@@ -120,6 +149,23 @@ describe("MVP08 groups list screen", () => {
     );
     const offline = await render(<GroupsScreen />);
     expect(offline.getByText("Offline")).toBeTruthy();
+  });
+
+  it("keeps the empty state copy visible when offline with ready status", async () => {
+    mockUseGroups.mockReturnValue(
+      createGroupsState({
+        online: false,
+        groups: { status: "ready", items: [], errorCode: "OFFLINE" },
+      }),
+    );
+    const view = await render(<GroupsScreen />);
+    expect(view.getByText("Noch keine Gruppe")).toBeTruthy();
+    expect(
+      view.getByText(
+        "Du bist noch in keiner Gruppe. Erstelle eine private Gruppe oder tritt über einen Einladungslink bei.",
+      ),
+    ).toBeTruthy();
+    expect(view.getByText("Offline")).toBeTruthy();
   });
 
   it("initializes from idle, provides pull-to-refresh, and opens create", async () => {
@@ -180,10 +226,98 @@ describe("MVP08 groups list screen", () => {
     ).toBeTruthy();
     expect(view.getByText("Anonyme Rangliste aktiv")).toBeTruthy();
 
-    fireEvent.press(view.getByRole("button", { name: "Alpha Circle" }));
+    const groupButton = view.getByRole("button", { name: /Alpha Circle/ });
+    expect(groupButton.props.accessibilityLabel).toContain("Rang 2");
+    expect(groupButton.props.accessibilityLabel).toContain("1234");
+    expect(groupButton.props.accessibilityLabel).toContain("5 aktive Mitglieder");
+    expect(groupButton.props.accessibilityHint).toContain("Berechnet");
+    expect(groupButton.props.accessibilityHint).toContain("Aktualisiert");
+    expect(groupButton.props.accessibilityHint).toContain(
+      "Anonyme Rangliste aktiv",
+    );
+
+    fireEvent.press(groupButton);
     expect(mockPush).toHaveBeenCalledWith({
       pathname: "/groups/[id]",
       params: { id: "group-1" },
     });
+  });
+
+  it("shows a partial error banner with retry while keeping cached rows", async () => {
+    mockUseGroups.mockReturnValue(
+      createGroupsState({
+        online: true,
+        groups: {
+          status: "ready",
+          errorCode: "INTERNAL",
+          items: [
+            {
+              id: "group-2",
+              name: "Beta Circle",
+              timezone: "Europe/Berlin",
+              role: "owner",
+              memberCount: "3",
+              ownWeekTotal: "456",
+              ownRank: 1,
+              leaderboardAnonymous: false,
+              revision: 8,
+              updatedAt: "2026-08-31T20:00:00.000Z",
+              calculatedAt: "2026-08-31T20:05:00.000Z",
+            },
+          ],
+        },
+      }),
+    );
+
+    const view = await render(<GroupsScreen />);
+
+    expect(view.getByText("Beta Circle")).toBeTruthy();
+    expect(view.getByText("Nicht alles konnte geladen werden")).toBeTruthy();
+    expect(view.getByText("Die vorhandenen Inhalte bleiben sichtbar.")).toBeTruthy();
+    const refreshButton = view.getByRole("button", { name: "Aktualisieren" });
+    await act(async () => {
+      fireEvent.press(refreshButton);
+    });
+    await waitFor(() => expect(mockRefreshGroups).toHaveBeenCalledTimes(1));
+  });
+
+  it("memoizes group rows to avoid recomputing metrics on unrelated rerenders", async () => {
+    const sharedGroup = {
+      id: "group-3",
+      name: "Gamma Circle",
+      timezone: "Europe/Berlin",
+      role: "owner",
+      memberCount: "9",
+      ownWeekTotal: "999",
+      ownRank: 4,
+      leaderboardAnonymous: true,
+      revision: 3,
+      updatedAt: "2026-08-31T20:00:00.000Z",
+      calculatedAt: "2026-08-31T20:05:00.000Z",
+    } as const;
+
+    const groupsState = createGroupsState({
+      groups: {
+        status: "ready",
+        errorCode: null,
+        items: [sharedGroup],
+      },
+    });
+    mockUseGroups.mockImplementation(() => groupsState);
+
+    const view = await render(<GroupsScreen />);
+    expect(mockFormatAppNumber.mock.calls.length).toBeGreaterThan(0);
+    expect(mockFormatAppDate.mock.calls.length).toBeGreaterThan(0);
+    expect(mockFormatAppTime.mock.calls.length).toBeGreaterThan(0);
+
+    mockFormatAppNumber.mockClear();
+    mockFormatAppDate.mockClear();
+    mockFormatAppTime.mockClear();
+
+    view.rerender(<GroupsScreen />);
+
+    expect(mockFormatAppNumber).not.toHaveBeenCalled();
+    expect(mockFormatAppDate).not.toHaveBeenCalled();
+    expect(mockFormatAppTime).not.toHaveBeenCalled();
   });
 });

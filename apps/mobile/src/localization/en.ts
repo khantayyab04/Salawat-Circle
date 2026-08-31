@@ -106,15 +106,23 @@ export const en = {
     "Other members will then see stable aliases instead of display names.",
   groupCreateAnonymousCaveat:
     "Note: if someone has already seen the ranking with display names, anonymity is not retroactive.",
-  groupCreateRulesLabel: "I confirm the group rules and voluntary participation.",
-  groupCreateRulesHint: "Without consent, the group cannot be created.",
+  groupCreateRulesLabel: "I accept the terms of use and group rules.",
+  groupCreateRulesHint:
+    "My display name and aggregated Salawat values are shared with active group members.",
+  groupCreateLegalAction: "Open terms and group rules",
+  groupCreateLegalActionHint:
+    "Opens the legal details and terms of use.",
   groupCreateErrorOffline: "You are offline. Connect and try again.",
   groupCreateErrorNameRejected:
     "This group name is not allowed. Please choose another name.",
+  groupCreateErrorGroupLimitReached:
+    "You have reached the group limit. Leave an existing group or try again later.",
   groupCreateErrorConsentRequired:
     "Please confirm the group rules to continue.",
   groupCreateErrorRateLimited:
     "Too many attempts. Please wait a moment and try again.",
+  groupCreateErrorInvalidInput:
+    "This time zone was rejected. Check the format, for example Europe/Berlin.",
   groupCreateErrorGeneral:
     "The group could not be created. Please try again.",
   groupsListLoadingTitle: "Loading groups",

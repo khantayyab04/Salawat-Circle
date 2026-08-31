@@ -108,16 +108,24 @@ export const de = {
   groupCreateAnonymousCaveat:
     "Hinweis: Wenn jemand die Rangliste vorher mit Anzeigenamen gesehen hat, wirkt die Anonymisierung nicht rückwirkend.",
   groupCreateRulesLabel:
-    "Ich bestätige die Gruppenregeln und die freiwillige Teilnahme.",
-  groupCreateRulesHint: "Ohne Zustimmung kann die Gruppe nicht erstellt werden.",
+    "Ich akzeptiere die Nutzungsbedingungen und Gruppenregeln.",
+  groupCreateRulesHint:
+    "Mein Anzeigename und aggregierte Salawat-Werte werden mit aktiven Gruppenmitgliedern geteilt.",
+  groupCreateLegalAction: "Nutzungsbedingungen und Regeln öffnen",
+  groupCreateLegalActionHint:
+    "Öffnet die rechtlichen Hinweise und Nutzungsbedingungen.",
   groupCreateErrorOffline:
     "Du bist offline. Verbinde dich und versuche es erneut.",
   groupCreateErrorNameRejected:
     "Dieser Gruppenname ist nicht zulässig. Bitte wähle einen anderen Namen.",
+  groupCreateErrorGroupLimitReached:
+    "Du hast das Gruppenlimit erreicht. Verlasse eine bestehende Gruppe oder versuche es später erneut.",
   groupCreateErrorConsentRequired:
     "Bitte bestätige die Gruppenregeln, um fortzufahren.",
   groupCreateErrorRateLimited:
     "Zu viele Versuche. Bitte warte kurz und versuche es erneut.",
+  groupCreateErrorInvalidInput:
+    "Diese Zeitzone wurde nicht akzeptiert. Prüfe das Format, zum Beispiel Europe/Berlin.",
   groupCreateErrorGeneral:
     "Die Gruppe konnte nicht erstellt werden. Bitte versuche es erneut.",
   groupsListLoadingTitle: "Gruppen werden geladen",

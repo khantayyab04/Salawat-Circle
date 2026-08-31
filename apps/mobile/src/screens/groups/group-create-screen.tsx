@@ -11,7 +11,7 @@ import { useTranslation, type TranslationKey } from "@/localization";
 import { spacing } from "@/theme";
 import { Host, Switch } from "@expo/ui";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 function normalizeGroupName(value: string) {
   return value.normalize("NFC").trim().replace(/\s+/gu, " ");
@@ -57,10 +57,14 @@ function createErrorKey(code: string): TranslationKey {
       return "groupCreateErrorOffline";
     case "NAME_REJECTED":
       return "groupCreateErrorNameRejected";
+    case "GROUP_LIMIT_REACHED":
+      return "groupCreateErrorGroupLimitReached";
     case "CONSENT_REQUIRED":
       return "groupCreateErrorConsentRequired";
     case "RATE_LIMITED":
       return "groupCreateErrorRateLimited";
+    case "INVALID_INPUT":
+      return "groupCreateErrorInvalidInput";
     default:
       return "groupCreateErrorGeneral";
   }
@@ -93,22 +97,47 @@ export function GroupCreateScreen() {
   const [timeZone, setTimeZone] = useState(() =>
     resolvePreferredTimeZone(entries.timeZone),
   );
+  const [timeZoneValid, setTimeZoneValid] = useState(true);
+  const [timeZoneTouched, setTimeZoneTouched] = useState(false);
   const [leaderboardAnonymous, setLeaderboardAnonymous] = useState(false);
   const [rulesAccepted, setRulesAccepted] = useState(false);
   const [submitErrorCode, setSubmitErrorCode] = useState<string | null>(null);
+  const submitGuardRef = useRef(false);
 
   const normalizedName = normalizeGroupName(name);
   const normalizedTimeZone = timeZone.trim();
   const nameLength = visibleCharLength(normalizedName);
   const validName = nameLength >= 2 && nameLength <= 50;
-  const validTimeZone =
-    normalizedTimeZone.length > 0 && isValidIanaTimeZone(normalizedTimeZone);
-  const submitting = groups.mutation.pending;
+  const validTimeZone = normalizedTimeZone.length > 0 && timeZoneValid;
+  const submitting =
+    groups.mutation.pending && groups.mutation.kind === "create_group";
   const canSubmit = !submitting && validName && validTimeZone && rulesAccepted;
+  const showServerTimeZoneError = submitErrorCode === "INVALID_INPUT";
+  const timeZoneError =
+    showServerTimeZoneError || (timeZoneTouched && !validTimeZone)
+      ? t(
+          showServerTimeZoneError
+            ? "groupCreateErrorInvalidInput"
+            : "groupTimezoneInvalid",
+        )
+      : undefined;
+
+  const validateTimeZone = (value: string) => {
+    const normalized = value.trim();
+    return normalized.length > 0 && isValidIanaTimeZone(normalized);
+  };
 
   const handleSubmit = async () => {
-    if (!canSubmit) return;
+    if (submitGuardRef.current) return;
+    if (!canSubmit) {
+      if (!validateTimeZone(normalizedTimeZone)) {
+        setTimeZoneTouched(true);
+        setTimeZoneValid(false);
+      }
+      return;
+    }
     setSubmitErrorCode(null);
+    submitGuardRef.current = true;
 
     try {
       const result = await groups.createGroup(
@@ -119,7 +148,14 @@ export function GroupCreateScreen() {
       );
       router.replace({ pathname: "/groups/[id]", params: { id: result.group.id } });
     } catch (error) {
-      setSubmitErrorCode(groups.mutation.errorCode ?? readErrorCode(error));
+      const errorCode = readErrorCode(error);
+      if (errorCode === "INVALID_INPUT") {
+        setTimeZoneTouched(true);
+        setTimeZoneValid(false);
+      }
+      setSubmitErrorCode(errorCode);
+    } finally {
+      submitGuardRef.current = false;
     }
   };
 
@@ -144,12 +180,12 @@ export function GroupCreateScreen() {
         autoCorrect={false}
         label={t("groupTimezoneLabel")}
         hint={t("groupTimezoneHint")}
-        error={
-          timeZone.length > 0 && !validTimeZone ? t("groupTimezoneInvalid") : undefined
-        }
+        error={timeZoneError}
         value={timeZone}
         onChangeText={(value) => {
           setSubmitErrorCode(null);
+          setTimeZoneTouched(true);
+          setTimeZoneValid(validateTimeZone(value));
           setTimeZone(value);
         }}
       />
@@ -183,6 +219,12 @@ export function GroupCreateScreen() {
           />
         </Host>
         <AppText variant="caption">{t("groupCreateRulesHint")}</AppText>
+        <AppButton
+          label={t("groupCreateLegalAction")}
+          variant="ghost"
+          accessibilityHint={t("groupCreateLegalActionHint")}
+          onPress={() => router.push("/settings/legal")}
+        />
       </AppCard>
       {submitErrorCode ? (
         <AppText accessibilityLiveRegion="polite">
@@ -193,7 +235,7 @@ export function GroupCreateScreen() {
         disabled={!canSubmit}
         loading={submitting}
         label={t("groupsCreate")}
-        onPress={() => void handleSubmit()}
+        onPress={handleSubmit}
       />
     </AppScreen>
   );
