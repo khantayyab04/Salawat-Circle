@@ -168,6 +168,7 @@ declare
   v_member_count integer;
   v_active_group_count integer;
   v_joined_at timestamptz := pg_catalog.clock_timestamp();
+  v_already_active boolean := false;
 begin
   v_user_id := private.require_active_core_user();
 
@@ -190,10 +191,16 @@ begin
     raise exception using errcode = 'P0001', message = 'INVITE_INVALID';
   end if;
 
+  perform 1
+  from public.profiles profile_row
+  where profile_row.id = v_user_id
+  for update;
+
   select *
   into v_group
   from public.groups group_row
-  where group_row.id = v_invite.group_id;
+  where group_row.id = v_invite.group_id
+  for update;
 
   if not found then
     raise exception using errcode = 'P0001', message = 'INVITE_INVALID';
@@ -271,19 +278,6 @@ begin
     raise exception using errcode = 'P0001', message = 'INVITE_INVALID';
   end if;
 
-  insert into private.consent_records (
-    user_id,
-    consent_type,
-    document_version,
-    locale
-  ) values (
-    v_user_id,
-    'group_sharing',
-    'mvp08-group-sharing-v1',
-    p_locale
-  )
-  on conflict (user_id, consent_type, document_version) do nothing;
-
   insert into public.group_memberships (
     group_id,
     user_id,
@@ -309,59 +303,54 @@ begin
       and membership.left_at is null;
 
     if found then
-      select count(*)::integer
-      into v_member_count
-      from public.group_memberships membership
-      where membership.group_id = v_group.id
-        and membership.left_at is null;
-
-      return private.with_response_meta(jsonb_build_object(
-        'group', jsonb_build_object(
-          'id', v_group.id,
-          'name', v_group.name,
-          'timezone', v_group.timezone,
-          'leaderboard_anonymous', v_group.leaderboard_anonymous,
-          'member_count', v_member_count
-        ),
-        'membership', jsonb_build_object(
-          'id', v_membership.id,
-          'group_id', v_membership.group_id,
-          'joined_at', v_membership.joined_at,
-          'created_at', v_membership.created_at,
-          'sharing_consent_version', v_membership.sharing_consent_version
-        ),
-        'already_active', true
-      ));
+      v_already_active := true;
     end if;
+  end if;
 
+  if not found and not v_already_active then
     raise exception using errcode = 'P0001', message = 'INTERNAL';
   end if;
 
-  insert into private.group_invite_uses (
-    invite_id,
+  insert into private.consent_records (
     user_id,
-    membership_id,
-    used_at
+    consent_type,
+    document_version,
+    locale
   ) values (
-    v_invite.id,
     v_user_id,
-    v_membership.id,
-    v_joined_at
+    'group_sharing',
+    'mvp08-group-sharing-v1',
+    p_locale
   )
-  on conflict (invite_id, user_id) do nothing;
+  on conflict (user_id, consent_type, document_version) do nothing;
 
-  if not found then
-    raise exception using errcode = 'P0001', message = 'INVITE_INVALID';
-  end if;
+  if not v_already_active then
+    insert into private.group_invite_uses (
+      invite_id,
+      user_id,
+      membership_id,
+      used_at
+    ) values (
+      v_invite.id,
+      v_user_id,
+      v_membership.id,
+      v_joined_at
+    )
+    on conflict (invite_id, user_id) do nothing;
 
-  update private.group_invites invite
-  set use_count = invite.use_count + 1
-  where invite.id = v_invite.id
-    and invite.use_count < invite.max_uses
-  returning * into v_invite;
+    if not found then
+      raise exception using errcode = 'P0001', message = 'INVITE_INVALID';
+    end if;
 
-  if not found then
-    raise exception using errcode = 'P0001', message = 'INVITE_INVALID';
+    update private.group_invites invite
+    set use_count = invite.use_count + 1
+    where invite.id = v_invite.id
+      and invite.use_count < invite.max_uses
+    returning * into v_invite;
+
+    if not found then
+      raise exception using errcode = 'P0001', message = 'INVITE_INVALID';
+    end if;
   end if;
 
   select *
@@ -390,7 +379,7 @@ begin
       'created_at', v_membership.created_at,
       'sharing_consent_version', v_membership.sharing_consent_version
     ),
-    'already_active', false
+    'already_active', v_already_active
   ));
 end;
 $$;

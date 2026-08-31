@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(51);
+select plan(55);
 
 select has_function(
   'public',
@@ -578,11 +578,59 @@ select is(
 );
 
 reset role;
+create temp table accept_group_invite_definition as
+select lower(pg_catalog.pg_get_functiondef('public.accept_group_invite(text, text, text)'::regprocedure)) as definition;
+
 select ok(
-  position(
-    'for update' in lower(pg_catalog.pg_get_functiondef('public.accept_group_invite(text, text, text)'::regprocedure))
-  ) > 0,
+  (
+    select
+      position('from private.group_invites invite
+  where invite.id = v_invite_id
+  for update' in definition) > 0
+    from accept_group_invite_definition
+  ),
   'accept implementation locks invite rows FOR UPDATE for concurrent safety'
+);
+select ok(
+  (
+    select
+      position('from public.profiles profile_row
+  where profile_row.id = v_user_id
+  for update' in definition) > 0
+    from accept_group_invite_definition
+  ),
+  'accept implementation locks caller profile rows FOR UPDATE before join limit checks'
+);
+select ok(
+  (
+    select
+      position('from public.groups group_row
+  where group_row.id = v_invite.group_id
+  for update' in definition) > 0
+    from accept_group_invite_definition
+  ),
+  'accept implementation locks target group rows FOR UPDATE before join limit checks'
+);
+select ok(
+  (
+    select
+      position('from public.profiles profile_row' in definition) > 0
+      and position('from public.groups group_row' in definition) > position('from public.profiles profile_row' in definition)
+      and position('select count(*)::integer
+  into v_member_count
+  from public.group_memberships membership' in definition) > position('from public.groups group_row' in definition)
+    from accept_group_invite_definition
+  ),
+  'accept acquires profile and group locks in a stable order before membership capacity counts'
+);
+select ok(
+  (
+    select
+      position('insert into public.group_memberships' in definition) > 0
+      and position('insert into private.consent_records' in definition) > position('insert into public.group_memberships' in definition)
+    from accept_group_invite_definition
+  ),
+  'accept inserts sharing consent only after membership creation/idempotent resolution succeeds'
 );
 
 select * from finish();
