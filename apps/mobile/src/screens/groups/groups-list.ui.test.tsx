@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
 import { GroupsScreen } from "@/screens/groups";
 
 const mockPush = jest.fn();
@@ -145,6 +145,10 @@ describe("MVP08 groups list screen", () => {
     const errorRetry = error.getByRole("button", { name: "Aktualisieren" });
     expect(errorAlert).toBeTruthy();
     expect(errorRetry).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(errorRetry);
+    });
+    await waitFor(() => expect(mockRefreshGroups).toHaveBeenCalledTimes(1));
 
     mockUseGroups.mockReturnValue(
       createGroupsState({
@@ -158,6 +162,10 @@ describe("MVP08 groups list screen", () => {
     const offlineRetry = offline.getByRole("button", { name: "Aktualisieren" });
     expect(offlineAlert).toBeTruthy();
     expect(offlineRetry).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(offlineRetry);
+    });
+    await waitFor(() => expect(mockRefreshGroups).toHaveBeenCalledTimes(2));
   });
 
   it("keeps the empty state copy visible when offline with ready status", async () => {
@@ -193,10 +201,14 @@ describe("MVP08 groups list screen", () => {
       "function",
     );
 
-    fireEvent.press(view.getByRole("button", { name: "Gruppe erstellen" }));
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Gruppe erstellen" }));
+    });
     expect(mockPush).toHaveBeenCalledWith("/groups/create");
 
-    fireEvent.press(view.getByRole("button", { name: "Einladungscode eingeben" }));
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Einladungscode eingeben" }));
+    });
     expect(mockPush).toHaveBeenCalledWith("/join");
   });
 

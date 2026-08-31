@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
 import GroupInvitesRoute from "@/app/(tabs)/groups/[id]/invites";
 import { Alert, Share } from "react-native";
@@ -38,6 +38,7 @@ const mockRevokeInvite = jest.fn<
 >();
 const mockUseGroups = jest.fn();
 let mockGroupId = "group-1";
+let previousJoinBaseUrl: string | undefined;
 
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ id: mockGroupId }),
@@ -91,6 +92,14 @@ const copy: Record<string, string> = {
   groupInvitesSecretCodeLabel: "Einladungscode",
   groupInvitesShareMessage:
     "Tritt unserer privaten Gruppe bei. Link: %{link} Code: %{code}",
+  groupInvitesNotFoundTitle: "Einladung nicht gefunden",
+  groupInvitesNotFoundBody:
+    "Diese Einladung ist nicht mehr verfügbar. Aktualisiere die Liste.",
+  groupInvitesActionErrorTitle: "Aktion fehlgeschlagen",
+  groupInvitesActionErrorBody:
+    "Die Aktion konnte nicht abgeschlossen werden. Bitte versuche es erneut.",
+  stateForbiddenTitle: "Kein Zugriff",
+  stateForbiddenBody: "Du darfst diesen Inhalt nicht öffnen.",
 };
 
 jest.mock("@/localization", () => ({
@@ -166,6 +175,7 @@ function createGroupsState(overrides: Record<string, unknown> = {}) {
 describe("Task 15 owner invite screen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    previousJoinBaseUrl = process.env.EXPO_PUBLIC_JOIN_BASE_URL;
     process.env.EXPO_PUBLIC_JOIN_BASE_URL = "https://join.example.com";
     mockGroupId = "group-1";
     mockLoadInvites.mockResolvedValue(undefined);
@@ -202,6 +212,15 @@ describe("Task 15 owner invite screen", () => {
     jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
   });
 
+  afterEach(() => {
+    if (typeof previousJoinBaseUrl === "string") {
+      process.env.EXPO_PUBLIC_JOIN_BASE_URL = previousJoinBaseUrl;
+      return;
+    }
+
+    delete process.env.EXPO_PUBLIC_JOIN_BASE_URL;
+  });
+
   it("loads invites, creates default 7-day/25-use secrets, and supports share + copy", async () => {
     const view = await render(<GroupInvitesRoute />);
 
@@ -209,7 +228,9 @@ describe("Task 15 owner invite screen", () => {
     await waitFor(() =>
       expect(view.getByRole("button", { name: "Neue Einladung erstellen" })).toBeTruthy(),
     );
-    fireEvent.press(view.getByRole("button", { name: "Neue Einladung erstellen" }));
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Neue Einladung erstellen" }));
+    });
 
     await waitFor(() =>
       expect(mockCreateInvite).toHaveBeenCalledWith("group-1", {
@@ -223,7 +244,9 @@ describe("Task 15 owner invite screen", () => {
     expect(view.getByText("ABCD2345EF")).toBeTruthy();
     expect(view.getByText(expectedLink)).toBeTruthy();
 
-    fireEvent.press(view.getByRole("button", { name: "Teilen" }));
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Teilen" }));
+    });
     await waitFor(() => expect(Share.share).toHaveBeenCalledTimes(1));
     expect(Share.share).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -236,11 +259,15 @@ describe("Task 15 owner invite screen", () => {
       }),
     );
 
-    fireEvent.press(view.getByRole("button", { name: "Link kopieren" }));
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Link kopieren" }));
+    });
     await waitFor(() =>
       expect(Clipboard.setStringAsync).toHaveBeenCalledWith(expectedLink),
     );
-    fireEvent.press(view.getByRole("button", { name: "Code kopieren" }));
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Code kopieren" }));
+    });
     await waitFor(() =>
       expect(Clipboard.setStringAsync).toHaveBeenCalledWith("ABCD2345EF"),
     );
@@ -257,13 +284,278 @@ describe("Task 15 owner invite screen", () => {
     await waitFor(() =>
       expect(view.getByRole("button", { name: "Neue Einladung erstellen" })).toBeTruthy(),
     );
-    fireEvent.press(view.getByRole("button", { name: "Neue Einladung erstellen" }));
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Neue Einladung erstellen" }));
+    });
     await waitFor(() => expect(view.getByText("ABCD2345EF")).toBeTruthy());
 
-    fireEvent.press(view.getByRole("button", { name: "Widerrufen" }));
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Widerrufen" }));
+    });
     await waitFor(() => expect(mockRevokeInvite).toHaveBeenCalledWith("group-1", "invite-2"));
     await waitFor(() => expect(mockLoadInvites).toHaveBeenCalledTimes(2));
     expect(view.queryByText("ABCD2345EF")).toBeNull();
+  });
+
+  it("renders invite rows with localized status labels, expiry, and usage counters", async () => {
+    mockUseGroups.mockReturnValue(
+      createGroupsState({
+        invites: {
+          groupId: "group-1",
+          status: "ready",
+          errorCode: null,
+          items: [
+            {
+              id: "invite-active",
+              groupId: "group-1",
+              expiresAt: "2026-09-07T12:00:00.000Z",
+              maxUses: "25",
+              useCount: "4",
+              revokedAt: null,
+              createdAt: "2026-08-31T12:00:00.000Z",
+              status: "active",
+            },
+            {
+              id: "invite-expired",
+              groupId: "group-1",
+              expiresAt: "2026-09-08T13:00:00.000Z",
+              maxUses: "25",
+              useCount: "25",
+              revokedAt: null,
+              createdAt: "2026-08-31T12:00:00.000Z",
+              status: "expired",
+            },
+            {
+              id: "invite-revoked",
+              groupId: "group-1",
+              expiresAt: "2026-09-09T14:00:00.000Z",
+              maxUses: "10",
+              useCount: "1",
+              revokedAt: "2026-09-01T08:00:00.000Z",
+              createdAt: "2026-08-31T12:00:00.000Z",
+              status: "revoked",
+            },
+            {
+              id: "invite-exhausted",
+              groupId: "group-1",
+              expiresAt: "2026-09-10T15:00:00.000Z",
+              maxUses: "3",
+              useCount: "3",
+              revokedAt: null,
+              createdAt: "2026-08-31T12:00:00.000Z",
+              status: "exhausted",
+            },
+          ],
+        },
+      }),
+    );
+
+    const view = await render(<GroupInvitesRoute />);
+
+    expect(view.getByText("Aktiv")).toBeTruthy();
+    expect(view.getByText("Abgelaufen")).toBeTruthy();
+    expect(view.getAllByText("Widerrufen").length).toBeGreaterThan(0);
+    expect(view.getByText("Verbraucht")).toBeTruthy();
+    expect(view.getByText("Nutzungen: 4 / 25")).toBeTruthy();
+    expect(view.getByText("Nutzungen: 25 / 25")).toBeTruthy();
+    expect(view.getByText("Nutzungen: 1 / 10")).toBeTruthy();
+    expect(view.getByText("Nutzungen: 3 / 3")).toBeTruthy();
+    expect(view.getByText("Ablauf: date:2026-09-07 time:12:00")).toBeTruthy();
+    expect(view.getByText("Ablauf: date:2026-09-08 time:13:00")).toBeTruthy();
+    expect(view.getByText("Ablauf: date:2026-09-09 time:14:00")).toBeTruthy();
+    expect(view.getByText("Ablauf: date:2026-09-10 time:15:00")).toBeTruthy();
+
+    const revokeButtons = view.getAllByRole("button", { name: "Widerrufen" });
+    expect(revokeButtons[0]?.props.accessibilityState.disabled).toBe(false);
+    expect(revokeButtons[1]?.props.accessibilityState.disabled).toBe(true);
+    expect(revokeButtons[2]?.props.accessibilityState.disabled).toBe(true);
+    expect(revokeButtons[3]?.props.accessibilityState.disabled).toBe(true);
+  });
+
+  it("keeps revoke pending state on the targeted invite row only", async () => {
+    let resolveRevoke: ((value: RevokeInviteResponse) => void) | null = null;
+    mockRevokeInvite.mockImplementation(
+      async () =>
+        new Promise<RevokeInviteResponse>((resolve) => {
+          resolveRevoke = resolve;
+        }),
+    );
+    jest.spyOn(Alert, "alert").mockImplementation((_, __, buttons) => {
+      const revokeButton = buttons?.find((button) => button?.style === "destructive");
+      revokeButton?.onPress?.();
+    });
+    mockUseGroups.mockReturnValue(
+      createGroupsState({
+        invites: {
+          groupId: "group-1",
+          status: "ready",
+          errorCode: null,
+          items: [
+            {
+              id: "invite-a",
+              groupId: "group-1",
+              expiresAt: "2026-09-07T12:00:00.000Z",
+              maxUses: "25",
+              useCount: "0",
+              revokedAt: null,
+              createdAt: "2026-08-31T12:00:00.000Z",
+              status: "active",
+            },
+            {
+              id: "invite-b",
+              groupId: "group-1",
+              expiresAt: "2026-09-08T12:00:00.000Z",
+              maxUses: "25",
+              useCount: "0",
+              revokedAt: null,
+              createdAt: "2026-08-31T12:00:00.000Z",
+              status: "active",
+            },
+          ],
+        },
+      }),
+    );
+
+    const view = await render(<GroupInvitesRoute />);
+    const revokeButtons = view.getAllByRole("button", { name: "Widerrufen" });
+
+    await act(async () => {
+      fireEvent.press(revokeButtons[0]!);
+    });
+
+    try {
+      await waitFor(() => expect(mockRevokeInvite).toHaveBeenCalledWith("group-1", "invite-a"));
+      await waitFor(() => {
+        expect(view.getAllByRole("button", { name: "Widerrufen" })).toHaveLength(1);
+      });
+    } finally {
+      await act(async () => {
+        resolveRevoke?.({
+          invite: {
+            id: "invite-a",
+            groupId: "group-1",
+            expiresAt: "2026-09-07T12:00:00.000Z",
+            maxUses: "25",
+            useCount: "0",
+            revokedAt: "2026-09-01T00:00:00.000Z",
+            createdAt: "2026-08-31T12:00:00.000Z",
+            status: "revoked",
+          },
+        });
+      });
+      await waitFor(() => expect(mockLoadInvites).toHaveBeenCalledTimes(2));
+      await waitFor(() =>
+        expect(view.getAllByRole("button", { name: "Widerrufen" })).toHaveLength(2),
+      );
+    }
+  });
+
+  it.each([
+    {
+      code: "OFFLINE",
+      expectedTitle: "Offline",
+      expectedBody: "Verbinde dich mit dem Internet, um Einladungen zu verwalten.",
+    },
+    {
+      code: "RATE_LIMITED",
+      expectedTitle: "Bitte kurz warten",
+      expectedBody: "Zu viele Aktionen in kurzer Zeit. Versuche es gleich erneut.",
+    },
+    {
+      code: "NOT_FOUND",
+      expectedTitle: "Einladung nicht gefunden",
+      expectedBody:
+        "Diese Einladung ist nicht mehr verfügbar. Aktualisiere die Liste.",
+    },
+  ] as const)(
+    "maps create invite failure %s to localized actionable feedback",
+    async ({ code, expectedTitle, expectedBody }) => {
+      mockCreateInvite.mockRejectedValueOnce(new Error(code));
+
+      const view = await render(<GroupInvitesRoute />);
+
+      await waitFor(() =>
+        expect(
+          view.getByRole("button", { name: "Neue Einladung erstellen" }),
+        ).toBeTruthy(),
+      );
+      await act(async () => {
+        fireEvent.press(view.getByRole("button", { name: "Neue Einladung erstellen" }));
+      });
+
+      await waitFor(() => expect(view.getByText(expectedTitle)).toBeTruthy());
+      expect(view.getByText(expectedBody)).toBeTruthy();
+      expect(view.getByRole("button", { name: "Aktualisieren" })).toBeTruthy();
+    },
+  );
+
+  it("renders forbidden action feedback for revoke failures", async () => {
+    mockUseGroups.mockReturnValue(
+      createGroupsState({
+        invites: {
+          groupId: "group-1",
+          status: "ready",
+          errorCode: null,
+          items: [
+            {
+              id: "invite-locked",
+              groupId: "group-1",
+              expiresAt: "2026-09-07T12:00:00.000Z",
+              maxUses: "25",
+              useCount: "0",
+              revokedAt: null,
+              createdAt: "2026-08-31T12:00:00.000Z",
+              status: "active",
+            },
+          ],
+        },
+      }),
+    );
+    mockRevokeInvite.mockRejectedValueOnce(new Error("FORBIDDEN"));
+    jest.spyOn(Alert, "alert").mockImplementation((_, __, buttons) => {
+      const revokeButton = buttons?.find((button) => button?.style === "destructive");
+      revokeButton?.onPress?.();
+    });
+
+    const view = await render(<GroupInvitesRoute />);
+
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Widerrufen" }));
+    });
+
+    await waitFor(() => expect(view.getByText("Kein Zugriff")).toBeTruthy());
+    expect(view.getByText("Du darfst diesen Inhalt nicht öffnen.")).toBeTruthy();
+  });
+
+  it("shows a generic actionable error when invite link creation fails", async () => {
+    mockCreateInvite.mockResolvedValueOnce({
+      invite: {
+        id: "invite-2",
+        groupId: "group-1",
+        token: "invalid-token",
+        code: "ABCD2345EF",
+        expiresAt: "2026-09-07T12:00:00.000Z",
+        maxUses: "25",
+        useCount: "0",
+        revokedAt: null,
+        createdAt: "2026-08-31T12:00:00.000Z",
+      },
+    });
+    const view = await render(<GroupInvitesRoute />);
+
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Neue Einladung erstellen" }));
+    });
+
+    await waitFor(() =>
+      expect(view.getByText("Aktion fehlgeschlagen")).toBeTruthy(),
+    );
+    expect(
+      view.getByText(
+        "Die Aktion konnte nicht abgeschlossen werden. Bitte versuche es erneut.",
+      ),
+    ).toBeTruthy();
+    expect(view.queryByText("invalid-token")).toBeNull();
   });
 
   it("renders dedicated offline state", async () => {
@@ -298,5 +590,39 @@ describe("Task 15 owner invite screen", () => {
     await waitFor(() =>
       expect(limited.getByText("Bitte kurz warten")).toBeTruthy(),
     );
+  });
+
+  it("shows forbidden state when current member is not the group owner", async () => {
+    mockUseGroups.mockReturnValue(
+      createGroupsState({
+        groups: {
+          status: "ready",
+          errorCode: null,
+          items: [
+            {
+              id: "group-1",
+              name: "Alpha Circle",
+              timezone: "Europe/Berlin",
+              role: "member",
+              memberCount: "3",
+              ownWeekTotal: "0",
+              ownRank: 1,
+              leaderboardAnonymous: false,
+              revision: 2,
+              updatedAt: "2026-08-31T22:00:00.000Z",
+              calculatedAt: "2026-08-31T22:01:00.000Z",
+            },
+          ],
+        },
+      }),
+    );
+    const view = await render(<GroupInvitesRoute />);
+
+    expect(view.getByText("Kein Zugriff")).toBeTruthy();
+    expect(view.getByText("Du darfst diesen Inhalt nicht öffnen.")).toBeTruthy();
+    expect(
+      view.getByRole("button", { name: "Neue Einladung erstellen" }).props
+        .accessibilityState.disabled,
+    ).toBe(true);
   });
 });

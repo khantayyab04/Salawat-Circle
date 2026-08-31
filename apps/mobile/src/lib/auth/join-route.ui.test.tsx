@@ -27,12 +27,6 @@ jest.mock("@/components", () => {
 jest.mock("@/localization", () => ({
   useTranslation: () => ({ t: () => "Einladung" }),
 }));
-jest.mock("@/screens/main", () => {
-  const { Text } = jest.requireActual<typeof import("react-native")>(
-    "react-native",
-  );
-  return { JoinScreen: () => <Text>join-preview</Text> };
-});
 jest.mock("@/screens/groups", () => {
   const { Text } = jest.requireActual<typeof import("react-native")>(
     "react-native",
@@ -59,7 +53,7 @@ beforeEach(() => {
   mockRememberInvite.mockResolvedValue(undefined);
 });
 
-describe("MVP03 join route", () => {
+describe("MVP08 join route", () => {
   it("stores a pre-auth invite and returns to the auth state router", async () => {
     const view = await render(<JoinRoute />);
 
@@ -71,7 +65,7 @@ describe("MVP03 join route", () => {
     expect(view.getByText("/")).toBeTruthy();
   });
 
-  it("keeps the join placeholder reachable for ready users", async () => {
+  it("keeps the join preview reachable for ready users", async () => {
     mockStatus = "ready";
     const view = await render(<JoinRoute />);
 

@@ -23,6 +23,10 @@ import { View, type TextStyle, type ViewStyle } from "react-native";
 const retryButtonStyle: ViewStyle = { alignSelf: "flex-start" };
 const tabularNumberStyle: TextStyle = { fontVariant: ["tabular-nums"] };
 
+function createSecretKey(secret: InviteSecret) {
+  return `${secret.kind}:${secret.secret}`;
+}
+
 function formatNumeric(value: string, localeTag: string) {
   try {
     return formatAppNumber(BigInt(value), localeTag);
@@ -89,31 +93,50 @@ export function JoinScreen({
   const [manualCode, setManualCode] = useState("");
   const [manualSecret, setManualSecret] = useState<InviteSecret | null>(null);
   const [previewRevision, setPreviewRevision] = useState(0);
+  const [previewDataSecretKey, setPreviewDataSecretKey] = useState<string | null>(
+    null,
+  );
   const [errorCode, setErrorCode] = useState<GroupsErrorCode | null>(
     invalidRouteSecret ? "INVITE_INVALID" : null,
   );
   const activeSecret = manualSecret ?? initialSecret;
   const activeSecretKind = activeSecret?.kind ?? null;
   const activeSecretValue = activeSecret?.secret ?? null;
+  const activeSecretKey = activeSecret ? createSecretKey(activeSecret) : null;
 
   useEffect(() => {
-    if (!activeSecretKind || !activeSecretValue) return;
+    if (!activeSecretKind || !activeSecretValue || !activeSecretKey) return;
+
     let mounted = true;
     void previewInvite(activeSecretKind, activeSecretValue)
+      .then(() => {
+        if (!mounted) return;
+        setPreviewDataSecretKey(activeSecretKey);
+      })
       .catch((error) => {
         if (!mounted) return;
+        setPreviewDataSecretKey(null);
         setErrorCode(toGroupsError(error).code);
       });
     return () => {
       mounted = false;
     };
-  }, [activeSecretKind, activeSecretValue, previewInvite, previewRevision]);
+  }, [
+    activeSecretKey,
+    activeSecretKind,
+    activeSecretValue,
+    previewInvite,
+    previewRevision,
+  ]);
 
   const manualCodeNormalized = useMemo(
     () => normalizeManualInviteCode(manualCode),
     [manualCode],
   );
-  const previewData = activeSecret ? invitePreview.data : null;
+  const previewData =
+    activeSecret && previewDataSecretKey === activeSecretKey
+      ? invitePreview.data
+      : null;
   const acceptPending = mutation.pending && mutation.kind === "accept_invite";
   const effectiveErrorCode = errorCode ?? (activeSecret ? invitePreview.errorCode : null);
   const resolvedErrorMessage = effectiveErrorCode
@@ -125,6 +148,7 @@ export function JoinScreen({
     if (!manualCodeNormalized) return;
     setManualCode(manualCodeNormalized);
     setErrorCode(null);
+    setPreviewDataSecretKey(null);
     setManualSecret({ kind: "code", secret: manualCodeNormalized });
     setPreviewRevision((current) => current + 1);
   }, [manualCodeNormalized]);
@@ -172,6 +196,7 @@ export function JoinScreen({
               setManualCode(value.toUpperCase());
               setErrorCode(null);
               if (manualSecret?.kind === "code") {
+                setPreviewDataSecretKey(null);
                 setManualSecret(null);
               }
             }}
@@ -205,6 +230,7 @@ export function JoinScreen({
                 onPress={() => {
                   if (!activeSecretKind || !activeSecretValue) return;
                   setErrorCode(null);
+                  setPreviewDataSecretKey(null);
                   setPreviewRevision((current) => current + 1);
                 }}
               />
@@ -228,6 +254,9 @@ export function JoinScreen({
                 : t("joinAnonymityOff")}
             </AppText>
             <AppText variant="caption">{t("joinNoShareBeforeConfirm")}</AppText>
+            {previewData.alreadyActive ? (
+              <AppText variant="caption">{t("joinAlreadyActiveHint")}</AppText>
+            ) : null}
           </AppCard>
           {resolvedErrorMessage ? (
             <StatusBanner

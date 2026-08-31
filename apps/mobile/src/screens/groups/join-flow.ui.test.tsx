@@ -62,7 +62,7 @@ const copy: Record<string, string> = {
   joinAction: "Einladung annehmen",
   joinManualCodeTitle: "Einladungscode eingeben",
   joinManualCodeLabel: "Einladungscode",
-  joinManualCodeHint: "10 Zeichen, Buchstaben und Zahlen ohne 1, I, O.",
+  joinManualCodeHint: "10 Zeichen, Buchstaben und Zahlen ohne 0, O, 1, I, L.",
   joinManualCodeSubmit: "Einladung prüfen",
   joinPreviewHeading: "Gruppenvorschau",
   joinMembersLabel: "aktive Mitglieder",
@@ -74,6 +74,8 @@ const copy: Record<string, string> = {
     "Mit dem Beitritt werden dein Anzeigename und aggregierte Salawat-Werte für aktive Mitglieder sichtbar.",
   joinNoShareBeforeConfirm:
     "Vor deiner Bestätigung werden keine Werte geteilt.",
+  joinAlreadyActiveHint:
+    "Du bist bereits aktives Mitglied. Mit Bestätigen kommst du direkt zur Gruppe.",
   joinInvalidInviteMessage: "Diese Einladung ist nicht mehr gültig.",
   joinRateLimitedMessage:
     "Zu viele Versuche. Bitte warte kurz und versuche es erneut.",
@@ -209,6 +211,31 @@ describe("Task 15 join flows", () => {
     });
   });
 
+  it("shows an already-active hint in invite preview when returned by gateway", async () => {
+    mockUseGroups.mockReturnValue(
+      createGroupsState({
+        invitePreview: {
+          status: "ready",
+          errorCode: null,
+          data: {
+            alreadyActive: true,
+            group: {
+              id: "group-1",
+              name: "Alpha Circle",
+              timezone: "Europe/Berlin",
+              leaderboardAnonymous: true,
+              memberCount: "9",
+            },
+          },
+        },
+      }),
+    );
+
+    const view = await render(<JoinTokenRoute />);
+
+    expect(view.getByText(copy.joinAlreadyActiveHint)).toBeTruthy();
+  });
+
   it("manual route normalizes code input and submits preview requests", async () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const JoinManualRoute = require("@/app/join/index").default;
@@ -233,6 +260,58 @@ describe("Task 15 join flows", () => {
     );
   });
 
+  it("clears stale preview data before requesting a preview for a new manual code", async () => {
+    let resolvePreview: (() => void) | null = null;
+    mockPreviewInvite.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolvePreview = resolve;
+        }),
+    );
+    mockUseGroups.mockReturnValue(
+      createGroupsState({
+        invitePreview: {
+          status: "ready",
+          errorCode: null,
+          data: {
+            alreadyActive: false,
+            group: {
+              id: "group-stale",
+              name: "Stale Circle",
+              timezone: "Europe/Berlin",
+              leaderboardAnonymous: false,
+              memberCount: "5",
+            },
+          },
+        },
+      }),
+    );
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const JoinManualRoute = require("@/app/join/index").default;
+    const view = await render(<JoinManualRoute />);
+
+    fireEvent.changeText(view.getByLabelText("Einladungscode"), "ABCD2345EF");
+    await waitFor(() =>
+      expect(
+        view.getByRole("button", { name: "Einladung prüfen" }).props.accessibilityState
+          .disabled,
+      ).toBe(false),
+    );
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Einladung prüfen" }));
+    });
+
+    await waitFor(() =>
+      expect(mockPreviewInvite).toHaveBeenCalledWith("code", "ABCD2345EF"),
+    );
+    expect(view.queryByText("Stale Circle")).toBeNull();
+
+    await act(async () => {
+      resolvePreview?.();
+    });
+  });
+
   it("maps invalid invites to a neutral message while keeping offline and rate-limited errors distinct", async () => {
     mockUseGroups.mockReturnValue(
       createGroupsState({
@@ -244,7 +323,9 @@ describe("Task 15 join flows", () => {
       }),
     );
     const invalid = await render(<JoinTokenRoute />);
-    expect(invalid.getByText(copy.joinInvalidInviteMessage)).toBeTruthy();
+    await waitFor(() =>
+      expect(invalid.getByText(copy.joinInvalidInviteMessage)).toBeTruthy(),
+    );
 
     mockUseGroups.mockReturnValue(
       createGroupsState({
@@ -256,7 +337,9 @@ describe("Task 15 join flows", () => {
       }),
     );
     const offline = await render(<JoinTokenRoute />);
-    expect(offline.getByText(copy.joinOfflineMessage)).toBeTruthy();
+    await waitFor(() =>
+      expect(offline.getByText(copy.joinOfflineMessage)).toBeTruthy(),
+    );
 
     mockUseGroups.mockReturnValue(
       createGroupsState({
@@ -268,6 +351,8 @@ describe("Task 15 join flows", () => {
       }),
     );
     const rateLimited = await render(<JoinTokenRoute />);
-    expect(rateLimited.getByText(copy.joinRateLimitedMessage)).toBeTruthy();
+    await waitFor(() =>
+      expect(rateLimited.getByText(copy.joinRateLimitedMessage)).toBeTruthy(),
+    );
   });
 });

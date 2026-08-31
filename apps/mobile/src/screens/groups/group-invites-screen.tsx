@@ -7,6 +7,7 @@ import {
 } from "@/components";
 import {
   buildInviteLink,
+  toGroupsError,
   type GroupInvite,
   useGroups,
   type GroupsErrorCode,
@@ -38,6 +39,16 @@ type InviteSecretCard = {
   inviteId: string;
   link: string;
   code: string;
+};
+
+type InviteActionErrorState = {
+  groupId: string;
+  code: GroupsErrorCode;
+};
+
+type PendingRevokeState = {
+  groupId: string;
+  inviteId: string;
 };
 
 function readGroupId(value: string | string[] | undefined) {
@@ -106,10 +117,60 @@ function resolveInviteErrorCopy(
         body: t("groupInvitesRateLimitedBody"),
         tone: "error",
       };
+    case "FORBIDDEN":
+      return {
+        title: t("stateForbiddenTitle"),
+        body: t("stateForbiddenBody"),
+        tone: "error",
+      };
+    case "NOT_FOUND":
+      return {
+        title: t("groupInvitesNotFoundTitle"),
+        body: t("groupInvitesNotFoundBody"),
+        tone: "error",
+      };
     default:
       return {
         title: t("groupInvitesErrorTitle"),
         body: t("groupInvitesErrorBody"),
+        tone: "error",
+      };
+  }
+}
+
+function resolveInviteActionErrorCopy(
+  code: GroupsErrorCode,
+  t: (key: TranslationKey) => string,
+): InviteErrorCopy {
+  switch (code) {
+    case "OFFLINE":
+      return {
+        title: t("groupInvitesOfflineTitle"),
+        body: t("groupInvitesOfflineBody"),
+        tone: "offline",
+      };
+    case "RATE_LIMITED":
+      return {
+        title: t("groupInvitesRateLimitedTitle"),
+        body: t("groupInvitesRateLimitedBody"),
+        tone: "error",
+      };
+    case "FORBIDDEN":
+      return {
+        title: t("stateForbiddenTitle"),
+        body: t("stateForbiddenBody"),
+        tone: "error",
+      };
+    case "NOT_FOUND":
+      return {
+        title: t("groupInvitesNotFoundTitle"),
+        body: t("groupInvitesNotFoundBody"),
+        tone: "error",
+      };
+    default:
+      return {
+        title: t("groupInvitesActionErrorTitle"),
+        body: t("groupInvitesActionErrorBody"),
         tone: "error",
       };
   }
@@ -163,6 +224,10 @@ export function GroupInvitesScreen() {
 
   const groupId = readGroupId(id);
   const [secretCard, setSecretCard] = useState<InviteSecretCard | null>(null);
+  const [actionError, setActionError] = useState<InviteActionErrorState | null>(
+    null,
+  );
+  const [pendingRevoke, setPendingRevoke] = useState<PendingRevokeState | null>(null);
 
   const group = useMemo(() => {
     if (!groupId) return null;
@@ -172,11 +237,16 @@ export function GroupInvitesScreen() {
   const timeZone = group?.timezone ?? "UTC";
   const visibleSecretCard =
     secretCard && secretCard.groupId === groupId ? secretCard : null;
+  const visibleSecretInviteId = visibleSecretCard?.inviteId ?? null;
+  const pendingRevokeInviteId =
+    pendingRevoke?.groupId === groupId ? pendingRevoke.inviteId : null;
 
   useFocusEffect(
     useCallback(() => {
       return () => {
         setSecretCard(null);
+        setActionError(null);
+        setPendingRevoke(null);
       };
     }, []),
   );
@@ -198,57 +268,103 @@ export function GroupInvitesScreen() {
   const showBlockingError = !hasInvites && !!effectiveErrorCode;
   const showPartialError = hasInvites && !!effectiveErrorCode;
   const createPending = mutation.pending && mutation.kind === "create_invite";
-  const revokePending = mutation.pending && mutation.kind === "revoke_invite";
+  const effectiveActionErrorCode =
+    actionError?.groupId === groupId ? actionError.code : mutation.errorCode;
+  const actionErrorCopy = effectiveActionErrorCode
+    ? resolveInviteActionErrorCopy(effectiveActionErrorCode, t)
+    : null;
 
   const refreshInvites = useCallback(() => {
     if (!groupId) return;
-    void loadInvites(groupId).catch(() => undefined);
+    setActionError(null);
+    void loadInvites(groupId).catch((error) => {
+      setActionError({ groupId, code: toGroupsError(error).code });
+    });
   }, [groupId, loadInvites]);
 
   const handleCreateInvite = useCallback(async () => {
     if (!groupId || !isOwner) return;
-    const response = await createInvite(groupId, { expiresInDays: 7, maxUses: 25 });
-    setSecretCard({
-      groupId,
-      inviteId: response.invite.id,
-      code: response.invite.code,
-      link: buildInviteLink(
-        response.invite.token,
-        process.env.EXPO_PUBLIC_JOIN_BASE_URL,
-      ),
-    });
+    setActionError(null);
+    try {
+      const response = await createInvite(groupId, { expiresInDays: 7, maxUses: 25 });
+      setSecretCard({
+        groupId,
+        inviteId: response.invite.id,
+        code: response.invite.code,
+        link: buildInviteLink(
+          response.invite.token,
+          process.env.EXPO_PUBLIC_JOIN_BASE_URL,
+        ),
+      });
+    } catch (error) {
+      setActionError({ groupId, code: toGroupsError(error).code });
+    }
   }, [createInvite, groupId, isOwner]);
 
   const handleShare = useCallback(async () => {
-    if (!visibleSecretCard) return;
-    await Share.share({
-      message: t("groupInvitesShareMessage", {
-        link: visibleSecretCard.link,
-        code: visibleSecretCard.code,
-      }),
-    });
-  }, [t, visibleSecretCard]);
+    if (!groupId || !visibleSecretCard) return;
+    setActionError(null);
+    try {
+      await Share.share({
+        message: t("groupInvitesShareMessage", {
+          link: visibleSecretCard.link,
+          code: visibleSecretCard.code,
+        }),
+      });
+    } catch (error) {
+      setActionError({ groupId, code: toGroupsError(error).code });
+    }
+  }, [groupId, t, visibleSecretCard]);
 
   const handleCopyLink = useCallback(async () => {
-    if (!visibleSecretCard) return;
-    await Clipboard.setStringAsync(visibleSecretCard.link);
-  }, [visibleSecretCard]);
+    if (!groupId || !visibleSecretCard) return;
+    setActionError(null);
+    try {
+      await Clipboard.setStringAsync(visibleSecretCard.link);
+    } catch (error) {
+      setActionError({ groupId, code: toGroupsError(error).code });
+    }
+  }, [groupId, visibleSecretCard]);
 
   const handleCopyCode = useCallback(async () => {
-    if (!visibleSecretCard) return;
-    await Clipboard.setStringAsync(visibleSecretCard.code);
-  }, [visibleSecretCard]);
+    if (!groupId || !visibleSecretCard) return;
+    setActionError(null);
+    try {
+      await Clipboard.setStringAsync(visibleSecretCard.code);
+    } catch (error) {
+      setActionError({ groupId, code: toGroupsError(error).code });
+    }
+  }, [groupId, visibleSecretCard]);
 
   const revokeWithRefresh = useCallback(
     async (inviteId: string) => {
-      if (!groupId || !isOwner) return;
-      await revokeInvite(groupId, inviteId);
-      if (visibleSecretCard?.inviteId === inviteId) {
-        setSecretCard(null);
+      if (!groupId || !isOwner || pendingRevokeInviteId) return;
+      setActionError(null);
+      setPendingRevoke({ groupId, inviteId });
+      try {
+        await revokeInvite(groupId, inviteId);
+        if (visibleSecretInviteId === inviteId) {
+          setSecretCard(null);
+        }
+        await loadInvites(groupId);
+      } catch (error) {
+        setActionError({ groupId, code: toGroupsError(error).code });
+      } finally {
+        setPendingRevoke((current) =>
+          current?.groupId === groupId && current.inviteId === inviteId
+            ? null
+            : current,
+        );
       }
-      await loadInvites(groupId).catch(() => undefined);
     },
-    [groupId, isOwner, loadInvites, revokeInvite, visibleSecretCard?.inviteId],
+    [
+      groupId,
+      isOwner,
+      loadInvites,
+      pendingRevokeInviteId,
+      revokeInvite,
+      visibleSecretInviteId,
+    ],
   );
 
   const confirmRevoke = useCallback(
@@ -262,7 +378,7 @@ export function GroupInvitesScreen() {
             text: t("groupInvitesRevokeAction"),
             style: "destructive",
             onPress: () => {
-              void revokeWithRefresh(inviteId).catch(() => undefined);
+              void revokeWithRefresh(inviteId);
             },
           },
         ],
@@ -285,9 +401,24 @@ export function GroupInvitesScreen() {
         disabled={!groupId || !isOwner}
         loading={createPending}
         onPress={() => {
-          void handleCreateInvite().catch(() => undefined);
+          void handleCreateInvite();
         }}
       />
+      {actionErrorCopy ? (
+        <View style={{ gap: spacing.sm }}>
+          <StatusBanner
+            title={actionErrorCopy.title}
+            body={actionErrorCopy.body}
+            tone={actionErrorCopy.tone}
+          />
+          <AppButton
+            label={t("groupInvitesRefresh")}
+            variant="secondary"
+            style={retryButtonStyle}
+            onPress={refreshInvites}
+          />
+        </View>
+      ) : null}
       {visibleSecretCard ? (
         <AppCard style={{ gap: spacing.sm }}>
           <AppText variant="title">{t("groupInvitesSecretTitle")}</AppText>
@@ -305,21 +436,21 @@ export function GroupInvitesScreen() {
               label={t("groupInvitesShareAction")}
               variant="secondary"
               onPress={() => {
-                void handleShare().catch(() => undefined);
+                void handleShare();
               }}
             />
             <AppButton
               label={t("groupInvitesCopyLinkAction")}
               variant="secondary"
               onPress={() => {
-                void handleCopyLink().catch(() => undefined);
+                void handleCopyLink();
               }}
             />
             <AppButton
               label={t("groupInvitesCopyCodeAction")}
               variant="secondary"
               onPress={() => {
-                void handleCopyCode().catch(() => undefined);
+                void handleCopyCode();
               }}
             />
           </View>
@@ -331,7 +462,7 @@ export function GroupInvitesScreen() {
             />
             <AppButton
               label={t("groupInvitesRevokeAction")}
-              loading={revokePending}
+              loading={pendingRevokeInviteId === visibleSecretCard.inviteId}
               variant="destructive"
               onPress={() => confirmRevoke(visibleSecretCard.inviteId)}
             />
@@ -394,7 +525,7 @@ export function GroupInvitesScreen() {
             <AppButton
               label={t("groupInvitesRevokeAction")}
               variant="destructive"
-              loading={revokePending}
+              loading={pendingRevokeInviteId === invite.id}
               disabled={!isOwner || invite.status !== "active"}
               onPress={() => confirmRevoke(invite.id)}
             />

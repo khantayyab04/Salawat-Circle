@@ -207,6 +207,12 @@ export const de = {
     "Zu viele Aktionen in kurzer Zeit. Versuche es gleich erneut.",
   groupInvitesErrorTitle: "Einladungen konnten nicht geladen werden",
   groupInvitesErrorBody: "Bitte versuche es erneut.",
+  groupInvitesNotFoundTitle: "Einladung nicht gefunden",
+  groupInvitesNotFoundBody:
+    "Diese Einladung ist nicht mehr verfügbar. Aktualisiere die Liste.",
+  groupInvitesActionErrorTitle: "Aktion fehlgeschlagen",
+  groupInvitesActionErrorBody:
+    "Die Aktion konnte nicht abgeschlossen werden. Bitte versuche es erneut.",
   groupInvitesStatusActive: "Aktiv",
   groupInvitesStatusExpired: "Abgelaufen",
   groupInvitesStatusExhausted: "Verbraucht",
@@ -233,7 +239,7 @@ export const de = {
   joinAction: "Einladung annehmen",
   joinManualCodeTitle: "Einladungscode eingeben",
   joinManualCodeLabel: "Einladungscode",
-  joinManualCodeHint: "10 Zeichen, Buchstaben und Zahlen ohne 1, I, O.",
+  joinManualCodeHint: "10 Zeichen, Buchstaben und Zahlen ohne 0, O, 1, I, L.",
   joinManualCodeSubmit: "Einladung prüfen",
   joinPreviewHeading: "Gruppenvorschau",
   joinMembersLabel: "aktive Mitglieder",
@@ -244,6 +250,8 @@ export const de = {
   joinAnonymityOff:
     "Aktuell sehen aktive Mitglieder deinen Anzeigenamen und aggregierte Salawat-Werte.",
   joinNoShareBeforeConfirm: "Vor deiner Bestätigung werden keine Werte geteilt.",
+  joinAlreadyActiveHint:
+    "Du bist bereits aktives Mitglied. Mit Bestätigen kommst du direkt zur Gruppe.",
   joinLoadingTitle: "Einladung wird geprüft",
   joinLoadingBody: "Wir laden die aktuellen Gruppendaten.",
   joinErrorTitle: "Einladung nicht verfügbar",

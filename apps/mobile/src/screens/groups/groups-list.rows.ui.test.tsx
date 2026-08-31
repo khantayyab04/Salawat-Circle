@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import { fireEvent, render } from "@testing-library/react-native";
+import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
 import { GroupsScreen } from "@/screens/groups";
 
 const mockPush = jest.fn();
 const mockUseGroups = jest.fn();
+const mockRefreshGroups = jest.fn<() => Promise<void>>();
 const mockFormatAppNumber = jest.fn(
   (value: number | bigint, _localeTag?: string, _timeZone?: string) =>
     String(value),
@@ -85,7 +86,7 @@ function createGroupsState(overrides: Record<string, unknown> = {}) {
       kind: null,
       errorCode: null,
     },
-    refreshGroups: jest.fn(),
+    refreshGroups: mockRefreshGroups,
     createGroup: jest.fn(),
     loadLeaderboard: jest.fn(),
     setAnonymity: jest.fn(),
@@ -101,6 +102,7 @@ function createGroupsState(overrides: Record<string, unknown> = {}) {
 describe("MVP08 groups list rows", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockRefreshGroups.mockResolvedValue(undefined);
     mockUseGroups.mockReturnValue(createGroupsState());
     mockFormatAppNumber.mockClear();
     mockFormatAppDate.mockClear();
@@ -155,7 +157,9 @@ describe("MVP08 groups list rows", () => {
       "Anonyme Rangliste aktiv",
     );
 
-    fireEvent.press(groupButton);
+    await act(async () => {
+      fireEvent.press(groupButton);
+    });
     expect(mockPush).toHaveBeenCalledWith({
       pathname: "/groups/[id]",
       params: { id: "group-1" },
@@ -193,7 +197,14 @@ describe("MVP08 groups list rows", () => {
     expect(view.getByText("Beta Circle")).toBeTruthy();
     expect(view.getByText("Nicht alles konnte geladen werden")).toBeTruthy();
     expect(view.getByText("Die vorhandenen Inhalte bleiben sichtbar.")).toBeTruthy();
-    expect(view.getByRole("button", { name: "Aktualisieren" })).toBeTruthy();
+    const retry = view.getByRole("button", { name: "Aktualisieren" });
+    expect(retry).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(retry);
+    });
+
+    await waitFor(() => expect(mockRefreshGroups).toHaveBeenCalledTimes(1));
   });
 
   it("memoizes group rows to avoid recomputing metrics on unrelated rerenders", async () => {

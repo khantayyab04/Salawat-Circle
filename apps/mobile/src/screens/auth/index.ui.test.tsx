@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
 import { CodeScreen, ConsentScreen, EmailScreen } from "./index";
 
 const mockPush = jest.fn();
@@ -119,7 +119,9 @@ describe("MVP03 auth screens", () => {
           .accessibilityState.disabled,
       ).toBe(false),
     );
-    fireEvent.press(view.getByRole("button", { name: "Weiter zum Code" }));
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Weiter zum Code" }));
+    });
 
     await waitFor(() =>
       expect(mockRequestOtp).toHaveBeenCalledWith("person@example.com"),
@@ -137,14 +139,18 @@ describe("MVP03 auth screens", () => {
         .disabled,
     ).toBe(true);
 
-    fireEvent.press(view.getByRole("checkbox", { name: "Ich willige ein." }));
+    await act(async () => {
+      fireEvent.press(view.getByRole("checkbox", { name: "Ich willige ein." }));
+    });
     await waitFor(() =>
       expect(
         view.getByRole("button", { name: "Weiter" }).props.accessibilityState
           .disabled,
       ).toBe(false),
     );
-    fireEvent.press(view.getByRole("button", { name: "Weiter" }));
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Weiter" }));
+    });
 
     await waitFor(() => expect(mockGrantConsent).toHaveBeenCalledWith("de"));
     expect(mockReplace).toHaveBeenCalledWith("/today");
@@ -165,7 +171,9 @@ describe("MVP03 auth screens", () => {
           .disabled,
       ).toBe(false),
     );
-    fireEvent.press(view.getByRole("button", { name: "Code prüfen" }));
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Code prüfen" }));
+    });
 
     await waitFor(() => expect(mockVerifyOtp).toHaveBeenCalledWith("123456"));
     await waitFor(() => expect(mockConsumePendingInvite).toHaveBeenCalledTimes(1));
@@ -174,4 +182,32 @@ describe("MVP03 auth screens", () => {
       params: { token: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
     });
   });
+
+  it.each([
+    "profile_required",
+    "consent_required",
+  ] as const)(
+    "does not consume pending invites when verifyOtp returns %s",
+    async (nextStatus) => {
+      mockStatus = nextStatus;
+      mockVerifyOtp.mockResolvedValue(nextStatus);
+
+      const view = await render(<CodeScreen />);
+      fireEvent.changeText(view.getByLabelText("Sechsstelliger Code"), "123456");
+      await waitFor(() =>
+        expect(
+          view.getByRole("button", { name: "Code prüfen" }).props.accessibilityState
+            .disabled,
+        ).toBe(false),
+      );
+
+      await act(async () => {
+        fireEvent.press(view.getByRole("button", { name: "Code prüfen" }));
+      });
+
+      await waitFor(() => expect(mockVerifyOtp).toHaveBeenCalledWith("123456"));
+      expect(mockConsumePendingInvite).not.toHaveBeenCalled();
+      expect(mockReplace).toHaveBeenCalledWith("/");
+    },
+  );
 });
