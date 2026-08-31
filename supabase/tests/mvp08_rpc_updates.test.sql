@@ -1,32 +1,36 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(44);
+select plan(57);
 
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at
 ) values
   ('00000000-0000-0000-0000-000000000000', '72000000-0000-4000-8000-000000000001', 'authenticated', 'authenticated', 'mvp08-rpc-owner@example.test', '', now(), now(), now()),
   ('00000000-0000-0000-0000-000000000000', '72000000-0000-4000-8000-000000000002', 'authenticated', 'authenticated', 'mvp08-rpc-member@example.test', '', now(), now(), now()),
-  ('00000000-0000-0000-0000-000000000000', '72000000-0000-4000-8000-000000000003', 'authenticated', 'authenticated', 'mvp08-rpc-limit@example.test', '', now(), now(), now());
+  ('00000000-0000-0000-0000-000000000000', '72000000-0000-4000-8000-000000000003', 'authenticated', 'authenticated', 'mvp08-rpc-limit@example.test', '', now(), now(), now()),
+  ('00000000-0000-0000-0000-000000000000', '72000000-0000-4000-8000-000000000004', 'authenticated', 'authenticated', 'mvp08-rpc-suspended@example.test', '', now(), now(), now());
 
 insert into public.profiles (id, display_name, normalized_name)
 values
   ('72000000-0000-4000-8000-000000000001', 'Contract Owner', 'contract owner'),
   ('72000000-0000-4000-8000-000000000002', 'Contract Member', 'contract member'),
-  ('72000000-0000-4000-8000-000000000003', 'Contract Limit', 'contract limit');
+  ('72000000-0000-4000-8000-000000000003', 'Contract Limit', 'contract limit'),
+  ('72000000-0000-4000-8000-000000000004', 'Contract Suspended', 'contract suspended');
 
 insert into public.user_settings (user_id, timezone, locale)
 values
   ('72000000-0000-4000-8000-000000000001', 'Europe/Berlin', 'de'),
   ('72000000-0000-4000-8000-000000000002', 'Europe/Berlin', 'de'),
-  ('72000000-0000-4000-8000-000000000003', 'Europe/Berlin', 'de');
+  ('72000000-0000-4000-8000-000000000003', 'Europe/Berlin', 'de'),
+  ('72000000-0000-4000-8000-000000000004', 'Europe/Berlin', 'en');
 
 insert into private.consent_records (user_id, consent_type, document_version, locale)
 values
   ('72000000-0000-4000-8000-000000000001', 'core_processing', 'mvp-core-v1', 'de'),
   ('72000000-0000-4000-8000-000000000002', 'core_processing', 'mvp-core-v1', 'de'),
-  ('72000000-0000-4000-8000-000000000003', 'core_processing', 'mvp-core-v1', 'de');
+  ('72000000-0000-4000-8000-000000000003', 'core_processing', 'mvp-core-v1', 'de'),
+  ('72000000-0000-4000-8000-000000000004', 'core_processing', 'mvp-core-v1', 'en');
 
 select has_function(
   'public',
@@ -137,6 +141,34 @@ select results_eq(
   array[1::bigint],
   'create_group creates exactly one active owner membership'
 );
+select results_eq(
+  $$
+    select sharing_consent_version
+    from public.group_memberships
+    where group_id = '72a00000-0000-4000-8000-000000000001'
+      and user_id = '72000000-0000-4000-8000-000000000001'
+      and left_at is null
+  $$,
+  array['mvp08-group-sharing-v1'],
+  'create_group stores immutable owner sharing consent version'
+);
+reset role;
+select results_eq(
+  $$
+    select count(*)::bigint
+    from private.consent_records
+    where user_id = '72000000-0000-4000-8000-000000000001'
+      and consent_type = 'group_sharing'
+      and document_version = 'mvp08-group-sharing-v1'
+      and locale = 'de'
+      and withdrawn_at is null
+  $$,
+  array[1::bigint],
+  'create_group records group sharing consent using supported server locale'
+);
+set local role authenticated;
+set local "request.jwt.claim.role" = 'authenticated';
+set local "request.jwt.claim.sub" = '72000000-0000-4000-8000-000000000001';
 
 create temp table created_named_replay as
 select public.create_group('72a00000-0000-4000-8000-000000000001', 'Contract Group', 'Europe/Berlin', false, true) as response;
@@ -146,6 +178,22 @@ select is(
   (select response->'membership'->>'id' from created_named),
   'idempotent replay returns the original owner membership id'
 );
+reset role;
+select results_eq(
+  $$
+    select count(*)::bigint
+    from private.consent_records
+    where user_id = '72000000-0000-4000-8000-000000000001'
+      and consent_type = 'group_sharing'
+      and document_version = 'mvp08-group-sharing-v1'
+      and withdrawn_at is null
+  $$,
+  array[1::bigint],
+  'idempotent create_group replay never duplicates group sharing consent records'
+);
+set local role authenticated;
+set local "request.jwt.claim.role" = 'authenticated';
+set local "request.jwt.claim.sub" = '72000000-0000-4000-8000-000000000001';
 select throws_ok(
   $$ select public.create_group('72a00000-0000-4000-8000-000000000001', 'Contract Group', 'Europe/Berlin', true, true) $$,
   'P0001',
@@ -216,7 +264,12 @@ reset role;
 insert into public.group_memberships (id, group_id, user_id, joined_at, sharing_consent_version)
 values
   ('72b00000-0000-4000-8000-000000000101', '72a00000-0000-4000-8000-000000000002', '72000000-0000-4000-8000-000000000002', clock_timestamp() - interval '1 day', 'mvp08-rpc-updates-v1'),
-  ('72b00000-0000-4000-8000-000000000201', '72a00000-0000-4000-8000-000000000001', '72000000-0000-4000-8000-000000000002', clock_timestamp() - interval '1 day', 'mvp08-rpc-updates-v1');
+  ('72b00000-0000-4000-8000-000000000201', '72a00000-0000-4000-8000-000000000001', '72000000-0000-4000-8000-000000000002', clock_timestamp() - interval '1 day', 'mvp08-rpc-updates-v1'),
+  ('72b00000-0000-4000-8000-000000000301', '72a00000-0000-4000-8000-000000000002', '72000000-0000-4000-8000-000000000004', clock_timestamp() - interval '1 day', 'mvp08-rpc-updates-v1');
+
+update public.profiles
+set status = 'suspended'
+where id = '72000000-0000-4000-8000-000000000004';
 
 insert into public.salawat_entries (id, user_id, amount, entry_date, timezone, recorded_at_client)
 values
@@ -226,6 +279,48 @@ values
 set local role authenticated;
 set local "request.jwt.claim.role" = 'authenticated';
 set local "request.jwt.claim.sub" = '72000000-0000-4000-8000-000000000001';
+
+create temp table listed_groups_owner_after_members as
+select public.list_my_groups() as response;
+
+select is(
+  (
+    select item->>'member_count'
+    from listed_groups_owner_after_members,
+    lateral jsonb_array_elements(response->'items') as item
+    where item->>'id' = '72a00000-0000-4000-8000-000000000002'
+  ),
+  '2',
+  'list_my_groups member_count excludes memberships whose profile is suspended'
+);
+select is(
+  (
+    select item->>'revision'
+    from listed_groups_owner_after_members,
+    lateral jsonb_array_elements(response->'items') as item
+    where item->>'id' = '72a00000-0000-4000-8000-000000000002'
+  ),
+  (
+    select group_row.revision::text
+    from public.groups group_row
+    where group_row.id = '72a00000-0000-4000-8000-000000000002'
+  ),
+  'list_my_groups returns the exact group revision value'
+);
+select is(
+  (
+    select (item->>'updated_at')::timestamptz
+    from listed_groups_owner_after_members,
+    lateral jsonb_array_elements(response->'items') as item
+    where item->>'id' = '72a00000-0000-4000-8000-000000000002'
+  ),
+  (
+    select group_row.updated_at
+    from public.groups group_row
+    where group_row.id = '72a00000-0000-4000-8000-000000000002'
+  ),
+  'list_my_groups returns the exact group updated_at timestamp'
+);
 
 create temp table named_board as
 select public.get_group_leaderboard('72a00000-0000-4000-8000-000000000001', 'week', null, null, null, 20) as response;
@@ -343,6 +438,75 @@ select is(
   (select jsonb_path_exists(response, '$.**.alias_key') from anonymous_board),
   false,
   'leaderboard payload never exposes alias_key field names'
+);
+
+set local "request.jwt.claim.sub" = '72000000-0000-4000-8000-000000000002';
+create temp table listed_groups_member as
+select public.list_my_groups() as response;
+create temp table anonymous_board_member as
+select public.get_group_leaderboard('72a00000-0000-4000-8000-000000000002', 'week', null, null, null, 20) as response;
+
+select is(
+  (
+    select item->>'role'
+    from listed_groups_member,
+    lateral jsonb_array_elements(response->'items') as item
+    where item->>'id' = '72a00000-0000-4000-8000-000000000002'
+  ),
+  'member',
+  'list_my_groups reports role=member for non-owner memberships'
+);
+select is(
+  (
+    select item->>'revision'
+    from listed_groups_member,
+    lateral jsonb_array_elements(response->'items') as item
+    where item->>'id' = '72a00000-0000-4000-8000-000000000002'
+  ),
+  (
+    select group_row.revision::text
+    from public.groups group_row
+    where group_row.id = '72a00000-0000-4000-8000-000000000002'
+  ),
+  'member list_my_groups view returns the exact group revision value'
+);
+select is(
+  (
+    select (item->>'updated_at')::timestamptz
+    from listed_groups_member,
+    lateral jsonb_array_elements(response->'items') as item
+    where item->>'id' = '72a00000-0000-4000-8000-000000000002'
+  ),
+  (
+    select group_row.updated_at
+    from public.groups group_row
+    where group_row.id = '72a00000-0000-4000-8000-000000000002'
+  ),
+  'member list_my_groups view returns the exact group updated_at timestamp'
+);
+select is(
+  (select response->'group'->>'role' from anonymous_board_member),
+  'member',
+  'get_group_leaderboard reports role=member for non-owner callers'
+);
+select is(
+  (select response->'group'->>'is_owner' from anonymous_board_member),
+  'false',
+  'get_group_leaderboard reports is_owner=false for non-owner callers'
+);
+select is(
+  (select response->'group'->>'revision' from anonymous_board_member),
+  (
+    select group_row.revision::text
+    from public.groups group_row
+    where group_row.id = '72a00000-0000-4000-8000-000000000002'
+  ),
+  'member leaderboard metadata returns the exact group revision value'
+);
+select is(
+  (select response->'group'->>'member_count' from anonymous_board_member),
+  '2',
+  'member leaderboard metadata member_count matches visible active-profile membership rows'
 );
 
 reset role;
