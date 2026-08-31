@@ -542,7 +542,7 @@ select is(
     select (item->>'total')::bigint
     from retro_board_before,
     lateral jsonb_array_elements(response->'items') as item
-    where item->>'membership_id' = (select response->'membership'->>'id' from accepted_retro)
+    where item->>'row_id' = (select response->'membership'->>'id' from accepted_retro)
   ),
   0::bigint,
   'leaderboard excludes entries recorded before joined_at for invite acceptances'
@@ -571,7 +571,7 @@ select is(
     select (item->>'total')::bigint
     from retro_board_after,
     lateral jsonb_array_elements(response->'items') as item
-    where item->>'membership_id' = (select response->'membership'->>'id' from accepted_retro)
+    where item->>'row_id' = (select response->'membership'->>'id' from accepted_retro)
   ),
   60::bigint,
   'leaderboard includes entries recorded after joined_at for invite acceptances'

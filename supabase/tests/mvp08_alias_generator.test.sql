@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(11);
+select plan(16);
 
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at
@@ -21,14 +21,18 @@ values ('30303030-3030-4030-8030-303030303030', '90909090-9090-4090-8090-9090909
 
 select results_eq(
   $$
-    select (alias_name is not null and alias_normalized = pg_catalog.lower(private.normalise_name(alias_name)))::boolean
+    select (
+      alias_name is not null
+      and alias_normalized = pg_catalog.lower(private.normalise_name(alias_name))
+      and alias_key is not null
+    )::boolean
     from public.group_memberships
     where group_id = '30303030-3030-4030-8030-303030303030'
       and user_id = '90909090-9090-4090-8090-909090909090'
       and left_at is null
   $$,
   array[true],
-  'server-generated active aliases are stored and normalized canonically'
+  'server-generated active aliases include a canonical name and opaque row key'
 );
 
 select results_eq(
@@ -36,10 +40,10 @@ select results_eq(
     select count(*)
     from public.group_memberships
     where left_at is null
-      and (alias_name is null or alias_normalized is null)
+      and (alias_name is null or alias_normalized is null or alias_key is null)
   $$,
   array[0::bigint],
-  'active memberships persist non-null aliases'
+  'active memberships persist non-null aliases and row keys'
 );
 
 insert into public.group_memberships (id, group_id, user_id, sharing_consent_version, alias_name, alias_normalized)
@@ -78,20 +82,35 @@ values (
   'mvp08-collision-v1'
 );
 
-select results_eq(
-  $$
+select is(
+  (
     select alias_normalized
     from public.group_memberships
     where id = '33333333-3333-4333-8333-333333333333'
-  $$,
-  $$
-    select alias_normalized
-    from private.membership_alias_candidate(
+  ),
+  (
+    with occupied as (
+      select alias_normalized
+      from public.group_memberships
+      where group_id = '30303030-3030-4030-8030-303030303030'
+        and left_at is null
+        and id <> '33333333-3333-4333-8333-333333333333'
+    )
+    select candidate.alias_normalized
+    from generate_series(0, 1024) attempt
+    cross join lateral private.membership_alias_candidate(
       '30303030-3030-4030-8030-303030303030'::uuid,
       '33333333-3333-4333-8333-333333333333'::uuid,
-      2
+      attempt
+    ) candidate
+    where not exists (
+      select 1
+      from occupied
+      where occupied.alias_normalized = candidate.alias_normalized
     )
-  $$,
+    order by attempt
+    limit 1
+  ),
   'collision resolution deterministically picks the first free bounded attempt'
 );
 
@@ -104,6 +123,17 @@ select results_eq(
   $$,
   array[true],
   'active aliases stay unique per group after collision handling'
+);
+
+select results_eq(
+  $$
+    select (count(*) = count(distinct alias_key))::boolean
+    from public.group_memberships
+    where group_id = '30303030-3030-4030-8030-303030303030'
+      and left_at is null
+  $$,
+  array[true],
+  'active row keys stay unique per group after collision handling'
 );
 
 select results_eq(
@@ -124,7 +154,7 @@ select results_eq(
 );
 
 insert into public.group_memberships (
-  id, group_id, user_id, joined_at, left_at, sharing_consent_version, alias_name, alias_normalized
+  id, group_id, user_id, joined_at, left_at, sharing_consent_version, alias_name, alias_normalized, alias_key
 ) values (
   '34343434-3434-4434-8434-343434343434',
   '30303030-3030-4030-8030-303030303030',
@@ -132,6 +162,7 @@ insert into public.group_memberships (
   now() - interval '2 days',
   now() - interval '1 day',
   'mvp08-backfill-historical-v1',
+  null,
   null,
   null
 );
@@ -153,15 +184,16 @@ select results_eq(
     where id = '35353535-3535-4535-8535-353535353535'
       and alias_name is null
       and alias_normalized is null
+      and alias_key is null
   $$,
   array[1::bigint],
-  'fixture contains one active membership without alias before backfill'
+  'fixture contains one active membership without alias or row key before backfill'
 );
 
 select is(
   private.backfill_active_membership_aliases() >= 1,
   true,
-  'backfill assigns aliases for active memberships with null aliases'
+  'backfill assigns aliases for active memberships with null alias fields'
 );
 
 select results_eq(
@@ -171,9 +203,10 @@ select results_eq(
     where id = '35353535-3535-4535-8535-353535353535'
       and alias_name is not null
       and alias_normalized = pg_catalog.lower(private.normalise_name(alias_name))
+      and alias_key is not null
   $$,
   array[1::bigint],
-  'backfill fills canonical aliases for active memberships'
+  'backfill fills canonical aliases and opaque row keys for active memberships'
 );
 
 select results_eq(
@@ -186,7 +219,19 @@ select results_eq(
       and alias_normalized is null
   $$,
   array[1::bigint],
-  'backfill preserves historical membership rows'
+  'backfill preserves historical membership alias columns'
+);
+
+select results_eq(
+  $$
+    select count(*)
+    from public.group_memberships
+    where id = '34343434-3434-4434-8434-343434343434'
+      and left_at is not null
+      and alias_key is null
+  $$,
+  array[1::bigint],
+  'backfill preserves historical membership row keys'
 );
 
 set local role authenticated;
@@ -196,7 +241,15 @@ select throws_ok(
   $$,
   '42501',
   null,
-  'authenticated clients cannot execute private alias assignment helpers'
+  'authenticated clients cannot execute private alias assignment helper (single argument)'
+);
+select throws_ok(
+  $$
+    select private.assign_membership_alias('33333333-3333-4333-8333-333333333333'::uuid, 'blocked')
+  $$,
+  '42501',
+  null,
+  'authenticated clients cannot execute private alias assignment helper (disallowed alias signature)'
 );
 select throws_ok(
   $$
@@ -209,7 +262,29 @@ select throws_ok(
   $$,
   '42501',
   null,
-  'authenticated clients cannot execute private alias generator helpers'
+  'authenticated clients cannot execute private alias generator helper'
+);
+select throws_ok(
+  $$
+    select *
+    from private.membership_alias_candidate_for_epoch(
+      '30303030-3030-4030-8030-303030303030'::uuid,
+      '33333333-3333-4333-8333-333333333333'::uuid,
+      '40404040-4040-4040-8040-404040404040'::uuid,
+      0
+    )
+  $$,
+  '42501',
+  null,
+  'authenticated clients cannot execute epoch-scoped private alias generator helper'
+);
+select throws_ok(
+  $$
+    select private.rotate_group_membership_aliases('30303030-3030-4030-8030-303030303030'::uuid)
+  $$,
+  '42501',
+  null,
+  'authenticated clients cannot execute private alias rotation helpers'
 );
 reset role;
 
