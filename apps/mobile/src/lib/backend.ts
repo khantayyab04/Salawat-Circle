@@ -12,6 +12,12 @@ export type BackendConfig = {
   url: string;
 };
 
+export function platformForBackend(
+  nativePlatform: string | undefined,
+): MobilePlatform {
+  return nativePlatform === "android" ? "android" : "ios";
+}
+
 export function resolveBackendConfig(
   environment: BackendEnvironment,
   platform: MobilePlatform,
@@ -51,8 +57,8 @@ export async function checkBackendHealth(config: BackendConfig) {
   }
 }
 
-export async function checkConfiguredBackend() {
-  const platform = process.env.EXPO_OS === "android" ? "android" : "ios";
+export async function checkConfiguredBackend(nativePlatform?: string) {
+  const platform = platformForBackend(nativePlatform);
   const config = resolveBackendConfig(
     {
       EXPO_PUBLIC_SUPABASE_ANON_KEY:

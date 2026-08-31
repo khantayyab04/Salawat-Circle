@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   checkBackendHealth,
   checkConfiguredBackend,
+  platformForBackend,
   resolveBackendConfig,
 } from "./backend";
 
@@ -61,6 +62,16 @@ describe("resolveBackendConfig", () => {
         "ios",
       ),
     ).toThrow("Backend-Konfiguration fehlt.");
+  });
+});
+
+describe("platformForBackend", () => {
+  it("keeps the Android runtime on the Android emulator endpoint", () => {
+    expect(platformForBackend("android")).toBe("android");
+  });
+
+  it("uses the iOS endpoint for the iOS runtime", () => {
+    expect(platformForBackend("ios")).toBe("ios");
   });
 });
 
@@ -137,7 +148,7 @@ describe("checkConfiguredBackend", () => {
     vi.stubEnv("EXPO_PUBLIC_SUPABASE_URL_ANDROID", "");
     vi.stubEnv("EXPO_PUBLIC_SUPABASE_URL_IOS", "");
 
-    await expect(checkConfiguredBackend()).rejects.toThrow(
+    await expect(checkConfiguredBackend("ios")).rejects.toThrow(
       "Backend-Konfiguration fehlt.",
     );
   });
