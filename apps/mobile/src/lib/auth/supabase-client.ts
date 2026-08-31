@@ -3,7 +3,7 @@ import "react-native-url-polyfill/auto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as SecureStore from "expo-secure-store";
 import { resolveBackendConfig } from "../backend";
-import type { Database } from "@/types/database.types";
+import type { Database } from "@salawat-circle/shared-types";
 import { createSecureStorage } from "./secure-storage";
 
 export const AUTH_STORAGE_KEY = "salawat-circle.auth-session";

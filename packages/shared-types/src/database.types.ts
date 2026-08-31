@@ -9,6 +9,110 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      daily_goal_versions: {
+        Row: {
+          amount: number | null
+          created_at: string
+          effective_from: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string
+          effective_from: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string
+          effective_from?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      group_memberships: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          invite_id: string | null
+          joined_at: string
+          left_at: string | null
+          sharing_consent_version: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          invite_id?: string | null
+          joined_at?: string
+          left_at?: string | null
+          sharing_consent_version: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          invite_id?: string | null
+          joined_at?: string
+          left_at?: string | null
+          sharing_consent_version?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_memberships_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      groups: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          normalized_name: string
+          owner_user_id: string
+          revision: number
+          status: Database["public"]["Enums"]["group_status"]
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          name: string
+          normalized_name: string
+          owner_user_id: string
+          revision?: number
+          status?: Database["public"]["Enums"]["group_status"]
+          timezone: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          normalized_name?: string
+          owner_user_id?: string
+          revision?: number
+          status?: Database["public"]["Enums"]["group_status"]
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -36,6 +140,42 @@ export type Database = {
           revision?: number
           status?: Database["public"]["Enums"]["profile_status"]
           updated_at?: string
+        }
+        Relationships: []
+      }
+      salawat_entries: {
+        Row: {
+          amount: number
+          created_at: string
+          entry_date: string
+          id: string
+          recorded_at_client: string
+          revision: number
+          timezone: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          entry_date: string
+          id: string
+          recorded_at_client: string
+          revision?: number
+          timezone: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          entry_date?: string
+          id?: string
+          recorded_at_client?: string
+          revision?: number
+          timezone?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -76,14 +216,76 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_entry: {
+        Args: {
+          p_amount: number
+          p_entry_date: string
+          p_id: string
+          p_recorded_at_client: string
+          p_timezone: string
+        }
+        Returns: Json
+      }
+      create_group: {
+        Args: { p_client_group_id: string; p_name: string; p_timezone: string }
+        Returns: Json
+      }
+      delete_entry: {
+        Args: { p_expected_revision: number; p_id: string }
+        Returns: Json
+      }
+      get_group_leaderboard: {
+        Args: {
+          p_cursor_membership_id?: string
+          p_cursor_normalized_name?: string
+          p_cursor_rank?: number
+          p_group_id: string
+          p_limit?: number
+          p_period: string
+        }
+        Returns: Json
+      }
+      get_home_summary: { Args: { p_timezone: string }; Returns: Json }
       get_onboarding_state: { Args: never; Returns: Json }
       grant_core_consent: { Args: { p_locale: string }; Returns: Json }
+      list_entries: {
+        Args: {
+          p_cursor_created_at?: string
+          p_cursor_entry_date?: string
+          p_cursor_id?: string
+          p_limit?: number
+        }
+        Returns: Json
+      }
+      list_my_groups: { Args: never; Returns: Json }
+      set_daily_goal: {
+        Args: { p_amount: number; p_effective_from: string }
+        Returns: Json
+      }
+      update_entry: {
+        Args: {
+          p_amount: number
+          p_entry_date: string
+          p_expected_revision: number
+          p_id: string
+        }
+        Returns: Json
+      }
+      update_group_name: {
+        Args: {
+          p_expected_revision: number
+          p_group_id: string
+          p_name: string
+        }
+        Returns: Json
+      }
       upsert_my_profile: {
         Args: { p_display_name: string; p_locale: string; p_timezone: string }
         Returns: Json
       }
     }
     Enums: {
+      group_status: "active" | "suspended"
       profile_status: "active" | "suspended"
     }
     CompositeTypes: {
@@ -212,6 +414,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      group_status: ["active", "suspended"],
       profile_status: ["active", "suspended"],
     },
   },

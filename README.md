@@ -104,6 +104,32 @@ pnpm supabase:types
 pnpm test:auth-integration
 ```
 
+### MVP04-Datenmodell und API
+
+MVP04 ergänzt die versionierte Datenbankmigration für Einträge, tägliche Zielversionen,
+Gruppen, Mitgliedschaftsperioden sowie private Einladungshashes. Fachliche Mutationen und
+Gruppenaggregate sind ausschließlich über die schlanken, authentifizierten RPCs erreichbar:
+`get_home_summary`, `list_entries`, `create_entry`, `update_entry`, `delete_entry`,
+`set_daily_goal`, `list_my_groups`, `create_group`, `update_group_name` und
+`get_group_leaderboard`.
+
+RLS ist auf allen neuen `public`-Tabellen aktiviert und erzwungen. Direkte Schreibzugriffe
+sind entzogen; private Einladungsdaten sind nicht Teil des Data-API-Schemas. Die MVP04-RPCs
+setzen ein aktives MVP03-Profil und die `core_processing`-Einwilligung voraus.
+
+Die TypeScript-Datenbanktypen werden ausschließlich aus dem lokalen migrierten Schema nach
+`packages/shared-types/src/database.types.ts` generiert. Nach einer Schemaänderung ausführen:
+
+```bash
+pnpm supabase:reset
+pnpm supabase:test
+pnpm supabase:types
+pnpm typecheck
+```
+
+Einladungsannahme, Offline-Queue, Tracking-UI, Gruppenverwaltung und produktive
+Einladungs-Edge-Functions gehören ausdrücklich nicht zu MVP04.
+
 ### Qualitätsprüfung
 
 ```bash
