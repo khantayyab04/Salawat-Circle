@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import test from "node:test";
 
 const environment = Object.fromEntries(
@@ -36,6 +36,22 @@ const listMyGroupsContractKeys = [
   "timezone",
   "updated_at",
 ];
+const listGroupInvitesContractKeys = [
+  "created_at",
+  "expires_at",
+  "group_id",
+  "id",
+  "max_uses",
+  "revoked_at",
+  "status",
+  "use_count",
+];
+const inviteSecretContractKeys = ["token", "code", "token_hash", "code_hash"];
+const postgrestInviteErrorKeys = ["code", "details", "hint", "message"];
+const manualInviteErrorEnvelopeKeys = ["error", "request_id", "server_time"];
+const anonymousAliasPattern = /^\p{Lu}\p{Ll}+ \p{Lu}\p{Ll}+(?: [1-9]\d*)?$/u;
+const tokenPattern = /^[A-Za-z0-9_-]{43}$/u;
+const manualCodePattern = /^[A-HJKMNPQRSTUVWXYZ2-9]{10}$/u;
 
 async function authRequest(path, body) {
   return fetch(`${apiUrl}/auth/v1/${path}`, {
@@ -96,10 +112,77 @@ async function rpcExpectOk(token, name, body = {}) {
   return payload;
 }
 
-async function rpcExpectNeutralTokenError(token, name, body, expectedMessage) {
+async function rpcExpectNeutralTokenError(token, name, body) {
   const { response, payload } = await rpc(token, name, body);
   assert.equal(response.ok, false, `${name} should fail neutrally`);
-  assert.equal(payload?.message, expectedMessage, `${name} neutral message mismatch`);
+  assert.equal(payload?.message, "INVITE_INVALID", `${name} neutral message mismatch`);
+  assert.equal(payload?.code, "P0001", `${name} neutral error code mismatch`);
+  assert.equal(payload?.details ?? null, null, `${name} neutral details must stay null`);
+  assert.equal(payload?.hint ?? null, null, `${name} neutral hint must stay null`);
+  assert.deepEqual(
+    Object.keys(payload ?? {}).sort(),
+    [...postgrestInviteErrorKeys].sort(),
+    `${name} neutral token error payload keys must stay stable`,
+  );
+
+  return {
+    status: response.status,
+    code: payload?.code ?? null,
+    message: payload?.message ?? null,
+    details: payload?.details ?? null,
+    hint: payload?.hint ?? null,
+  };
+}
+
+function assertSameNeutralTokenErrorShape(actual, expected, context) {
+  assert.deepEqual(
+    actual,
+    expected,
+    `${context} should keep the same neutral PostgREST token error shape`,
+  );
+}
+
+async function rpcExpectNeutralManualCodeError(token, name, body) {
+  const { response, payload } = await rpc(token, name, body);
+  assert.equal(response.status, 200, `${name} manual-code neutral status should be HTTP 200`);
+  assert.equal(response.ok, true, `${name} manual-code neutral response should stay ok=true`);
+  assert.equal(payload?.error?.code, "INVITE_INVALID", `${name} manual-code neutral error code mismatch`);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(payload ?? {}, "group"),
+    false,
+    `${name} manual-code neutral response must not include group metadata`,
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(payload ?? {}, "membership"),
+    false,
+    `${name} manual-code neutral response must not include membership metadata`,
+  );
+  assert.deepEqual(
+    Object.keys(payload ?? {}).sort(),
+    [...manualInviteErrorEnvelopeKeys].sort(),
+    `${name} manual-code neutral payload keys must stay stable`,
+  );
+  assert.deepEqual(
+    Object.keys(payload?.error ?? {}).sort(),
+    ["code"],
+    `${name} manual-code error payload should only expose code`,
+  );
+
+  return {
+    status: response.status,
+    ok: response.ok,
+    errorCode: payload?.error?.code ?? null,
+    envelopeKeys: Object.keys(payload ?? {}).sort(),
+    errorKeys: Object.keys(payload?.error ?? {}).sort(),
+  };
+}
+
+function assertSameNeutralManualCodeErrorShape(actual, expected, context) {
+  assert.deepEqual(
+    actual,
+    expected,
+    `${context} should keep the same manual-code neutral error envelope`,
+  );
 }
 
 function runSql(sql) {
@@ -115,11 +198,39 @@ function runSql(sql) {
 }
 
 function readScalarSql(sql) {
-  return execFileSync(
-    "psql",
-    [dbUrl, "-X", "-q", "-t", "-A", "-v", "ON_ERROR_STOP=1", "-c", sql],
-    { encoding: "utf8" },
-  ).trim();
+  try {
+    return execFileSync(
+      "psql",
+      [dbUrl, "-X", "-q", "-t", "-A", "-v", "ON_ERROR_STOP=1", "-c", sql],
+      { encoding: "utf8", stdio: "pipe" },
+    ).trim();
+  } catch (error) {
+    const detail = error.stderr?.toString().trim() || "Unknown SQL scalar fixture error";
+    throw new Error(`SQL scalar fixture failed: ${detail}`);
+  }
+}
+
+function assertAnonymousAlias(alias, context) {
+  assert.equal(typeof alias, "string", `${context} should be a string alias`);
+  assert.match(alias, anonymousAliasPattern, `${context} must follow adjective+noun(+number) alias format`);
+  assert.notEqual(alias, "Mitglied", `${context} must not collapse to Mitglied fallback`);
+}
+
+function assertInviteListPayloadSafe(listPayload, context) {
+  for (const item of listPayload.items) {
+    assert.deepEqual(
+      Object.keys(item).sort(),
+      [...listGroupInvitesContractKeys].sort(),
+      `${context} invite rows must keep the safe list_group_invites contract`,
+    );
+    for (const key of inviteSecretContractKeys) {
+      assert.equal(
+        Object.prototype.hasOwnProperty.call(item, key),
+        false,
+        `${context} invite rows must not expose ${key}`,
+      );
+    }
+  }
 }
 
 function getInviteFromList(listPayload, inviteId) {
@@ -135,9 +246,27 @@ function getLeaderboardRowById(leaderboardPayload, rowId) {
 }
 
 function getSelfLeaderboardRow(leaderboardPayload) {
-  const row = leaderboardPayload.items.find((item) => item.is_self === true);
-  assert.ok(row, "Expected exactly one self leaderboard row");
-  return row;
+  const selfRows = leaderboardPayload.items.filter((item) => item.is_self === true);
+  assert.equal(selfRows.length, 1, "Expected exactly one self leaderboard row");
+  return selfRows[0];
+}
+
+function assertLeaderboardCardinality(leaderboardPayload, expectedItems, context) {
+  assert.equal(
+    leaderboardPayload.items.length,
+    expectedItems,
+    `${context} should return exactly ${expectedItems} leaderboard items`,
+  );
+  assert.equal(
+    leaderboardPayload.items.filter((item) => item.is_self === true).length,
+    1,
+    `${context} should include exactly one self row`,
+  );
+  assert.equal(
+    Number(leaderboardPayload.group.member_count),
+    expectedItems,
+    `${context} member_count should match returned items for this fixture`,
+  );
 }
 
 async function signInAndOnboard({ prefix, displayName, locale }) {
@@ -183,6 +312,8 @@ test(
   "MVP08 groups integration covers real local Supabase group flows",
   { timeout: 240_000 },
   async () => {
+    // Each run is preceded by supabase:reset, so this single flow can assume isolated fixture state.
+    // We intentionally keep onboarding at four OTP accounts to stay within a predictable email budget.
     const owner = await signInAndOnboard({
       prefix: "mvp08-owner",
       displayName: "Owner Real",
@@ -239,8 +370,8 @@ test(
         p_group_id: groupId,
       })
     ).invite;
-    assert.match(initialInvite.token, /^[A-Za-z0-9_-]{43}$/u, "invite token shape must be URL-safe base64");
-    assert.match(initialInvite.code, /^[A-HJKMNPQRSTUVWXYZ2-9]{10}$/u, "manual invite code shape must be stable");
+    assert.match(initialInvite.token, tokenPattern, "invite token shape must be URL-safe base64");
+    assert.match(initialInvite.code, manualCodePattern, "manual invite code shape must be stable");
     assert.equal(initialInvite.max_uses, 25, "create_group_invite defaults max_uses to 25");
     assert.equal(initialInvite.use_count, 0, "new invite starts with use_count 0");
     const defaultLifetimeSeconds =
@@ -288,18 +419,25 @@ test(
       "duplicate acceptance should return the existing membership id",
     );
 
-    const inviteAfterRepeatAccept = getInviteFromList(
-      await rpcExpectOk(owner.token, "list_group_invites", { p_group_id: groupId }),
-      initialInvite.id,
-    );
+    const invitesAfterRepeatAccept = await rpcExpectOk(owner.token, "list_group_invites", {
+      p_group_id: groupId,
+    });
+    assertInviteListPayloadSafe(invitesAfterRepeatAccept, "post-accept invite listing");
+    const inviteAfterRepeatAccept = getInviteFromList(invitesAfterRepeatAccept, initialInvite.id);
     assert.equal(
       Number(inviteAfterRepeatAccept.use_count),
       1,
       "idempotent duplicate acceptance must not increment invite use_count",
     );
+    assert.equal(
+      inviteAfterRepeatAccept.status,
+      "active",
+      "partially used invite with remaining capacity stays active",
+    );
 
     const entryDate = new Date().toISOString().slice(0, 10);
     await createEntry(member.token, 40, entryDate, new Date(joinedAtMillis - 60_000).toISOString());
+    await createEntry(member.token, 5, entryDate, memberJoinedAt);
     await createEntry(member.token, 60, entryDate, new Date(joinedAtMillis + 60_000).toISOString());
     await createEntry(owner.token, 30, entryDate, new Date(joinedAtMillis + 120_000).toISOString());
 
@@ -311,21 +449,24 @@ test(
       p_group_id: groupId,
       p_period: "all_time",
     });
+    assertLeaderboardCardinality(memberWeekBoard, 2, "member week leaderboard");
+    assertLeaderboardCardinality(memberAllTimeBoard, 2, "member all-time leaderboard");
     assert.equal(
       getLeaderboardRowById(memberWeekBoard, memberMembershipId).total,
-      "60",
-      "week leaderboard excludes entries recorded before joined_at",
+      "65",
+      "week leaderboard includes joined_at equality and excludes before-joined_at entries",
     );
     assert.equal(
       getLeaderboardRowById(memberAllTimeBoard, memberMembershipId).total,
-      "60",
-      "all-time leaderboard excludes entries recorded before joined_at",
+      "65",
+      "all-time leaderboard includes joined_at equality and excludes before-joined_at entries",
     );
 
     const ownerNamedBoard = await rpcExpectOk(owner.token, "get_group_leaderboard", {
       p_group_id: groupId,
       p_period: "week",
     });
+    assertLeaderboardCardinality(ownerNamedBoard, 2, "owner named leaderboard");
     assert.equal(ownerNamedBoard.own_alias, null, "named leaderboard should keep own_alias null");
     assert.equal(
       getLeaderboardRowById(ownerNamedBoard, ownerMembershipId).display_name,
@@ -354,16 +495,14 @@ test(
       p_group_id: groupId,
       p_period: "all_time",
     });
+    assertLeaderboardCardinality(ownerAnonymousBoardV1, 2, "owner anonymous leaderboard v1");
     const ownerSelfAnonymousV1 = getSelfLeaderboardRow(ownerAnonymousBoardV1);
     assert.equal(
       ownerSelfAnonymousV1.display_name,
       owner.displayName,
       "owner still sees own real name in anonymous mode",
     );
-    assert.ok(
-      typeof ownerAnonymousBoardV1.own_alias === "string" && ownerAnonymousBoardV1.own_alias.length > 0,
-      "owner receives own_alias in anonymous mode",
-    );
+    assertAnonymousAlias(ownerAnonymousBoardV1.own_alias, "owner own_alias");
     assert.notEqual(
       ownerSelfAnonymousV1.row_id,
       ownerMembershipId,
@@ -379,10 +518,16 @@ test(
       member.displayName,
       "owner sees member alias instead of member real name in anonymous mode",
     );
+    assertAnonymousAlias(memberRowForOwnerAnonV1.display_name, "member alias as seen by owner");
     assert.notEqual(
       memberRowForOwnerAnonV1.row_id,
       memberMembershipId,
       "anonymous mode foreign row_id should not expose membership id",
+    );
+    assert.notEqual(
+      memberRowForOwnerAnonV1.display_name,
+      ownerAnonymousBoardV1.own_alias,
+      "owner and member aliases must stay distinct in anonymous mode",
     );
 
     const firstForeignAnonRowId = memberRowForOwnerAnonV1.row_id;
@@ -393,11 +538,18 @@ test(
       p_group_id: groupId,
       p_period: "all_time",
     });
+    assertLeaderboardCardinality(memberAnonymousBoard, 2, "member anonymous leaderboard");
+    assertAnonymousAlias(memberAnonymousBoard.own_alias, "member own_alias");
     const memberSelfAnonymousRow = getSelfLeaderboardRow(memberAnonymousBoard);
     assert.equal(
       memberSelfAnonymousRow.display_name,
       member.displayName,
       "member sees own real name in anonymous mode",
+    );
+    assert.notEqual(
+      memberAnonymousBoard.own_alias,
+      ownerAliasInAnonymousV1,
+      "owner and member own_alias values must stay distinct",
     );
     const ownerRowAsSeenByMember = memberAnonymousBoard.items.find((item) => !item.is_self);
     assert.ok(ownerRowAsSeenByMember, "member should see an owner row in anonymous mode");
@@ -405,6 +557,12 @@ test(
       ownerRowAsSeenByMember.display_name,
       ownerAliasInAnonymousV1,
       "member should see owner alias provided by owner own_alias",
+    );
+    assertAnonymousAlias(ownerRowAsSeenByMember.display_name, "owner alias as seen by member");
+    assert.equal(
+      memberAnonymousBoard.own_alias,
+      memberRowForOwnerAnonV1.display_name,
+      "member own_alias should match the alias seen by owner for that member",
     );
 
     const disabledAnonymity = await rpcExpectOk(owner.token, "set_group_leaderboard_anonymity", {
@@ -423,6 +581,7 @@ test(
       p_group_id: groupId,
       p_period: "all_time",
     });
+    assertLeaderboardCardinality(ownerNamedAfterDisable, 2, "owner named leaderboard after disable");
     assert.equal(
       getLeaderboardRowById(ownerNamedAfterDisable, memberMembershipId).display_name,
       member.displayName,
@@ -445,6 +604,7 @@ test(
       p_group_id: groupId,
       p_period: "all_time",
     });
+    assertLeaderboardCardinality(ownerAnonymousBoardV2, 2, "owner anonymous leaderboard v2");
     const ownerSelfAnonymousV2 = getSelfLeaderboardRow(ownerAnonymousBoardV2);
     const memberRowForOwnerAnonV2 = ownerAnonymousBoardV2.items.find(
       (item) => item.row_id !== ownerSelfAnonymousV2.row_id,
@@ -470,15 +630,13 @@ test(
       p_group_id: groupId,
       p_invite_id: revokedInvite.id,
     });
-    await rpcExpectNeutralTokenError(raceA.token, "preview_group_invite", {
-      p_kind: "token",
-      p_secret: revokedInvite.token,
-    }, "INVITE_INVALID");
-    await rpcExpectNeutralTokenError(raceA.token, "accept_group_invite", {
-      p_kind: "token",
-      p_secret: revokedInvite.token,
-      p_locale: "en",
-    }, "INVITE_INVALID");
+    const invitesAfterRevoke = await rpcExpectOk(owner.token, "list_group_invites", { p_group_id: groupId });
+    assertInviteListPayloadSafe(invitesAfterRevoke, "post-revoke invite listing");
+    assert.equal(
+      getInviteFromList(invitesAfterRevoke, revokedInvite.id).status,
+      "revoked",
+      "revoked invite should surface as revoked in list_group_invites",
+    );
 
     const expiredInvite = (
       await rpcExpectOk(owner.token, "create_group_invite", {
@@ -501,29 +659,130 @@ test(
       "1",
       "test-only SQL fixture should force invite expiry before validation",
     );
-    await rpcExpectNeutralTokenError(raceB.token, "preview_group_invite", {
+    const invitesAfterExpiryFixture = await rpcExpectOk(owner.token, "list_group_invites", {
+      p_group_id: groupId,
+    });
+    assertInviteListPayloadSafe(invitesAfterExpiryFixture, "post-expiry fixture invite listing");
+    assert.equal(
+      getInviteFromList(invitesAfterExpiryFixture, expiredInvite.id).status,
+      "expired",
+      "forced-expired invite should surface as expired in list_group_invites",
+    );
+
+    const unknownToken = randomBytes(32).toString("base64url");
+    assert.match(unknownToken, tokenPattern, "unknown token fixture must be well-formed");
+    assert.notEqual(unknownToken, revokedInvite.token, "unknown token fixture must not reuse revoked secret");
+    assert.notEqual(unknownToken, expiredInvite.token, "unknown token fixture must not reuse expired secret");
+
+    const previewUnknownTokenNeutral = await rpcExpectNeutralTokenError(raceA.token, "preview_group_invite", {
+      p_kind: "token",
+      p_secret: unknownToken,
+    });
+    const previewRevokedTokenNeutral = await rpcExpectNeutralTokenError(raceA.token, "preview_group_invite", {
+      p_kind: "token",
+      p_secret: revokedInvite.token,
+    });
+    const previewExpiredTokenNeutral = await rpcExpectNeutralTokenError(raceA.token, "preview_group_invite", {
       p_kind: "token",
       p_secret: expiredInvite.token,
-    }, "INVITE_INVALID");
-    await rpcExpectNeutralTokenError(raceB.token, "accept_group_invite", {
+    });
+    assertSameNeutralTokenErrorShape(
+      previewRevokedTokenNeutral,
+      previewUnknownTokenNeutral,
+      "revoked token preview",
+    );
+    assertSameNeutralTokenErrorShape(
+      previewExpiredTokenNeutral,
+      previewUnknownTokenNeutral,
+      "expired token preview",
+    );
+
+    const acceptUnknownTokenNeutral = await rpcExpectNeutralTokenError(raceA.token, "accept_group_invite", {
+      p_kind: "token",
+      p_secret: unknownToken,
+      p_locale: "en",
+    });
+    const acceptRevokedTokenNeutral = await rpcExpectNeutralTokenError(raceA.token, "accept_group_invite", {
+      p_kind: "token",
+      p_secret: revokedInvite.token,
+      p_locale: "en",
+    });
+    const acceptExpiredTokenNeutral = await rpcExpectNeutralTokenError(raceA.token, "accept_group_invite", {
       p_kind: "token",
       p_secret: expiredInvite.token,
       p_locale: "en",
-    }, "INVITE_INVALID");
-
-    const invalidManualCodePreview = await rpcExpectOk(raceB.token, "preview_group_invite", {
-      p_kind: "code",
-      p_secret: "ZZZZ2345ZZ",
     });
-    assert.equal(
-      invalidManualCodePreview.error?.code,
-      "INVITE_INVALID",
-      "invalid manual code preview should return structured neutral error",
+    assertSameNeutralTokenErrorShape(
+      acceptRevokedTokenNeutral,
+      acceptUnknownTokenNeutral,
+      "revoked token accept",
     );
-    assert.equal(
-      Object.prototype.hasOwnProperty.call(invalidManualCodePreview, "group"),
-      false,
-      "invalid manual code preview must not leak group metadata",
+    assertSameNeutralTokenErrorShape(
+      acceptExpiredTokenNeutral,
+      acceptUnknownTokenNeutral,
+      "expired token accept",
+    );
+
+    const unknownManualCode = "ZZZZ2345ZZ";
+    assert.match(unknownManualCode, manualCodePattern, "unknown manual-code fixture must be well-formed");
+    assert.notEqual(
+      unknownManualCode,
+      revokedInvite.code,
+      "unknown manual-code fixture must not reuse revoked secret",
+    );
+    assert.notEqual(
+      unknownManualCode,
+      expiredInvite.code,
+      "unknown manual-code fixture should differ from expired code fixture",
+    );
+
+    const previewUnknownManualNeutral = await rpcExpectNeutralManualCodeError(raceB.token, "preview_group_invite", {
+      p_kind: "code",
+      p_secret: unknownManualCode,
+    });
+    const previewRevokedManualNeutral = await rpcExpectNeutralManualCodeError(raceB.token, "preview_group_invite", {
+      p_kind: "code",
+      p_secret: revokedInvite.code,
+    });
+    const previewExpiredManualNeutral = await rpcExpectNeutralManualCodeError(raceB.token, "preview_group_invite", {
+      p_kind: "code",
+      p_secret: expiredInvite.code,
+    });
+    assertSameNeutralManualCodeErrorShape(
+      previewRevokedManualNeutral,
+      previewUnknownManualNeutral,
+      "revoked manual-code preview",
+    );
+    assertSameNeutralManualCodeErrorShape(
+      previewExpiredManualNeutral,
+      previewUnknownManualNeutral,
+      "expired manual-code preview",
+    );
+
+    const acceptUnknownManualNeutral = await rpcExpectNeutralManualCodeError(raceA.token, "accept_group_invite", {
+      p_kind: "code",
+      p_secret: unknownManualCode,
+      p_locale: "en",
+    });
+    const acceptRevokedManualNeutral = await rpcExpectNeutralManualCodeError(raceA.token, "accept_group_invite", {
+      p_kind: "code",
+      p_secret: revokedInvite.code,
+      p_locale: "en",
+    });
+    const acceptExpiredManualNeutral = await rpcExpectNeutralManualCodeError(raceA.token, "accept_group_invite", {
+      p_kind: "code",
+      p_secret: expiredInvite.code,
+      p_locale: "en",
+    });
+    assertSameNeutralManualCodeErrorShape(
+      acceptRevokedManualNeutral,
+      acceptUnknownManualNeutral,
+      "revoked manual-code accept",
+    );
+    assertSameNeutralManualCodeErrorShape(
+      acceptExpiredManualNeutral,
+      acceptUnknownManualNeutral,
+      "expired manual-code accept",
     );
 
     const raceInvite = (
@@ -564,12 +823,26 @@ test(
       1,
       "exactly one contender should receive neutral INVITE_INVALID in max_uses=1 invite race",
     );
-
-    const raceInviteAfter = getInviteFromList(
-      await rpcExpectOk(owner.token, "list_group_invites", { p_group_id: groupId }),
-      raceInvite.id,
+    assert.equal(
+      raceNeutralFailures[0].payload?.details ?? null,
+      null,
+      "max_uses race neutral token failure keeps details null",
     );
+    assert.equal(
+      raceNeutralFailures[0].payload?.hint ?? null,
+      null,
+      "max_uses race neutral token failure keeps hint null",
+    );
+
+    const invitesAfterRace = await rpcExpectOk(owner.token, "list_group_invites", { p_group_id: groupId });
+    assertInviteListPayloadSafe(invitesAfterRace, "post-race invite listing");
+    const raceInviteAfter = getInviteFromList(invitesAfterRace, raceInvite.id);
     assert.equal(Number(raceInviteAfter.use_count), 1, "invite race must persist exactly one use_count increment");
+    assert.equal(
+      raceInviteAfter.status,
+      "exhausted",
+      "fully consumed max_uses=1 invite should surface as exhausted",
+    );
 
     const [groupsRaceA, groupsRaceB] = await Promise.all([
       rpcExpectOk(raceA.token, "list_my_groups"),
@@ -585,14 +858,68 @@ test(
       "exactly one race account should end with active group membership",
     );
 
+    const raceWinner = raceSuccesses[0];
+    const raceWinnerAccount = raceWinner.actor === "raceA" ? raceA : raceB;
+    const raceWinnerMembershipId = raceWinner.payload.membership.id;
+    const raceWinnerBoardAfterRace = await rpcExpectOk(raceWinnerAccount.token, "get_group_leaderboard", {
+      p_group_id: groupId,
+      p_period: "all_time",
+    });
+    assertLeaderboardCardinality(
+      raceWinnerBoardAfterRace,
+      3,
+      "race winner anonymous leaderboard after max_uses race",
+    );
+    const raceWinnerSelfRow = getSelfLeaderboardRow(raceWinnerBoardAfterRace);
+    assert.equal(
+      raceWinnerSelfRow.display_name,
+      raceWinnerAccount.displayName,
+      "race winner still sees own real display name in anonymous mode",
+    );
+    assert.notEqual(
+      raceWinnerSelfRow.row_id,
+      raceWinnerMembershipId,
+      "race winner self row_id stays opaque while anonymity is enabled",
+    );
+    assertAnonymousAlias(raceWinnerBoardAfterRace.own_alias, "race winner own_alias");
+
     const ownerBoardAfterRace = await rpcExpectOk(owner.token, "get_group_leaderboard", {
       p_group_id: groupId,
       p_period: "all_time",
     });
+    assertLeaderboardCardinality(ownerBoardAfterRace, 3, "owner anonymous leaderboard after max_uses race");
+    const ownerSelfAfterRace = getSelfLeaderboardRow(ownerBoardAfterRace);
     assert.equal(
-      ownerBoardAfterRace.group.member_count,
+      ownerSelfAfterRace.display_name,
+      owner.displayName,
+      "owner still sees own real display name after race while anonymity stays enabled",
+    );
+    const raceWinnerAliasAsSeenByOwner = ownerBoardAfterRace.items.find(
+      (item) => item.display_name === raceWinnerBoardAfterRace.own_alias,
+    );
+    assert.ok(raceWinnerAliasAsSeenByOwner, "owner board should include the race winner alias row");
+    assert.equal(
+      raceWinnerAliasAsSeenByOwner.is_self,
+      false,
+      "race winner alias row should be foreign for owner",
+    );
+    assert.ok(
+      typeof raceWinnerAliasAsSeenByOwner.row_id === "string" && raceWinnerAliasAsSeenByOwner.row_id.length > 0,
+      "race winner alias row should expose a non-null opaque row_id",
+    );
+    assert.notEqual(
+      raceWinnerAliasAsSeenByOwner.row_id,
+      raceWinnerMembershipId,
+      "race winner alias row_id should not reveal stable membership id",
+    );
+    assertAnonymousAlias(raceWinnerAliasAsSeenByOwner.display_name, "race winner alias as seen by owner");
+
+    const ownerGroupsAfterRace = await rpcExpectOk(owner.token, "list_my_groups");
+    assert.equal(ownerGroupsAfterRace.items.length, 1, "owner should still have exactly one active group summary");
+    assert.equal(
+      ownerGroupsAfterRace.items[0].member_count,
       "3",
-      "group member_count remains consistent after invite race",
+      "list_my_groups member_count stays consistent after race winner joins",
     );
   },
 );
