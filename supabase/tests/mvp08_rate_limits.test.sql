@@ -605,7 +605,7 @@ set local role authenticated;
 set local "request.jwt.claim.role" = 'authenticated';
 set local "request.jwt.claim.sub" = '44444444-4444-4444-8444-444444444444';
 create temp table tenth_group_creation as
-select public.create_group('dddddddd-0000-4000-8000-000000000001', 'Rate Group 1', 'Europe/Berlin') as response;
+select public.create_group('dddddddd-0000-4000-8000-000000000001', 'Rate Group 1', 'Europe/Berlin', false, true) as response;
 select ok(
   (
     select
@@ -620,7 +620,7 @@ create temp table tenth_group_creation_replay (
 );
 grant insert, select on table tenth_group_creation_replay to authenticated;
 select lives_ok(
-  $$ insert into tenth_group_creation_replay(response) select public.create_group('dddddddd-0000-4000-8000-000000000001', 'Rate Group 1', 'Europe/Berlin') $$,
+  $$ insert into tenth_group_creation_replay(response) select public.create_group('dddddddd-0000-4000-8000-000000000001', 'Rate Group 1', 'Europe/Berlin', false, true) $$,
   'idempotent replay of the same group id succeeds even after hitting the daily cap'
 );
 select ok(
@@ -638,7 +638,7 @@ select is(
   'idempotent replay of the same group id returns the original membership id'
 );
 select throws_ok(
-  $$ select public.create_group('dddddddd-0000-4000-8000-000000000002', 'Rate Group 2', 'Europe/Berlin') $$,
+  $$ select public.create_group('dddddddd-0000-4000-8000-000000000002', 'Rate Group 2', 'Europe/Berlin', false, true) $$,
   'P0001',
   'RATE_LIMITED',
   'eleventh group creation in the day is rejected'
