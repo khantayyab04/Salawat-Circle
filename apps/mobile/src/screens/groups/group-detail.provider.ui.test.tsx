@@ -121,6 +121,19 @@ jest.mock("@/theme", () => {
   };
 });
 
+function createDeferred<T>() {
+  let resolve: ((value: T | PromiseLike<T>) => void) | undefined;
+  let reject: ((reason?: unknown) => void) | undefined;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  if (!resolve || !reject) {
+    throw new Error("Deferred promise setup failed.");
+  }
+  return { promise, resolve, reject };
+}
+
 function createListItem(overrides: Partial<GroupListItem> = {}): GroupListItem {
   return {
     id: "group-1",
@@ -308,5 +321,147 @@ describe("Group detail with real GroupsProvider", () => {
     );
     expect(view.getByText("Rangliste zeigt Anzeigenamen.")).toBeTruthy();
     expect(getLeaderboard).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps leaderboard loads bounded when anonymity is updated while the initial leaderboard fetch is still in flight", async () => {
+    const deferredLeaderboard = createDeferred<GroupLeaderboardResponse>();
+    const getLeaderboard = jest
+      .fn<GroupsGateway["getLeaderboard"]>()
+      .mockImplementation(() => deferredLeaderboard.promise);
+    const setLeaderboardAnonymity = jest
+      .fn<GroupsGateway["setLeaderboardAnonymity"]>()
+      .mockResolvedValue({
+        group: {
+          id: "group-1",
+          name: "Alpha Circle",
+          timezone: "Europe/Berlin",
+          status: "active",
+          leaderboardAnonymous: false,
+          createdAt: "2026-08-31T19:00:00.000Z",
+          updatedAt: "2026-08-31T20:06:00.000Z",
+          revision: 8,
+        },
+      });
+    const listMyGroups = jest
+      .fn<GroupsGateway["listMyGroups"]>()
+      .mockResolvedValueOnce({
+        items: [createListItem({ role: "owner", leaderboardAnonymous: true, revision: 7 })],
+      })
+      .mockResolvedValue({
+        items: [createListItem({ role: "owner", leaderboardAnonymous: false, revision: 8 })],
+      });
+    const gateway = createGateway({
+      getLeaderboard,
+      setLeaderboardAnonymity,
+      listMyGroups,
+    });
+
+    const view = await render(
+      <GroupsProvider
+        accountId="account-1"
+        enabled
+        gateway={gateway}
+        onlineCheck={async () => true}
+      >
+        <GroupDetailScreen />
+      </GroupsProvider>,
+    );
+
+    await waitFor(() =>
+      expect(view.getByRole("switch", { name: "Rangliste anonym anzeigen" })).toBeTruthy(),
+    );
+    expect(getLeaderboard).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      fireEvent.press(view.getByRole("switch", { name: "Rangliste anonym anzeigen" }));
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(setLeaderboardAnonymity).toHaveBeenCalledWith("group-1", false, 7),
+    );
+
+    deferredLeaderboard.resolve(
+      createLeaderboardResponse({
+        group: {
+          id: "group-1",
+          name: "Alpha Circle",
+          timezone: "Europe/Berlin",
+          leaderboardAnonymous: false,
+          memberCount: "5",
+          role: "owner",
+          isOwner: true,
+          revision: 8,
+        },
+      }),
+    );
+
+    await waitFor(() => expect(view.getByText("Amina")).toBeTruthy());
+    await waitFor(() =>
+      expect(
+        view.getByRole("switch", { name: "Rangliste anonym anzeigen" }).props
+          .accessibilityState.checked,
+      ).toBe(false),
+    );
+
+    expect(getLeaderboard.mock.calls.length).toBeLessThanOrEqual(2);
+    const hasMaximumDepthWarning = consoleErrorSpy.mock.calls.some((args) =>
+      args.some(
+        (arg) =>
+          typeof arg === "string" &&
+          arg.includes("Maximum update depth exceeded"),
+      ),
+    );
+    expect(hasMaximumDepthWarning).toBe(false);
+  });
+
+  it("triggers a fresh leaderboard reset load when the detail screen unmounts and mounts again under the same provider", async () => {
+    const getLeaderboard = jest
+      .fn<GroupsGateway["getLeaderboard"]>()
+      .mockResolvedValue(createLeaderboardResponse());
+    const gateway = createGateway({ getLeaderboard });
+    const alwaysOnline = async () => true;
+
+    const view = await render(
+      <GroupsProvider
+        accountId="account-1"
+        enabled
+        gateway={gateway}
+        onlineCheck={alwaysOnline}
+      >
+        <GroupDetailScreen />
+      </GroupsProvider>,
+    );
+
+    await waitFor(() => expect(view.getByText("Amina")).toBeTruthy());
+    expect(getLeaderboard).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      view.rerender(
+        <GroupsProvider
+          accountId="account-1"
+          enabled
+          gateway={gateway}
+          onlineCheck={alwaysOnline}
+        >
+          {null}
+        </GroupsProvider>,
+      );
+    });
+
+    await act(async () => {
+      view.rerender(
+        <GroupsProvider
+          accountId="account-1"
+          enabled
+          gateway={gateway}
+          onlineCheck={alwaysOnline}
+        >
+          <GroupDetailScreen />
+        </GroupsProvider>,
+      );
+    });
+
+    await waitFor(() => expect(getLeaderboard).toHaveBeenCalledTimes(2));
   });
 });

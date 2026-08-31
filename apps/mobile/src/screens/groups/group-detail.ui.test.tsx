@@ -17,11 +17,23 @@ const mockSetAnonymity = jest.fn<
 const mockRefreshGroups = jest.fn<() => Promise<void>>();
 const mockUseGroups = jest.fn();
 let mockRouteGroupId = "group-1";
+let lastStackTitle: string | undefined;
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush, replace: jest.fn() }),
   useLocalSearchParams: () => ({ id: mockRouteGroupId }),
-  Stack: { Screen: () => null },
+  Stack: {
+    Screen: ({
+      options,
+    }: {
+      options?: {
+        title?: string;
+      };
+    }) => {
+      lastStackTitle = options?.title;
+      return null;
+    },
+  },
 }));
 
 jest.mock("@/lib/groups", () => ({
@@ -64,6 +76,7 @@ jest.mock("@expo/ui", () => {
 
 const copy: Record<string, string> = {
   groupTitle: "Private Gruppe",
+  groupDetailTitle: "Gruppendetail",
   groupDetailWeek: "Woche",
   groupDetailAllTime: "Gesamt",
   groupDetailMembersLabel: "aktive Mitglieder",
@@ -227,6 +240,7 @@ function createGroupsState(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   jest.clearAllMocks();
   mockRouteGroupId = "group-1";
+  lastStackTitle = undefined;
   mockLoadLeaderboard.mockResolvedValue(undefined);
   mockSetAnonymity.mockResolvedValue({});
   mockRefreshGroups.mockResolvedValue(undefined);
@@ -241,16 +255,99 @@ const errorCases: ["OFFLINE" | "RATE_LIMITED" | "NOT_FOUND" | "INTERNAL", string
 ];
 
 describe("Task 14 group detail screen", () => {
-  it("keeps preloaded week data, uses stack title only, and renders group metadata", async () => {
+  it("triggers a fresh week reset load on mount even when week data is already cached", async () => {
     const view = await render(<GroupDetailRoute />);
 
-    expect(mockLoadLeaderboard).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(mockLoadLeaderboard).toHaveBeenCalledWith("group-1", "week", {
+        mode: "reset",
+      }),
+    );
+    expect(mockLoadLeaderboard).toHaveBeenCalledTimes(1);
 
     expect(view.queryByText("Private Gruppe")).toBeNull();
     expect(view.getByText("Alpha Circle")).toBeTruthy();
     expect(view.getByText("5 aktive Mitglieder")).toBeTruthy();
     expect(
       view.getByText("Zuletzt berechnet: date:2026-08-31 time:20:05"),
+    ).toBeTruthy();
+  });
+
+  it("uses a neutral stack title while details are still loading", async () => {
+    mockUseGroups.mockReturnValue(
+      createGroupsState({
+        groups: {
+          status: "ready",
+          items: [],
+          errorCode: null,
+        },
+        leaderboard: {
+          selectedGroupId: "group-1",
+          selectedPeriod: "week",
+          byGroup: {
+            "group-1": {
+              week: createPeriodState("week", {
+                loading: true,
+                group: null,
+                ownAlias: null,
+                ownRank: null,
+                calculatedAt: null,
+                periodStart: null,
+                periodEnd: null,
+              }),
+              all_time: createPeriodState("all_time", {
+                group: null,
+                ownAlias: null,
+                ownRank: null,
+                calculatedAt: null,
+                periodStart: null,
+                periodEnd: null,
+              }),
+            },
+          },
+        },
+      }),
+    );
+
+    const view = await render(<GroupDetailRoute />);
+    expect(lastStackTitle).toBe("Gruppendetail");
+    expect(view.getByText("Rangliste wird geladen")).toBeTruthy();
+  });
+
+  it("uses not-found copy in the stack title only for an actual NOT_FOUND state", async () => {
+    mockUseGroups.mockReturnValue(
+      createGroupsState({
+        groups: {
+          status: "ready",
+          items: [],
+          errorCode: null,
+        },
+        leaderboard: {
+          selectedGroupId: "group-1",
+          selectedPeriod: "week",
+          byGroup: {
+            "group-1": {
+              week: createPeriodState("week", {
+                items: [],
+                errorCode: "NOT_FOUND",
+                group: null,
+                ownAlias: null,
+                ownRank: null,
+                calculatedAt: null,
+                periodStart: null,
+                periodEnd: null,
+              }),
+              all_time: createPeriodState("all_time"),
+            },
+          },
+        },
+      }),
+    );
+
+    const view = await render(<GroupDetailRoute />);
+    expect(lastStackTitle).toBe("Gruppe nicht gefunden");
+    expect(
+      view.getByText("Diese Gruppe ist nicht mehr verfügbar oder du hast keinen Zugriff."),
     ).toBeTruthy();
   });
 

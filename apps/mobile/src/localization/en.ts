@@ -141,6 +141,7 @@ export const en = {
   groupsListAnonymousOn: "Anonymous ranking enabled",
   groupsListAnonymousOff: "Ranking with display names",
   groupTitle: "Private group",
+  groupDetailTitle: "Group details",
   groupRanking: "Ranking",
   groupMembers: "Manage members",
   groupInvites: "Manage invitations",

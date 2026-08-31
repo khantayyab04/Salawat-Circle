@@ -145,6 +145,7 @@ export const de = {
   groupsListAnonymousOn: "Anonyme Rangliste aktiv",
   groupsListAnonymousOff: "Rangliste mit Anzeigenamen",
   groupTitle: "Private Gruppe",
+  groupDetailTitle: "Gruppendetail",
   groupRanking: "Rangliste",
   groupMembers: "Mitglieder verwalten",
   groupInvites: "Einladungen verwalten",

@@ -119,27 +119,6 @@ function getFallbackPeriodState(period: LeaderboardPeriod): GroupsLeaderboardPer
   };
 }
 
-function hasLoadedPeriodState(state: GroupsLeaderboardPeriodState | undefined) {
-  if (!state) {
-    return false;
-  }
-
-  return (
-    state.loading ||
-    state.loadingMore ||
-    state.errorCode !== null ||
-    state.group !== null ||
-    state.calculatedAt !== null ||
-    state.items.length > 0 ||
-    state.nextCursor !== null ||
-    state.hasMore ||
-    state.ownAlias !== null ||
-    state.ownRank !== null ||
-    state.periodStart !== null ||
-    state.periodEnd !== null
-  );
-}
-
 function resolveLeaderboardErrorCopy(
   code: string,
   t: (key: TranslationKey) => string,
@@ -335,11 +314,8 @@ export function GroupDetailScreen() {
     groupId && leaderboard.byGroup[groupId]
       ? leaderboard.byGroup[groupId][period]
       : fallbackPeriodState;
-  const weekState = groupId ? leaderboard.byGroup[groupId]?.week : undefined;
-  const shouldLoadInitialWeek = !!groupId && !hasLoadedPeriodState(weekState);
 
   const groupMeta = groupPeriodState.group;
-  const groupName = groupMeta?.name ?? listGroup?.name ?? t("groupDetailNotFoundTitle");
   const timeZone = groupMeta?.timezone ?? listGroup?.timezone ?? "UTC";
   const memberCount = groupMeta?.memberCount ?? listGroup?.memberCount ?? "0";
   const revision = groupMeta?.revision ?? listGroup?.revision;
@@ -360,6 +336,14 @@ export function GroupDetailScreen() {
     !groupId
       ? "NOT_FOUND"
       : groupPeriodState.errorCode ?? (online ? null : "OFFLINE");
+  const groupName =
+    groupMeta?.name ??
+    listGroup?.name ??
+    t(
+      effectiveErrorCode === "NOT_FOUND"
+        ? "groupDetailNotFoundTitle"
+        : "groupDetailTitle",
+    );
   const hasRows = groupPeriodState.items.length > 0;
   const showLoading = !hasRows && groupPeriodState.loading && !effectiveErrorCode;
   const showBlockingError = !hasRows && !!effectiveErrorCode;
@@ -377,9 +361,9 @@ export function GroupDetailScreen() {
   }, [groupId, period]);
 
   useEffect(() => {
-    if (!groupId || !shouldLoadInitialWeek) return;
+    if (!groupId) return;
     void loadLeaderboard(groupId, "week", { mode: "reset" }).catch(() => undefined);
-  }, [groupId, loadLeaderboard, shouldLoadInitialWeek]);
+  }, [groupId, loadLeaderboard]);
 
   const refreshCurrentPeriod = useCallback(async () => {
     if (!groupId) return;

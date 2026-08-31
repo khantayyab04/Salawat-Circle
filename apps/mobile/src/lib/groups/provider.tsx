@@ -4,7 +4,9 @@ import {
   createContext,
   type PropsWithChildren,
   use,
+  useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useSyncExternalStore,
 } from "react";
@@ -168,7 +170,7 @@ export function GroupsProvider({
     };
   }, [controller, onlineCheck]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!enabled || !accountId) {
       controller.reset();
       return;
@@ -177,23 +179,80 @@ export function GroupsProvider({
   }, [accountId, controller, enabled]);
 
   const snapshot = store.getSnapshot();
-  const value: GroupsContextValue = {
-    ...snapshot,
-    revision,
-    refreshGroups: () => controller.refreshGroups(),
-    createGroup: (name, timezone, leaderboardAnonymous, rulesAccepted) =>
-      controller.createGroup(name, timezone, leaderboardAnonymous, rulesAccepted),
-    loadLeaderboard: (groupId, period, options) =>
-      controller.loadLeaderboard(groupId, period, options),
-    setAnonymity: (groupId, anonymous, expectedRevision) =>
+  const refreshGroups = useCallback(() => controller.refreshGroups(), [controller]);
+  const createGroup = useCallback(
+    (
+      name: string,
+      timezone: string,
+      leaderboardAnonymous: boolean,
+      rulesAccepted: boolean,
+    ) => controller.createGroup(name, timezone, leaderboardAnonymous, rulesAccepted),
+    [controller],
+  );
+  const loadLeaderboard = useCallback(
+    (
+      groupId: string,
+      period: LeaderboardPeriod,
+      options?: LoadLeaderboardOptions,
+    ) => controller.loadLeaderboard(groupId, period, options),
+    [controller],
+  );
+  const setAnonymity = useCallback(
+    (groupId: string, anonymous: boolean, expectedRevision?: number) =>
       controller.setAnonymity(groupId, anonymous, expectedRevision),
-    loadInvites: (groupId) => controller.loadInvites(groupId),
-    createInvite: (groupId, options) => controller.createInvite(groupId, options),
-    revokeInvite: (groupId, inviteId) => controller.revokeInvite(groupId, inviteId),
-    previewInvite: (kind, secret) => controller.previewInvite(kind, secret),
-    acceptInvite: (kind, secret, locale) =>
+    [controller],
+  );
+  const loadInvites = useCallback(
+    (groupId: string) => controller.loadInvites(groupId),
+    [controller],
+  );
+  const createInvite = useCallback(
+    (groupId: string, options?: CreateInviteOptions) =>
+      controller.createInvite(groupId, options),
+    [controller],
+  );
+  const revokeInvite = useCallback(
+    (groupId: string, inviteId: string) => controller.revokeInvite(groupId, inviteId),
+    [controller],
+  );
+  const previewInvite = useCallback(
+    (kind: InviteKind, secret: string) => controller.previewInvite(kind, secret),
+    [controller],
+  );
+  const acceptInvite = useCallback(
+    (kind: InviteKind, secret: string, locale: AppLocale) =>
       controller.acceptInvite(kind, secret, locale),
-  };
+    [controller],
+  );
+
+  const value = useMemo<GroupsContextValue>(
+    () => ({
+      ...snapshot,
+      revision,
+      refreshGroups,
+      createGroup,
+      loadLeaderboard,
+      setAnonymity,
+      loadInvites,
+      createInvite,
+      revokeInvite,
+      previewInvite,
+      acceptInvite,
+    }),
+    [
+      acceptInvite,
+      createGroup,
+      createInvite,
+      loadInvites,
+      loadLeaderboard,
+      previewInvite,
+      refreshGroups,
+      revision,
+      revokeInvite,
+      setAnonymity,
+      snapshot,
+    ],
+  );
 
   return (
     <GroupsContext.Provider value={value}>{children}</GroupsContext.Provider>

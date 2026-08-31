@@ -728,6 +728,32 @@ describe("GroupsController / GroupsStore", () => {
     expect(getLeaderboard).toHaveBeenCalledTimes(1);
   });
 
+  it("does not emit a redundant store update when a deduped request keeps the same leaderboard selection", async () => {
+    const pending = deferred<GroupLeaderboardResponse>();
+    const getLeaderboard = vi
+      .fn<GroupsGateway["getLeaderboard"]>()
+      .mockImplementation(() => pending.promise);
+    const { controller, store } = setup({
+      gateway: createGateway({ getLeaderboard }),
+    });
+    await controller.initialize("account-1");
+
+    const first = controller.loadLeaderboard(baseGroup.id, "week", { mode: "reset" });
+    const versionBeforeDedup = store.getVersion();
+    const second = controller.loadLeaderboard(baseGroup.id, "week", { mode: "reset" });
+
+    expect(store.getVersion()).toBe(versionBeforeDedup);
+
+    pending.resolve(
+      leaderboardPage(
+        "week",
+        [{ rowId: "one", displayName: "One", total: "1", rank: 1, isSelf: true }],
+        { hasMore: false, nextCursor: null },
+      ),
+    );
+    await Promise.all([first, second]);
+  });
+
   it("subscribes via GroupsStore observable updates", async () => {
     const { controller, store } = setup();
     const listener = vi.fn();

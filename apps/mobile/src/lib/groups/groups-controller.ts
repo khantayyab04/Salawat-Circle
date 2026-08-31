@@ -233,10 +233,16 @@ export class GroupsController {
       return;
     }
     if (existing) {
-      this.store.update((state) => {
-        state.leaderboard.selectedGroupId = groupId;
-        state.leaderboard.selectedPeriod = period;
-      });
+      const selected = this.store.getSnapshot().leaderboard;
+      if (
+        selected.selectedGroupId !== groupId ||
+        selected.selectedPeriod !== period
+      ) {
+        this.store.update((state) => {
+          state.leaderboard.selectedGroupId = groupId;
+          state.leaderboard.selectedPeriod = period;
+        });
+      }
       return existing;
     }
 
