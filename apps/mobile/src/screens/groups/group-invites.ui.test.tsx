@@ -558,6 +558,74 @@ describe("Task 15 owner invite screen", () => {
     expect(view.queryByText("invalid-token")).toBeNull();
   });
 
+  it("does not render action error banner from stale unrelated mutation error on mount", async () => {
+    mockUseGroups.mockReturnValue(
+      createGroupsState({
+        mutation: {
+          pending: false,
+          kind: null,
+          errorCode: "RATE_LIMITED",
+        },
+      }),
+    );
+
+    const view = await render(<GroupInvitesRoute />);
+
+    await waitFor(() =>
+      expect(
+        view.getByRole("button", { name: "Neue Einladung erstellen" }),
+      ).toBeTruthy(),
+    );
+    expect(view.queryByText("Bitte kurz warten")).toBeNull();
+    expect(view.queryByText("Zu viele Aktionen in kurzer Zeit. Versuche es gleich erneut.")).toBeNull();
+  });
+
+  it("clears local create action error on retry and keeps it cleared despite stale mutation error", async () => {
+    mockUseGroups.mockReturnValue(
+      createGroupsState({
+        mutation: {
+          pending: false,
+          kind: null,
+          errorCode: "RATE_LIMITED",
+        },
+      }),
+    );
+    mockCreateInvite.mockRejectedValueOnce(new Error("OFFLINE"));
+
+    const view = await render(<GroupInvitesRoute />);
+
+    await waitFor(() =>
+      expect(
+        view.getByRole("button", { name: "Neue Einladung erstellen" }),
+      ).toBeTruthy(),
+    );
+
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Neue Einladung erstellen" }));
+    });
+
+    await waitFor(() =>
+      expect(view.getByText("Offline")).toBeTruthy(),
+    );
+    expect(
+      view.getByText(
+        "Verbinde dich mit dem Internet, um Einladungen zu verwalten.",
+      ),
+    ).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Aktualisieren" }));
+    });
+
+    await waitFor(() => expect(mockLoadInvites).toHaveBeenCalledTimes(2));
+    expect(view.queryByText("Offline")).toBeNull();
+    expect(
+      view.queryByText(
+        "Verbinde dich mit dem Internet, um Einladungen zu verwalten.",
+      ),
+    ).toBeNull();
+  });
+
   it("renders dedicated offline state", async () => {
     mockUseGroups.mockReturnValue(
       createGroupsState({

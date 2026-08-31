@@ -269,7 +269,7 @@ export function GroupInvitesScreen() {
   const showPartialError = hasInvites && !!effectiveErrorCode;
   const createPending = mutation.pending && mutation.kind === "create_invite";
   const effectiveActionErrorCode =
-    actionError?.groupId === groupId ? actionError.code : mutation.errorCode;
+    actionError?.groupId === groupId ? actionError.code : null;
   const actionErrorCopy = effectiveActionErrorCode
     ? resolveInviteActionErrorCopy(effectiveActionErrorCode, t)
     : null;
