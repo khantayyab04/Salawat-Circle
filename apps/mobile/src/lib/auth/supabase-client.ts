@@ -2,7 +2,8 @@ import "react-native-url-polyfill/auto";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as SecureStore from "expo-secure-store";
-import { resolveBackendConfig } from "../backend";
+import { Platform } from "react-native";
+import { platformForBackend, resolveBackendConfig } from "../backend";
 import type { Database } from "@salawat-circle/shared-types";
 import { createSecureStorage } from "./secure-storage";
 
@@ -24,8 +25,10 @@ function getEnvironment() {
 export function getSupabaseClient() {
   if (configuredClient) return configuredClient;
 
-  const platform = process.env.EXPO_OS === "android" ? "android" : "ios";
-  const config = resolveBackendConfig(getEnvironment(), platform);
+  const config = resolveBackendConfig(
+    getEnvironment(),
+    platformForBackend(Platform.OS),
+  );
   configuredClient = createClient<Database>(config.url, config.anonKey, {
     auth: {
       storage: createSecureStorage(SecureStore),
