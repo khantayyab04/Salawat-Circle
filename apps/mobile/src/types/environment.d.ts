@@ -5,5 +5,6 @@ declare namespace NodeJS {
     EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY?: string;
     EXPO_PUBLIC_SUPABASE_URL_ANDROID?: string;
     EXPO_PUBLIC_SUPABASE_URL_IOS?: string;
+    EXPO_PUBLIC_JOIN_BASE_URL?: string;
   }
 }

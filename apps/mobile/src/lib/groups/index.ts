@@ -1,3 +1,10 @@
+export {
+  buildInviteLink,
+  normalizeManualInviteCode,
+  normalizeTokenInvite,
+  parseInviteSecretParam,
+  type InviteSecret,
+} from "./invite-link";
 export { createSupabaseGroupsGateway, type GroupsGateway } from "./groups-gateway";
 export {
   GroupsError,
