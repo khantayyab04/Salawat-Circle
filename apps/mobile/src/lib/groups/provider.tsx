@@ -1,4 +1,5 @@
 import { randomUUID } from "expo-crypto";
+import { addNetworkStateListener, getNetworkStateAsync } from "expo-network";
 import {
   createContext,
   type PropsWithChildren,
@@ -59,6 +60,23 @@ type GroupsContextValue = ReturnType<GroupsStore["getSnapshot"]> & {
 
 const GroupsContext = createContext<GroupsContextValue | null>(null);
 
+type NetworkStateSnapshot = {
+  isConnected?: boolean;
+  isInternetReachable?: boolean;
+};
+
+function isNetworkStateOnline(state: NetworkStateSnapshot) {
+  return state.isConnected !== false && state.isInternetReachable !== false;
+}
+
+async function defaultOnlineCheck() {
+  try {
+    return isNetworkStateOnline(await getNetworkStateAsync());
+  } catch {
+    return false;
+  }
+}
+
 function unavailableGateway(): GroupsGateway {
   const unavailable = async () => {
     throw new Error("INTERNAL");
@@ -110,7 +128,7 @@ export function GroupsProvider({
     () =>
       new GroupsController(store, gateway, {
         createId,
-        isOnline: onlineCheck ?? (async () => store.getSnapshot().online),
+        isOnline: onlineCheck ?? defaultOnlineCheck,
       }),
     [createId, gateway, onlineCheck, store],
   );
@@ -124,24 +142,25 @@ export function GroupsProvider({
     if (onlineCheck) return;
     let active = true;
     let removeListener: (() => void) | undefined;
-    void import("expo-network")
-      .then(async ({ addNetworkStateListener, getNetworkStateAsync }) => {
-        const apply = (state: {
-          isConnected?: boolean;
-          isInternetReachable?: boolean;
-        }) => {
-          if (!active) return;
-          const online =
-            state.isConnected !== false &&
-            state.isInternetReachable !== false;
-          controller.setOnline(online);
-        };
-        apply(await getNetworkStateAsync());
+    const apply = (state: NetworkStateSnapshot) => {
+      if (!active) return;
+      controller.setOnline(isNetworkStateOnline(state));
+    };
+    void getNetworkStateAsync()
+      .then((initialState) => {
+        if (!active) return;
+        apply(initialState);
         const subscription = addNetworkStateListener(apply);
+        if (!active) {
+          subscription.remove();
+          return;
+        }
         removeListener = () => subscription.remove();
       })
       .catch(() => {
-        controller.setOnline(false);
+        if (active) {
+          controller.setOnline(false);
+        }
       });
     return () => {
       active = false;

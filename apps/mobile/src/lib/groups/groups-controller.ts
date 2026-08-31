@@ -27,6 +27,10 @@ export type LoadLeaderboardOptions = {
   mode?: "reset" | "next";
 };
 
+export type RefreshGroupsOptions = {
+  force?: boolean;
+};
+
 const DEFAULT_LEADERBOARD_PAGE_SIZE = 30;
 
 export class GroupsController {
@@ -39,7 +43,7 @@ export class GroupsController {
   private groupsRequestId = 0;
   private invitesRequestId = 0;
   private previewRequestId = 0;
-  private mutationInFlight: Promise<unknown> | null = null;
+  private mutationQueue: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly store: GroupsStore,
@@ -92,7 +96,7 @@ export class GroupsController {
     this.groupsRequestId = 0;
     this.invitesRequestId = 0;
     this.previewRequestId = 0;
-    this.mutationInFlight = null;
+    this.mutationQueue = Promise.resolve();
     this.replaceSnapshot(accountId);
     await this.refreshGroups();
   }
@@ -104,7 +108,7 @@ export class GroupsController {
     this.groupsRequestId = 0;
     this.invitesRequestId = 0;
     this.previewRequestId = 0;
-    this.mutationInFlight = null;
+    this.mutationQueue = Promise.resolve();
     this.replaceSnapshot(null);
   }
 
@@ -120,11 +124,10 @@ export class GroupsController {
     return promise;
   }
 
-  async refreshGroups() {
+  async refreshGroups(options: RefreshGroupsOptions = {}) {
     this.requireAccountId();
     const session = this.session;
-    const key = `groups:${session}`;
-    return this.withDedup(key, async () => {
+    const run = async () => {
       const requestId = this.groupsRequestId + 1;
       this.groupsRequestId = requestId;
       this.store.update((state) => {
@@ -157,7 +160,12 @@ export class GroupsController {
         });
         throw groupsError;
       }
-    });
+    };
+    if (options.force) {
+      return run();
+    }
+    const key = `groups:${session}`;
+    return this.withDedup(key, run);
   }
 
   async createGroup(
@@ -179,7 +187,7 @@ export class GroupsController {
       if (!this.isSessionCurrent(session)) return response;
 
       try {
-        await this.refreshGroups();
+        await this.refreshGroups({ force: true });
       } catch {
         if (!this.isSessionCurrent(session)) return response;
         this.upsertGroup({
@@ -215,7 +223,6 @@ export class GroupsController {
       : "start";
     const dedupKey = `leaderboard:${session}:${groupId}:${period}:${mode}:${cursorKey}`;
     const existing = this.inflight.get(dedupKey) as Promise<void> | undefined;
-    if (existing) return existing;
     if (
       mode === "next" &&
       (!existingState ||
@@ -224,6 +231,13 @@ export class GroupsController {
         !existingState.hasMore)
     ) {
       return;
+    }
+    if (existing) {
+      this.store.update((state) => {
+        state.leaderboard.selectedGroupId = groupId;
+        state.leaderboard.selectedPeriod = period;
+      });
+      return existing;
     }
 
     const scope = `${groupId}:${period}`;
@@ -236,7 +250,8 @@ export class GroupsController {
       const target = ensureLeaderboardState(state, groupId, period);
       target.errorCode = null;
       if (mode === "reset") {
-        Object.assign(target, createEmptyLeaderboardState(period), { loading: true });
+        target.loading = true;
+        target.loadingMore = false;
       } else {
         target.loadingMore = true;
       }
@@ -245,6 +260,15 @@ export class GroupsController {
     return this.withDedup(dedupKey, async () => {
       try {
         await this.requireOnline();
+        if (!this.isActiveLeaderboardRequest(session, scope, requestId, groupId, period)) {
+          return;
+        }
+        if (mode === "reset") {
+          this.store.update((state) => {
+            const target = ensureLeaderboardState(state, groupId, period);
+            Object.assign(target, createEmptyLeaderboardState(period), { loading: true });
+          });
+        }
         const response = await this.gateway.getLeaderboard(
           groupId,
           period,
@@ -325,6 +349,8 @@ export class GroupsController {
           );
         }
       });
+
+      await this.refreshGroups({ force: true }).catch(() => undefined);
 
       const selected = this.store.getSnapshot().leaderboard;
       if (selected.selectedGroupId === groupId) {
@@ -487,7 +513,7 @@ export class GroupsController {
       });
 
       try {
-        await this.refreshGroups();
+        await this.refreshGroups({ force: true });
       } catch {
         if (!this.isSessionCurrent(session)) return response;
         this.upsertGroup({
@@ -556,6 +582,7 @@ export class GroupsController {
         state.groups.items[index] = group;
       }
       state.groups.status = "ready";
+      state.groups.errorCode = null;
     });
   }
 
@@ -563,17 +590,21 @@ export class GroupsController {
     kind: GroupsMutationKind,
     action: (session: number) => Promise<T>,
   ) {
-    if (this.mutationInFlight) {
-      return this.mutationInFlight as Promise<T>;
-    }
     const session = this.session;
-    this.store.update((state) => {
-      state.mutation.pending = true;
-      state.mutation.kind = kind;
-      state.mutation.errorCode = null;
-    });
-    const promise = action(session)
-      .catch((error) => {
+    const execute = async () => {
+      if (!this.isSessionCurrent(session)) {
+        throw new GroupsError("AUTH_REQUIRED");
+      }
+
+      this.store.update((state) => {
+        state.mutation.pending = true;
+        state.mutation.kind = kind;
+        state.mutation.errorCode = null;
+      });
+
+      try {
+        return await action(session);
+      } catch (error) {
         const groupsError = toGroupsError(error);
         if (this.isSessionCurrent(session)) {
           this.store.update((state) => {
@@ -581,20 +612,22 @@ export class GroupsController {
           });
         }
         throw groupsError;
-      })
-      .finally(() => {
+      } finally {
         if (this.isSessionCurrent(session)) {
           this.store.update((state) => {
             state.mutation.pending = false;
             state.mutation.kind = null;
           });
         }
-        if (this.mutationInFlight === promise) {
-          this.mutationInFlight = null;
-        }
-      });
-    this.mutationInFlight = promise;
-    return promise;
+      }
+    };
+
+    const queuedMutation = this.mutationQueue.then(execute, execute);
+    this.mutationQueue = queuedMutation.then(
+      () => undefined,
+      () => undefined,
+    );
+    return queuedMutation;
   }
 }
 

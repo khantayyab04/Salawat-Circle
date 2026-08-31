@@ -1,8 +1,23 @@
-import { describe, expect, it, jest } from "@jest/globals";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+} from "@jest/globals";
 import { act, render, waitFor } from "@testing-library/react-native";
+import * as ExpoNetwork from "expo-network";
 import { Text } from "react-native";
 import type { GroupsGateway } from "./groups-gateway";
 import { GroupsProvider, useGroups } from "./provider";
+
+let getNetworkStateAsyncSpy: jest.SpiedFunction<
+  typeof ExpoNetwork.getNetworkStateAsync
+>;
+let addNetworkStateListenerSpy: jest.SpiedFunction<
+  typeof ExpoNetwork.addNetworkStateListener
+>;
 
 function Consumer() {
   const groups = useGroups();
@@ -50,6 +65,25 @@ function gateway(): GroupsGateway {
 }
 
 describe("GroupsProvider", () => {
+  beforeEach(() => {
+    getNetworkStateAsyncSpy = jest
+      .spyOn(ExpoNetwork, "getNetworkStateAsync")
+      .mockResolvedValue({
+        isConnected: true,
+        isInternetReachable: true,
+        type: ExpoNetwork.NetworkStateType.WIFI,
+      });
+    addNetworkStateListenerSpy = jest
+      .spyOn(ExpoNetwork, "addNetworkStateListener")
+      .mockReturnValue({
+        remove: jest.fn(),
+      } as ReturnType<typeof ExpoNetwork.addNetworkStateListener>);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it("wires context loading and resets when account is cleared", async () => {
     const wiredGateway = gateway();
     const view = await render(
@@ -81,5 +115,30 @@ describe("GroupsProvider", () => {
     });
 
     await waitFor(() => expect(view.getByText("none:0:idle")).toBeTruthy());
+  });
+
+  it("uses expo-network for cold-start online checks and keeps startup offline", async () => {
+    const wiredGateway = gateway();
+    getNetworkStateAsyncSpy.mockResolvedValue({
+      isConnected: false,
+      isInternetReachable: false,
+      type: ExpoNetwork.NetworkStateType.UNKNOWN,
+    });
+
+    const view = await render(
+      <GroupsProvider
+        gateway={wiredGateway}
+        accountId="account-1"
+        enabled
+        createId={() => "test-group-id"}
+      >
+        <Consumer />
+      </GroupsProvider>,
+    );
+
+    await waitFor(() => expect(view.getByText("account-1:0:error")).toBeTruthy());
+    expect(getNetworkStateAsyncSpy).toHaveBeenCalled();
+    expect(addNetworkStateListenerSpy).toHaveBeenCalled();
+    expect(wiredGateway.listMyGroups).toHaveBeenCalledTimes(0);
   });
 });

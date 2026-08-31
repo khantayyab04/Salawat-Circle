@@ -9,7 +9,6 @@ const DOMAIN_ERROR_CODES = new Set([
   "ENTRY_VERSION_CONFLICT",
   "INVITE_INVALID",
   "RATE_LIMITED",
-  "OFFLINE",
 ]);
 
 export type GroupsDomainErrorCode = typeof DOMAIN_ERROR_CODES extends Set<infer Code>
@@ -18,6 +17,7 @@ export type GroupsDomainErrorCode = typeof DOMAIN_ERROR_CODES extends Set<infer 
 
 export type GroupsErrorCode =
   | GroupsDomainErrorCode
+  | "OFFLINE"
   | "INTERNAL"
   | "INVALID_RESPONSE"
   | "NETWORK";
@@ -73,6 +73,10 @@ function readPostgrestCode(error: unknown): string {
 
 export function getGroupsErrorCode(error: unknown): GroupsErrorCode {
   const message = readMessage(error);
+  if (message === "OFFLINE") {
+    return "OFFLINE";
+  }
+
   if (DOMAIN_ERROR_CODES.has(message)) {
     return message as GroupsDomainErrorCode;
   }

@@ -13,9 +13,12 @@ describe("getGroupsErrorCode", () => {
     "ENTRY_VERSION_CONFLICT",
     "INVITE_INVALID",
     "RATE_LIMITED",
-    "OFFLINE",
   ])("preserves stable backend domain error code %s", (code) => {
     expect(getGroupsErrorCode({ message: code })).toBe(code);
+  });
+
+  it("keeps client offline failures separate from backend domain errors", () => {
+    expect(getGroupsErrorCode({ message: "OFFLINE" })).toBe("OFFLINE");
   });
 
   it("does not expose unknown backend message details", () => {

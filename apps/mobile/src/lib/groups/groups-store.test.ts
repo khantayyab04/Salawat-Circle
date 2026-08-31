@@ -44,6 +44,18 @@ const secondaryGroup: GroupListItem = {
   name: "Beta Circle",
 };
 
+const createdGroupListItem: GroupListItem = {
+  ...baseGroup,
+  id: "ffffffff-ffff-4fff-8fff-fffffffffff6",
+  name: "Gamma Circle",
+  revision: 1,
+  updatedAt: "2026-08-31T22:00:00.000Z",
+  calculatedAt: "2026-08-31T22:00:00.000Z",
+  ownRank: 0,
+  ownWeekTotal: "0",
+  memberCount: "1",
+};
+
 const inviteOne: GroupInvite = {
   id: "cccccccc-cccc-4ccc-8ccc-ccccccccccc3",
   groupId: baseGroup.id,
@@ -262,6 +274,43 @@ describe("GroupsController / GroupsStore", () => {
     expect(listMyGroups).toHaveBeenCalledTimes(2);
   });
 
+  it("queues concurrent distinct mutations so both execute and return their own result", async () => {
+    const createDeferred = deferred<CreateInviteResponse>();
+    const createdInvite: CreateInviteResponse = {
+      invite: {
+        ...inviteWithSecret.invite,
+        id: "00000000-0000-4000-8000-000000000001",
+      },
+    };
+    const revokedInvite: GroupInvite = {
+      ...inviteOne,
+      status: "revoked",
+      revokedAt: "2026-08-31T22:00:00.000Z",
+    };
+    const createInvite = vi
+      .fn<GroupsGateway["createInvite"]>()
+      .mockImplementation(() => createDeferred.promise);
+    const revokeInvite = vi
+      .fn<GroupsGateway["revokeInvite"]>()
+      .mockResolvedValue({ invite: revokedInvite });
+    const { controller } = setup({
+      gateway: createGateway({ createInvite, revokeInvite }),
+    });
+    await controller.initialize("account-1");
+
+    const first = controller.createInvite(baseGroup.id);
+    const second = controller.revokeInvite(baseGroup.id, inviteOne.id);
+    expect(revokeInvite).toHaveBeenCalledTimes(0);
+
+    createDeferred.resolve(createdInvite);
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+
+    expect(firstResult).toEqual(createdInvite);
+    expect(secondResult).toEqual({ invite: revokedInvite });
+    expect(createInvite).toHaveBeenCalledTimes(1);
+    expect(revokeInvite).toHaveBeenCalledTimes(1);
+  });
+
   it("paginates leaderboard rows without duplicate row_id and preserves items on next-page error", async () => {
     const getLeaderboard = vi
       .fn<GroupsGateway["getLeaderboard"]>()
@@ -347,6 +396,82 @@ describe("GroupsController / GroupsStore", () => {
     expect(store.getSnapshot().leaderboard.selectedPeriod).toBe("all_time");
     expect(allTime.items.map((row) => row.rowId)).toEqual(["all-1"]);
     expect(week.items).toEqual([]);
+  });
+
+  it("keeps week selected when it is re-selected while the same week request is still in-flight", async () => {
+    const slowWeek = deferred<GroupLeaderboardResponse>();
+    const getLeaderboard = vi.fn<GroupsGateway["getLeaderboard"]>((_, period) => {
+      if (period === "week") return slowWeek.promise;
+      return Promise.resolve(
+        leaderboardPage(
+          "all_time",
+          [{ rowId: "all-1", displayName: "All Time", total: "50", rank: 1, isSelf: true }],
+          { hasMore: false, nextCursor: null, ownAlias: "Sanfter Stern" },
+        ),
+      );
+    });
+    const { controller, store } = setup({
+      gateway: createGateway({ getLeaderboard }),
+    });
+    await controller.initialize("account-1");
+
+    const firstWeekLoad = controller.loadLeaderboard(baseGroup.id, "week", { mode: "reset" });
+    await controller.loadLeaderboard(baseGroup.id, "all_time", { mode: "reset" });
+    const secondWeekLoad = controller.loadLeaderboard(baseGroup.id, "week", { mode: "reset" });
+
+    expect(store.getSnapshot().leaderboard.selectedPeriod).toBe("week");
+
+    slowWeek.resolve(
+      leaderboardPage(
+        "week",
+        [{ rowId: "week-1", displayName: "Week", total: "20", rank: 1, isSelf: true }],
+        { hasMore: false, nextCursor: null },
+      ),
+    );
+
+    await Promise.all([firstWeekLoad, secondWeekLoad]);
+    const week = store.getSnapshot().leaderboard.byGroup[baseGroup.id].week;
+    expect(store.getSnapshot().leaderboard.selectedPeriod).toBe("week");
+    expect(week.loading).toBe(false);
+    expect(week.items.map((row) => row.rowId)).toEqual(["week-1"]);
+  });
+
+  it("preserves visible leaderboard rows and cursor when reset is requested while offline", async () => {
+    let online = true;
+    const getLeaderboard = vi
+      .fn<GroupsGateway["getLeaderboard"]>()
+      .mockResolvedValueOnce(
+        leaderboardPage(
+          "week",
+          [
+            { rowId: "row-1", displayName: "Self", total: "9", rank: 1, isSelf: true },
+            { rowId: "row-2", displayName: "Peer", total: "7", rank: 2, isSelf: false },
+          ],
+          {
+            hasMore: true,
+            nextCursor: { rank: 2, sortName: "peer", rowId: "row-2" },
+          },
+        ),
+      );
+    const { controller, store } = setup({
+      gateway: createGateway({ getLeaderboard }),
+      isOnline: async () => online,
+    });
+    await controller.initialize("account-1");
+    await controller.loadLeaderboard(baseGroup.id, "week", { mode: "reset" });
+
+    const beforeOfflineReset = store.getSnapshot().leaderboard.byGroup[baseGroup.id].week;
+    online = false;
+
+    await expect(
+      controller.loadLeaderboard(baseGroup.id, "week", { mode: "reset" }),
+    ).rejects.toEqual(new GroupsError("OFFLINE"));
+
+    const afterOfflineReset = store.getSnapshot().leaderboard.byGroup[baseGroup.id].week;
+    expect(afterOfflineReset.items).toEqual(beforeOfflineReset.items);
+    expect(afterOfflineReset.nextCursor).toEqual(beforeOfflineReset.nextCursor);
+    expect(afterOfflineReset.hasMore).toBe(true);
+    expect(afterOfflineReset.errorCode).toBe("OFFLINE");
   });
 
   it("updates group metadata on setAnonymity and reloads selected leaderboard", async () => {
@@ -437,6 +562,78 @@ describe("GroupsController / GroupsStore", () => {
     });
     expect(store.getSnapshot().groups.items).toEqual([secondaryGroup]);
     expect(store.getSnapshot().mutation.errorCode).toBeNull();
+  });
+
+  it("refreshes groups again after createGroup even when a pre-mutation refresh is already in-flight", async () => {
+    const staleRefresh = deferred<{ items: GroupListItem[] }>();
+    const listMyGroups = vi
+      .fn<GroupsGateway["listMyGroups"]>()
+      .mockResolvedValueOnce({ items: [baseGroup] })
+      .mockImplementationOnce(() => staleRefresh.promise)
+      .mockResolvedValueOnce({ items: [baseGroup, createdGroupListItem] });
+    const createGroup = vi.fn<GroupsGateway["createGroup"]>().mockResolvedValue({
+      group: {
+        id: createdGroupListItem.id,
+        name: createdGroupListItem.name,
+        timezone: createdGroupListItem.timezone,
+        status: "active",
+        leaderboardAnonymous: createdGroupListItem.leaderboardAnonymous,
+        createdAt: "2026-08-31T22:00:00.000Z",
+        updatedAt: "2026-08-31T22:00:00.000Z",
+        revision: createdGroupListItem.revision,
+      },
+      membership: {
+        id: "membership-new",
+        groupId: createdGroupListItem.id,
+        joinedAt: "2026-08-31T22:00:00.000Z",
+        createdAt: "2026-08-31T22:00:00.000Z",
+      },
+    });
+
+    const { controller, store } = setup({
+      gateway: createGateway({ listMyGroups, createGroup }),
+      createId: () => createdGroupListItem.id,
+    });
+    await controller.initialize("account-1");
+
+    const stalePromise = controller.refreshGroups();
+    const createPromise = controller.createGroup("Gamma Circle", "Europe/Berlin", false, true);
+
+    await createPromise;
+    expect(listMyGroups).toHaveBeenCalledTimes(3);
+    expect(store.getSnapshot().groups.items).toEqual([baseGroup, createdGroupListItem]);
+
+    staleRefresh.resolve({ items: [baseGroup] });
+    await stalePromise;
+    expect(store.getSnapshot().groups.items).toEqual([baseGroup, createdGroupListItem]);
+  });
+
+  it("refreshes groups again after acceptInvite even when a pre-mutation refresh is already in-flight", async () => {
+    const staleRefresh = deferred<{ items: GroupListItem[] }>();
+    const listMyGroups = vi
+      .fn<GroupsGateway["listMyGroups"]>()
+      .mockResolvedValueOnce({ items: [baseGroup] })
+      .mockImplementationOnce(() => staleRefresh.promise)
+      .mockResolvedValueOnce({ items: [secondaryGroup] });
+    const { controller, store } = setup({
+      gateway: createGateway({ listMyGroups }),
+    });
+    await controller.initialize("account-1");
+
+    const stalePromise = controller.refreshGroups();
+    const acceptPromise = controller.acceptInvite(
+      "token",
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "de",
+    );
+
+    await acceptPromise;
+    expect(listMyGroups).toHaveBeenCalledTimes(3);
+    expect(store.getSnapshot().groups.items).toEqual([secondaryGroup]);
+
+    staleRefresh.resolve({ items: [baseGroup] });
+    await stalePromise;
+    expect(store.getSnapshot().groups.items).toEqual([secondaryGroup]);
   });
 
   it("guards all online-only operations before hitting the gateway", async () => {
