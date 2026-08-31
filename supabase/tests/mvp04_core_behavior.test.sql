@@ -1,4 +1,5 @@
 begin;
+set local time zone 'Europe/Berlin';
 
 create extension if not exists pgtap with schema extensions;
 select plan(33);
