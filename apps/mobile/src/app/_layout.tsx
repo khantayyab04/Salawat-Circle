@@ -1,5 +1,6 @@
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { EntriesProvider } from "@/lib/entries";
+import { GroupsProvider } from "@/lib/groups";
 import { I18nProvider } from "@/localization";
 import { AppThemeProvider } from "@/theme";
 import { Stack } from "expo-router/stack";
@@ -12,21 +13,23 @@ function RootNavigator() {
   return (
     <>
       <EntriesProvider accountId={userId} enabled={status === "ready"}>
-        <Stack screenOptions={{ headerBackButtonDisplayMode: "minimal" }}>
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Protected guard={status === "signed_out"}>
-            <Stack.Screen name="welcome" options={{ headerShown: false }} />
-            <Stack.Screen name="auth" options={{ headerShown: false }} />
-          </Stack.Protected>
-          <Stack.Protected guard={onboardingRequired}>
-            <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-          </Stack.Protected>
-          <Stack.Protected guard={status === "ready"}>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="entry/[id]/edit" />
-          </Stack.Protected>
-          <Stack.Screen name="join/[token]" />
-        </Stack>
+        <GroupsProvider accountId={userId} enabled={status === "ready"}>
+          <Stack screenOptions={{ headerBackButtonDisplayMode: "minimal" }}>
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Protected guard={status === "signed_out"}>
+              <Stack.Screen name="welcome" options={{ headerShown: false }} />
+              <Stack.Screen name="auth" options={{ headerShown: false }} />
+            </Stack.Protected>
+            <Stack.Protected guard={onboardingRequired}>
+              <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+            </Stack.Protected>
+            <Stack.Protected guard={status === "ready"}>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="entry/[id]/edit" />
+            </Stack.Protected>
+            <Stack.Screen name="join/[token]" />
+          </Stack>
+        </GroupsProvider>
       </EntriesProvider>
       <StatusBar style="auto" />
     </>

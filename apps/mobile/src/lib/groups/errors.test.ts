@@ -13,6 +13,7 @@ describe("getGroupsErrorCode", () => {
     "ENTRY_VERSION_CONFLICT",
     "INVITE_INVALID",
     "RATE_LIMITED",
+    "OFFLINE",
   ])("preserves stable backend domain error code %s", (code) => {
     expect(getGroupsErrorCode({ message: code })).toBe(code);
   });
@@ -55,5 +56,6 @@ describe("GroupsError", () => {
   it("keeps network and invalid response failures as typed domain errors", () => {
     expect(new GroupsError("NETWORK").code).toBe("NETWORK");
     expect(new GroupsError("INVALID_RESPONSE").message).toBe("INVALID_RESPONSE");
+    expect(new GroupsError("OFFLINE").code).toBe("OFFLINE");
   });
 });

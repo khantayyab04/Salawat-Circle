@@ -6,6 +6,12 @@ export {
   type InviteSecret,
 } from "./invite-link";
 export { createSupabaseGroupsGateway, type GroupsGateway } from "./groups-gateway";
+export { GroupsStore, createGroupsSnapshot } from "./groups-store";
+export {
+  GroupsController,
+  type LoadLeaderboardOptions,
+} from "./groups-controller";
+export { GroupsProvider, useGroups } from "./provider";
 export {
   GroupsError,
   getGroupsErrorCode,
