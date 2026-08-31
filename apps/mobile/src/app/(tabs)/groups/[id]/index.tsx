@@ -1,4 +1,4 @@
-import { GroupDetailScreen } from "@/screens/main";
+import { GroupDetailScreen } from "@/screens/groups";
 export default function GroupDetailRoute() {
   return <GroupDetailScreen />;
 }
