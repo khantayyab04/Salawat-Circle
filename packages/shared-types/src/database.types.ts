@@ -234,6 +234,7 @@ export type Database = {
         Args: { p_expected_revision: number; p_id: string }
         Returns: Json
       }
+      get_entry: { Args: { p_id: string }; Returns: Json }
       get_group_leaderboard: {
         Args: {
           p_cursor_membership_id?: string

@@ -7,7 +7,10 @@ import {
   useMemo,
   useSyncExternalStore,
 } from "react";
+import { AppState } from "react-native";
 import { getSupabaseClient } from "@/lib/auth/supabase-client";
+import { OfflineController } from "@/lib/offline/controller";
+import type { OfflineAccountState } from "@/lib/offline/types";
 import {
   createSupabaseEntriesGateway,
   type EntriesGateway,
@@ -22,6 +25,9 @@ type EntriesContextValue = EntriesStore["snapshot"] & {
   setGoal(amount: number): Promise<void>;
   clearGoal(): Promise<void>;
   loadMore(): Promise<void>;
+  retrySync(): Promise<void>;
+  keepServerVersion(): Promise<void>;
+  reapplyConflict(): Promise<void>;
 };
 
 const EntriesContext = createContext<EntriesContextValue | null>(null);
@@ -57,23 +63,69 @@ function deviceTimeZone() {
   }
 }
 
+function createLazyOfflineStorage(accountId: string) {
+  let storage: Promise<{
+    load(): Promise<OfflineAccountState | null>;
+    save(state: OfflineAccountState): Promise<void>;
+    clear(): Promise<void>;
+  }> | null = null;
+  const getStorage = () => {
+    storage ??= import("@/lib/offline/expo-storage").then(
+      ({ createExpoOfflineStorage }) => createExpoOfflineStorage(accountId),
+    );
+    return storage;
+  };
+  return {
+    async load() {
+      return (await getStorage()).load();
+    },
+    async save(state: OfflineAccountState) {
+      return (await getStorage()).save(state);
+    },
+    async clear() {
+      return (await getStorage()).clear();
+    },
+  };
+}
+
 export function EntriesProvider({
   children,
   gateway: providedGateway,
   createId = randomUUID,
   enabled = true,
+  accountId,
 }: PropsWithChildren<{
   gateway?: EntriesGateway;
   createId?: () => string;
   enabled?: boolean;
+  accountId?: string | null;
 }>) {
   const gateway = useMemo(
     () => providedGateway ?? defaultGateway(),
     [providedGateway],
   );
+  const offline = useMemo(
+    () =>
+      accountId
+        ? new OfflineController(
+            createLazyOfflineStorage(accountId),
+            gateway,
+            () => new Date(),
+            createId,
+          )
+        : undefined,
+    [accountId, createId, gateway],
+  );
   const store = useMemo(
-    () => new EntriesStore(gateway, deviceTimeZone(), () => new Date(), createId),
-    [createId, gateway],
+    () =>
+      new EntriesStore(
+        gateway,
+        deviceTimeZone(),
+        () => new Date(),
+        createId,
+        offline,
+      ),
+    [createId, gateway, offline],
   );
 
   const revision = useSyncExternalStore(
@@ -83,6 +135,43 @@ export function EntriesProvider({
   useEffect(() => {
     if (enabled) void store.load();
   }, [enabled, store]);
+  useEffect(() => {
+    if (!offline) return;
+    let active = true;
+    let removeListener: (() => void) | undefined;
+    void import("expo-network")
+      .then(async ({ addNetworkStateListener, getNetworkStateAsync }) => {
+        const apply = (state: {
+          isConnected?: boolean;
+          isInternetReachable?: boolean;
+        }) => {
+          if (!active) return;
+          store.setOnline(
+            state.isConnected !== false &&
+              state.isInternetReachable !== false,
+          );
+        };
+        apply(await getNetworkStateAsync());
+        const subscription = addNetworkStateListener(apply);
+        removeListener = () => subscription.remove();
+      })
+      .catch(() => store.setOnline(false));
+    return () => {
+      active = false;
+      removeListener?.();
+    };
+  }, [offline, store]);
+  useEffect(() => {
+    if (!enabled || !offline) return;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") void store.syncPending();
+    });
+    const interval = setInterval(() => void store.syncPending(), 5_000);
+    return () => {
+      subscription.remove();
+      clearInterval(interval);
+    };
+  }, [enabled, offline, store]);
 
   const value: EntriesContextValue = {
     ...store.snapshot,
@@ -93,6 +182,9 @@ export function EntriesProvider({
     setGoal: (amount) => store.setGoal(amount),
     clearGoal: () => store.clearGoal(),
     loadMore: () => store.loadMore(),
+    retrySync: () => store.retrySync(),
+    keepServerVersion: () => store.keepServerVersion(),
+    reapplyConflict: () => store.reapplyConflict(),
   };
 
   return (

@@ -2,8 +2,16 @@ import { getPersonalDate, getWeekStart } from "./calendar";
 import { getEntriesErrorCode, type EntriesErrorCode } from "./errors";
 import type { EntriesGateway, Entry, EntrySummary } from "./entries-gateway";
 import { addTotal, subtractTotal } from "./totals";
+import type { OfflineController } from "@/lib/offline/controller";
+import type { EntryConflict, OfflineEntry } from "@/lib/offline/types";
 
 export type EntriesViewState = "loading" | "content" | "empty" | "error";
+export type EntriesSyncState =
+  | "idle"
+  | "offline"
+  | "pending"
+  | "error"
+  | "conflict";
 
 export class EntriesStore {
   readonly snapshot = {
@@ -22,18 +30,25 @@ export class EntriesStore {
     loadingMore: false,
     paginationError: false,
     busy: false,
+    online: true,
+    syncState: "idle" as EntriesSyncState,
+    pendingCount: 0,
+    failedCount: 0,
     errorCode: null as EntriesErrorCode | null,
     conflictEntryId: null as string | null,
+    conflict: null as EntryConflict | null,
   };
 
   private readonly listeners = new Set<() => void>();
   private version = 0;
+  private syncing = false;
 
   constructor(
     private readonly gateway: EntriesGateway,
     private readonly fallbackTimeZone: string,
     private readonly now: () => Date,
     private readonly createId: () => string,
+    private readonly offline?: OfflineController,
   ) {}
 
   subscribe(listener: () => void) {
@@ -65,8 +80,52 @@ export class EntriesStore {
     );
   }
 
+  private applyOfflineState() {
+    if (!this.offline) return;
+    const state = this.offline.state;
+    this.snapshot.entries = state.entries.filter(
+      (entry) => entry.localState !== "pending_delete",
+    );
+    this.snapshot.summary = state.summary;
+    this.snapshot.timeZone = state.timeZone || this.fallbackTimeZone;
+    this.snapshot.hasMore = state.hasMore;
+    this.snapshot.conflict = state.conflict;
+    this.snapshot.conflictEntryId = state.conflict?.entryId ?? null;
+    this.snapshot.pendingCount = state.queue.filter(
+      ({ status }) => status === "pending",
+    ).length;
+    this.snapshot.failedCount = state.queue.filter(
+      ({ status }) => status === "failed",
+    ).length;
+    this.snapshot.syncState = state.conflict
+      ? "conflict"
+      : this.snapshot.failedCount > 0
+        ? "error"
+        : this.snapshot.pendingCount > 0
+          ? this.snapshot.online
+            ? "pending"
+            : "offline"
+          : this.snapshot.online
+            ? "idle"
+            : "offline";
+    this.snapshot.viewState = this.snapshot.entries.length ? "content" : "empty";
+    this.sortEntries();
+  }
+
   async load() {
-    this.snapshot.viewState = "loading";
+    let hasCachedState = false;
+    if (this.offline) {
+      const cached = await this.offline.load();
+      hasCachedState =
+        cached.entries.length > 0 ||
+        cached.queue.length > 0 ||
+        Boolean(cached.timeZone);
+      if (hasCachedState) {
+        this.applyOfflineState();
+        this.notify();
+      }
+    }
+    if (!hasCachedState) this.snapshot.viewState = "loading";
     this.snapshot.errorCode = null;
     this.notify();
     try {
@@ -77,20 +136,35 @@ export class EntriesStore {
         this.gateway.getSummary(this.snapshot.timeZone),
         this.gateway.list(null, 30),
       ]);
-      this.snapshot.summary = summary;
-      const loadedIds = new Set(page.items.map((entry) => entry.id));
-      this.snapshot.entries = [
-        ...page.items,
-        ...this.snapshot.entries.filter((entry) => !loadedIds.has(entry.id)),
-      ];
-      this.sortEntries();
-      this.snapshot.hasMore = page.hasMore;
-      this.snapshot.viewState = page.items.length ? "content" : "empty";
+      if (this.offline) {
+        await this.offline.hydrate({
+          entries: page.items,
+          summary,
+          timeZone: this.snapshot.timeZone,
+          hasMore: page.hasMore,
+        });
+        this.applyOfflineState();
+      } else {
+        this.snapshot.summary = summary;
+        const loadedIds = new Set(page.items.map((entry) => entry.id));
+        this.snapshot.entries = [
+          ...page.items,
+          ...this.snapshot.entries.filter((entry) => !loadedIds.has(entry.id)),
+        ];
+        this.sortEntries();
+        this.snapshot.hasMore = page.hasMore;
+        this.snapshot.viewState = page.items.length ? "content" : "empty";
+      }
     } catch (error) {
       this.setError(error);
-      this.snapshot.viewState = "error";
+      this.snapshot.viewState = hasCachedState
+        ? this.snapshot.entries.length
+          ? "content"
+          : "empty"
+        : "error";
     }
     this.notify();
+    if (this.offline && this.snapshot.online) void this.syncPending();
   }
 
   private applyAmount(entry: Entry, amount: string, direction: "add" | "subtract") {
@@ -130,26 +204,59 @@ export class EntriesStore {
   async create(amount: number) {
     if (this.snapshot.busy) return;
     const recordedAtClient = this.now().toISOString();
+    const timeZone = this.snapshot.timeZone || this.fallbackTimeZone;
     const optimistic: Entry = {
       id: this.createId(),
       amount: String(amount),
       entryDate: getPersonalDate(
         new Date(recordedAtClient),
-        this.snapshot.timeZone,
+        timeZone,
       ),
-      timezone: this.snapshot.timeZone,
+      timezone: timeZone,
       recordedAtClient,
       createdAt: recordedAtClient,
       updatedAt: recordedAtClient,
       revision: 0,
+      localState: this.offline ? "pending_create" : undefined,
+      serverRevision: this.offline ? null : undefined,
+      lastAttemptAt: this.offline ? null : undefined,
+      retryCount: this.offline ? 0 : undefined,
+      lastErrorCode: this.offline ? null : undefined,
     };
     this.snapshot.busy = true;
     this.snapshot.errorCode = null;
+    this.snapshot.timeZone = timeZone;
     this.snapshot.entries = [optimistic, ...this.snapshot.entries];
     this.sortEntries();
     this.applyAmount(optimistic, optimistic.amount, "add");
     this.snapshot.viewState = "content";
     this.notify();
+    if (this.offline) {
+      try {
+        await this.offline.create(
+          optimistic as OfflineEntry,
+          this.snapshot.summary,
+          timeZone,
+        );
+        this.applyOfflineState();
+        void this.syncPending();
+      } catch (error) {
+        this.snapshot.entries = this.snapshot.entries.filter(
+          (entry) => entry.id !== optimistic.id,
+        );
+        this.applyAmount(optimistic, optimistic.amount, "subtract");
+        this.snapshot.viewState = this.snapshot.entries.length
+          ? "content"
+          : "empty";
+        const errorCode = getEntriesErrorCode(error);
+        this.snapshot.errorCode = errorCode;
+        throw new Error(errorCode);
+      } finally {
+        this.snapshot.busy = false;
+        this.notify();
+      }
+      return;
+    }
     try {
       const entry = await this.gateway.create({
         id: optimistic.id,
@@ -199,6 +306,11 @@ export class EntriesStore {
         },
         30,
       );
+      if (this.offline) {
+        await this.offline.appendPage(page.items, page.hasMore);
+        this.applyOfflineState();
+        return;
+      }
       const seen = new Set(this.snapshot.entries.map((entry) => entry.id));
       this.snapshot.entries = [
         ...this.snapshot.entries,
@@ -229,6 +341,32 @@ export class EntriesStore {
     this.applyAmount(before, before.amount, "subtract");
     this.applyAmount(optimistic, optimistic.amount, "add");
     this.notify();
+    if (this.offline) {
+      try {
+        await this.offline.update(
+          id,
+          amount,
+          entryDate,
+          this.snapshot.summary,
+        );
+        this.applyOfflineState();
+        void this.syncPending();
+      } catch (error) {
+        this.snapshot.entries = this.snapshot.entries.map((candidate) =>
+          candidate.id === id ? before : candidate,
+        );
+        this.sortEntries();
+        this.applyAmount(optimistic, optimistic.amount, "subtract");
+        this.applyAmount(before, before.amount, "add");
+        const errorCode = getEntriesErrorCode(error);
+        this.snapshot.errorCode = errorCode;
+        throw new Error(errorCode);
+      } finally {
+        this.snapshot.busy = false;
+        this.notify();
+      }
+      return;
+    }
     try {
       const entry = await this.gateway.update({
         id,
@@ -270,6 +408,24 @@ export class EntriesStore {
     this.applyAmount(before, before.amount, "subtract");
     this.snapshot.viewState = this.snapshot.entries.length ? "content" : "empty";
     this.notify();
+    if (this.offline) {
+      try {
+        await this.offline.delete(id, this.snapshot.summary);
+        this.applyOfflineState();
+        void this.syncPending();
+      } catch (error) {
+        this.snapshot.entries.splice(index, 0, before);
+        this.applyAmount(before, before.amount, "add");
+        this.snapshot.viewState = "content";
+        const errorCode = getEntriesErrorCode(error);
+        this.snapshot.errorCode = errorCode;
+        throw new Error(errorCode);
+      } finally {
+        this.snapshot.busy = false;
+        this.notify();
+      }
+      return;
+    }
     try {
       await this.gateway.delete({ id, expectedRevision: before.revision });
       await this.refreshSummary();
@@ -296,6 +452,28 @@ export class EntriesStore {
     this.snapshot.errorCode = null;
     this.snapshot.summary.todayGoal = String(amount);
     this.notify();
+    if (this.offline) {
+      try {
+        await this.offline.setGoal(
+          amount,
+          getPersonalDate(
+            this.now(),
+            this.snapshot.timeZone || this.fallbackTimeZone,
+          ),
+        );
+        this.applyOfflineState();
+        void this.syncPending();
+      } catch (error) {
+        this.snapshot.summary = before;
+        const errorCode = getEntriesErrorCode(error);
+        this.snapshot.errorCode = errorCode;
+        throw new Error(errorCode);
+      } finally {
+        this.snapshot.busy = false;
+        this.notify();
+      }
+      return;
+    }
     try {
       await this.gateway.setGoal(
         amount,
@@ -320,6 +498,28 @@ export class EntriesStore {
     this.snapshot.errorCode = null;
     this.snapshot.summary.todayGoal = null;
     this.notify();
+    if (this.offline) {
+      try {
+        await this.offline.setGoal(
+          null,
+          getPersonalDate(
+            this.now(),
+            this.snapshot.timeZone || this.fallbackTimeZone,
+          ),
+        );
+        this.applyOfflineState();
+        void this.syncPending();
+      } catch (error) {
+        this.snapshot.summary = before;
+        const errorCode = getEntriesErrorCode(error);
+        this.snapshot.errorCode = errorCode;
+        throw new Error(errorCode);
+      } finally {
+        this.snapshot.busy = false;
+        this.notify();
+      }
+      return;
+    }
     try {
       await this.gateway.setGoal(
         null,
@@ -335,5 +535,64 @@ export class EntriesStore {
       this.snapshot.busy = false;
       this.notify();
     }
+  }
+
+  setOnline(online: boolean) {
+    if (this.snapshot.online === online) return;
+    this.snapshot.online = online;
+    if (this.offline) this.applyOfflineState();
+    this.notify();
+    if (online) void this.syncPending(true);
+  }
+
+  async syncPending(forcePendingNow = false) {
+    if (!this.offline || !this.snapshot.online || this.syncing) return;
+    this.syncing = true;
+    try {
+      await this.offline.sync(forcePendingNow);
+      this.applyOfflineState();
+    } catch (error) {
+      this.setError(error);
+      this.snapshot.syncState = "error";
+    } finally {
+      this.syncing = false;
+      this.notify();
+    }
+  }
+
+  async retrySync() {
+    if (!this.offline) return;
+    try {
+      await this.offline.retryFailed();
+      this.applyOfflineState();
+    } catch (error) {
+      this.setError(error);
+      this.snapshot.syncState = "error";
+    }
+    this.notify();
+  }
+
+  async keepServerVersion() {
+    if (!this.offline) return;
+    try {
+      await this.offline.keepServerVersion();
+      this.applyOfflineState();
+    } catch (error) {
+      this.setError(error);
+      this.snapshot.syncState = "error";
+    }
+    this.notify();
+  }
+
+  async reapplyConflict() {
+    if (!this.offline) return;
+    try {
+      await this.offline.reapplyConflict();
+      this.applyOfflineState();
+    } catch (error) {
+      this.setError(error);
+      this.snapshot.syncState = "error";
+    }
+    this.notify();
   }
 }

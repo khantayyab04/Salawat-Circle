@@ -1,4 +1,11 @@
-import { AppButton, AppScreen, AppText, FormField, StateFeedback } from "@/components";
+import {
+  AppButton,
+  AppCard,
+  AppScreen,
+  AppText,
+  FormField,
+  StateFeedback,
+} from "@/components";
 import {
   getPersonalDate,
   isEntryDateAllowed,
@@ -40,6 +47,8 @@ function EntryEditForm({ entry }: { entry: ReturnType<typeof useEntries>["entrie
   const [amount, setAmount] = useState(entry.amount);
   const [entryDate, setEntryDate] = useState(entry.entryDate);
   const [error, setError] = useState<string | undefined>();
+  const conflict =
+    entries.conflict?.entryId === entry.id ? entries.conflict : null;
 
   const today = getPersonalDate(new Date(), entries.timeZone);
 
@@ -97,15 +106,41 @@ function EntryEditForm({ entry }: { entry: ReturnType<typeof useEntries>["entrie
           style={{ flex: 1 }}
         />
       </View>
-      {entries.conflictEntryId === entry.id ? (
-        <AppText accessibilityLiveRegion="polite">{t("entryConflict")}</AppText>
-      ) : null}
-      <AppButton
-        disabled={!amount.trim() || !entryDate.trim()}
-        label={t("commonSave")}
-        loading={entries.busy}
-        onPress={() => void save()}
-      />
+      {conflict ? (
+        <AppCard>
+          <AppText accessibilityLiveRegion="polite" variant="bodyStrong">
+            {conflict.operation === "delete"
+              ? t("entryDeleteConflict")
+              : t("entryConflict")}
+          </AppText>
+          <AppText>
+            {`${t("entryConflictServer")}: ${conflict.serverEntry.amount} · ${
+              conflict.serverEntry.entryDate
+            }`}
+          </AppText>
+          <AppText>
+            {`${t("entryConflictLocal")}: ${conflict.localAmount} · ${
+              conflict.localEntryDate
+            }`}
+          </AppText>
+          <AppButton
+            label={t("entryConflictKeepServer")}
+            variant="secondary"
+            onPress={() => void entries.keepServerVersion()}
+          />
+          <AppButton
+            label={t("entryConflictReapply")}
+            onPress={() => void entries.reapplyConflict()}
+          />
+        </AppCard>
+      ) : (
+        <AppButton
+          disabled={!amount.trim() || !entryDate.trim()}
+          label={t("commonSave")}
+          loading={entries.busy}
+          onPress={() => void save()}
+        />
+      )}
     </AppScreen>
   );
 }

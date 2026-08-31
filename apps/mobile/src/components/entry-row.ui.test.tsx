@@ -15,6 +15,10 @@ jest.mock("@/localization", () => ({
         entryDeleteBody: "Dieser Eintrag wird endgültig gelöscht.",
         commonCancel: "Abbrechen",
         entryDeleteConfirm: "Löschen",
+        entrySyncPending: "Ausstehend",
+        entrySyncSynced: "Synchronisiert",
+        entrySyncFailed: "Synchronisierung fehlgeschlagen",
+        entrySyncConflict: "Konflikt",
       })[key] ?? key,
   }),
 }));
@@ -52,5 +56,28 @@ describe("EntryRow", () => {
 
     expect(onEdit).toHaveBeenCalledWith("entry-1");
     expect(view.getByText(/10:00/u)).toBeTruthy();
+  });
+
+  it("shows the durable local sync state", async () => {
+    const view = await render(
+      <EntryRow
+        entry={{
+          id: "entry-1",
+          amount: "42",
+          entryDate: "2026-08-31",
+          timezone: "Europe/Berlin",
+          recordedAtClient: "2026-08-31T10:00:00.000Z",
+          createdAt: "2026-08-31T10:00:00.000Z",
+          updatedAt: "2026-08-31T10:00:00.000Z",
+          revision: 0,
+          localState: "pending_create",
+        }}
+        onDelete={jest.fn()}
+        onEdit={jest.fn()}
+        showTime={false}
+      />,
+    );
+
+    expect(view.getByText("Ausstehend")).toBeTruthy();
   });
 });

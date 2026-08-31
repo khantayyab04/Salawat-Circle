@@ -58,3 +58,31 @@ Offline-Queues oder fachliche Persistenz. Eingaben dürfen lokal im React-State
 existieren; fachliche Aktionen bleiben deaktiviert und als solche für
 Assistenztechnologien gekennzeichnet. Persönliche Daten werden nicht in der
 unverschlüsselten Präferenzablage gespeichert.
+
+## Offline-Datenfluss (MVP07)
+
+`EntriesStore` bleibt der UI-Vertrag. Für ein angemeldetes Konto besitzt er einen
+`OfflineController`, der einen verschlüsselten `OfflineAccountState` verwaltet.
+Die fachliche Reihenfolge ist:
+
+1. Eingabe validieren.
+2. Optimistische Projektion und Mutation-Queue gemeinsam lokal speichern.
+3. UI mit `pending_*` aktualisieren.
+4. Queue bei Verbindung, App-Foreground oder fälligem Retry abarbeiten.
+5. Serverantwort und kanonische Summary lokal persistieren.
+
+Der SQLite-Adapter speichert pro Konto genau einen AES-256-GCM-Envelope. Dadurch
+ist die komplette fachliche Transaktion einschließlich Queue atomar und weder
+Einzelwerte noch Summen oder Payloads liegen im Klartext. Der 256-Bit-Schlüssel
+liegt kontogebunden in SecureStore. `EncryptedAccountStorage`,
+`mutation-queue`, `retry-policy` und `SyncEngine` sind unabhängig vom
+Expo-Adapter testbar.
+
+Create verwendet die vorab erzeugte UUID. Update und Delete senden die zuletzt
+bestätigte Serverrevision. `get_entry` liefert bei einem Konflikt ausschließlich
+den eigenen aktuellen Serverstand. Unbestätigte Änderungen derselben Entity
+werden zusammengeführt; Create gefolgt von Delete erzeugt keinen Serveraufruf.
+
+PostgreSQL bleibt die kanonische Quelle. Lokale Daten autorisieren keine
+Operation und werden nie für fremde Einträge, Gruppenmitgliedschaft oder
+Ranglisten verwendet.

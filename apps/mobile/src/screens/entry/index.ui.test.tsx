@@ -3,6 +3,8 @@ import { act, fireEvent, render } from "@testing-library/react-native";
 import { EntryEditScreen } from "./index";
 
 const mockUpdate = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
+const mockKeepServerVersion = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
+const mockReapplyConflict = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
 const mockUseEntries = jest.fn();
 
 jest.mock("@/lib/entries", () => ({
@@ -27,6 +29,11 @@ jest.mock("@/localization", () => ({
         commonSave: "Speichern",
         entryToday: "Heute",
         entryYesterday: "Gestern",
+        entryConflict: "Dieser Eintrag wurde anderswo geändert.",
+        entryConflictServer: "Server",
+        entryConflictLocal: "Meine Änderung",
+        entryConflictKeepServer: "Serverstand behalten",
+        entryConflictReapply: "Meine Änderung erneut anwenden",
       })[key] ?? key,
   }),
 }));
@@ -82,5 +89,55 @@ describe("EntryEditScreen", () => {
     const view = await render(<EntryEditScreen />);
 
     expect(view.getByText("stateErrorTitle")).toBeTruthy();
+  });
+
+  it("shows both versions and explicit conflict resolution actions", async () => {
+    mockUseEntries.mockReturnValue({
+      entries: [
+        {
+          id: "entry-1",
+          amount: "8",
+          entryDate: "2026-08-31",
+          timezone: "Europe/Berlin",
+          revision: 1,
+        },
+      ],
+      timeZone: "Europe/Berlin",
+      busy: false,
+      conflictEntryId: "entry-1",
+      conflict: {
+        entryId: "entry-1",
+        operation: "update",
+        localAmount: "8",
+        localEntryDate: "2026-08-31",
+        serverEntry: {
+          id: "entry-1",
+          amount: "7",
+          entryDate: "2026-08-31",
+          timezone: "Europe/Berlin",
+          revision: 2,
+        },
+      },
+      update: mockUpdate,
+      keepServerVersion: mockKeepServerVersion,
+      reapplyConflict: mockReapplyConflict,
+    });
+
+    const view = await render(<EntryEditScreen />);
+
+    expect(view.getByText("Server: 7 · 2026-08-31")).toBeTruthy();
+    expect(view.getByText("Meine Änderung: 8 · 2026-08-31")).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(
+        view.getByRole("button", { name: "Serverstand behalten" }),
+      );
+    });
+    await act(async () => {
+      fireEvent.press(
+        view.getByRole("button", { name: "Meine Änderung erneut anwenden" }),
+      );
+    });
+    expect(mockKeepServerVersion).toHaveBeenCalled();
+    expect(mockReapplyConflict).toHaveBeenCalled();
   });
 });

@@ -3,6 +3,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AuthGateway } from "./auth-coordinator";
 
 type GatewayError = { message?: string } | null;
+type ReadySessionBackend = {
+  getItemAsync(key: string): Promise<string | null>;
+  setItemAsync(key: string, value: string): Promise<void>;
+  deleteItemAsync(key: string): Promise<void>;
+};
+const READY_USER_KEY = "salawat.auth.ready-user";
 
 function ensureSuccess(error: GatewayError) {
   if (error) {
@@ -12,6 +18,7 @@ function ensureSuccess(error: GatewayError) {
 
 export function createSupabaseAuthGateway(
   client: SupabaseClient<Database>,
+  readySessionBackend: ReadySessionBackend,
 ): AuthGateway {
   return {
     subscribeToAuthChanges(listener) {
@@ -22,9 +29,9 @@ export function createSupabaseAuthGateway(
     },
 
     async getCurrentUser() {
-      const { data, error } = await client.auth.getUser();
+      const { data, error } = await client.auth.getSession();
       ensureSuccess(error);
-      return data.user;
+      return data.session?.user ?? null;
     },
 
     async requestOtp(email) {
@@ -83,6 +90,18 @@ export function createSupabaseAuthGateway(
     async signOut() {
       const { error } = await client.auth.signOut({ scope: "local" });
       ensureSuccess(error);
+    },
+
+    getCachedReadyUserId() {
+      return readySessionBackend.getItemAsync(READY_USER_KEY);
+    },
+
+    cacheReadyUserId(userId) {
+      return readySessionBackend.setItemAsync(READY_USER_KEY, userId);
+    },
+
+    clearCachedReadyUserId() {
+      return readySessionBackend.deleteItemAsync(READY_USER_KEY);
     },
   };
 }

@@ -6,12 +6,12 @@ import { Stack } from "expo-router/stack";
 import { StatusBar } from "expo-status-bar";
 
 function RootNavigator() {
-  const { status } = useAuth();
+  const { status, userId } = useAuth();
   const onboardingRequired =
     status === "profile_required" || status === "consent_required";
   return (
     <>
-      <EntriesProvider enabled={status === "ready"}>
+      <EntriesProvider accountId={userId} enabled={status === "ready"}>
         <Stack screenOptions={{ headerBackButtonDisplayMode: "minimal" }}>
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Protected guard={status === "signed_out"}>

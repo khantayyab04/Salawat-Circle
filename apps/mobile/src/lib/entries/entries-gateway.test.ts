@@ -26,6 +26,16 @@ describe("Supabase entries gateway", () => {
           error: null,
         });
       }
+      if (name === "get_entry") {
+        return Promise.resolve({ data: { entry }, error: null });
+      }
+      if (name === "update_entry") {
+        return Promise.resolve({
+          data: null,
+          error: { message: "ENTRY_VERSION_CONFLICT" },
+          status: 400,
+        });
+      }
       return Promise.resolve({
         data: {
           today_total: "42",
@@ -45,6 +55,9 @@ describe("Supabase entries gateway", () => {
     const client = {
       rpc,
       from: vi.fn(() => ({ select: vi.fn(() => ({ single })) })),
+      auth: {
+        refreshSession: vi.fn().mockResolvedValue({ data: {}, error: null }),
+      },
     } as unknown as SupabaseClient<Database>;
     const gateway = createSupabaseEntriesGateway(client);
 
@@ -93,6 +106,19 @@ describe("Supabase entries gateway", () => {
     await expect(gateway.setGoal(100, "2026-08-31")).resolves.toBeUndefined();
     await expect(gateway.setGoal(null, "2026-08-31")).resolves.toBeUndefined();
     await expect(gateway.getTimeZone("UTC")).resolves.toBe("Europe/Berlin");
+    await expect(gateway.getEntry?.(entry.id)).resolves.toMatchObject({
+      id: entry.id,
+      revision: 1,
+    });
+    await expect(gateway.refreshSession?.()).resolves.toBeUndefined();
+    await expect(
+      gateway.update({
+        id: entry.id,
+        amount: 43,
+        entryDate: entry.entry_date,
+        expectedRevision: 1,
+      }),
+    ).rejects.toThrow("ENTRY_VERSION_CONFLICT");
 
     expect(rpc).toHaveBeenCalledWith("create_entry", {
       p_id: entry.id,
@@ -102,6 +128,7 @@ describe("Supabase entries gateway", () => {
       p_recorded_at_client: "2026-08-31T10:00:00.000Z",
     });
     expect(rpc).toHaveBeenCalledWith("list_entries", { p_limit: 30 });
+    expect(rpc).toHaveBeenCalledWith("get_entry", { p_id: entry.id });
     expect(rpc).toHaveBeenCalledWith("set_daily_goal", {
       p_amount: 100,
       p_effective_from: "2026-08-31",

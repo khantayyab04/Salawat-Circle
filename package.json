@@ -22,6 +22,7 @@
     "test:auth-integration": "node --test scripts/mvp03-auth.integration.test.mjs",
     "test:entries-integration": "node --test scripts/mvp05-entries.integration.test.mjs",
     "test:goals-integration": "node --test scripts/mvp06-goals.integration.test.mjs",
+    "test:offline-integration": "node --test scripts/mvp07-offline.integration.test.mjs",
     "verify": "pnpm test && pnpm lint && pnpm typecheck"
   },
   "devDependencies": {
