@@ -26,7 +26,7 @@ create or replace function private.rate_limit_bucket_start(
 )
 returns timestamptz
 language plpgsql
-immutable
+stable
 security definer
 set search_path = ''
 as $$
@@ -324,22 +324,25 @@ begin
     raise exception using errcode = 'P0001', message = 'INVALID_INPUT';
   end if;
 
-  perform private.enforce_rate_limit(
-    v_user_id::text,
-    'create_group',
-    'day',
-    86400,
-    10,
-    pg_catalog.clock_timestamp()
-  );
-
   insert into public.groups (id, owner_user_id, name, normalized_name, timezone)
   values (p_client_group_id, v_user_id, v_name, pg_catalog.lower(v_name), p_timezone)
-  on conflict (id) do nothing;
+  on conflict (id) do nothing
+  returning * into v_group;
 
-  select * into v_group
-  from public.groups
-  where id = p_client_group_id;
+  if found then
+    perform private.enforce_rate_limit(
+      v_user_id::text,
+      'create_group',
+      'day',
+      86400,
+      10,
+      pg_catalog.clock_timestamp()
+    );
+  else
+    select * into v_group
+    from public.groups
+    where id = p_client_group_id;
+  end if;
 
   if v_group.owner_user_id <> v_user_id then
     raise exception using errcode = 'P0001', message = 'NOT_FOUND';
@@ -719,80 +722,89 @@ begin
     return private.invite_invalid_response(v_user_id, v_is_manual_code, pg_catalog.clock_timestamp());
   end if;
 
-  insert into public.group_memberships (
-    group_id,
-    user_id,
-    joined_at,
-    invite_id,
-    sharing_consent_version
-  ) values (
-    v_group.id,
-    v_user_id,
-    v_joined_at,
-    v_invite.id,
-    'mvp08-group-sharing-v1'
-  )
-  on conflict (group_id, user_id) where left_at is null do nothing
-  returning * into v_membership;
-
-  if not found then
-    select *
-    into v_membership
-    from public.group_memberships membership
-    where membership.group_id = v_group.id
-      and membership.user_id = v_user_id
-      and membership.left_at is null;
-
-    if found then
-      v_already_active := true;
-    end if;
-  end if;
-
-  if not found and not v_already_active then
-    raise exception using errcode = 'P0001', message = 'INTERNAL';
-  end if;
-
-  insert into private.consent_records (
-    user_id,
-    consent_type,
-    document_version,
-    locale
-  ) values (
-    v_user_id,
-    'group_sharing',
-    'mvp08-group-sharing-v1',
-    p_locale
-  )
-  on conflict (user_id, consent_type, document_version) do nothing;
-
-  if not v_already_active then
-    insert into private.group_invite_uses (
-      invite_id,
+  begin
+    insert into public.group_memberships (
+      group_id,
       user_id,
-      membership_id,
-      used_at
+      joined_at,
+      invite_id,
+      sharing_consent_version
     ) values (
-      v_invite.id,
+      v_group.id,
       v_user_id,
-      v_membership.id,
-      v_joined_at
+      v_joined_at,
+      v_invite.id,
+      'mvp08-group-sharing-v1'
     )
-    on conflict (invite_id, user_id) do nothing;
+    on conflict (group_id, user_id) where left_at is null do nothing
+    returning * into v_membership;
 
     if not found then
-      raise exception using errcode = 'P0001', message = 'INVITE_INVALID';
+      select *
+      into v_membership
+      from public.group_memberships membership
+      where membership.group_id = v_group.id
+        and membership.user_id = v_user_id
+        and membership.left_at is null;
+
+      if found then
+        v_already_active := true;
+      end if;
     end if;
 
-    update private.group_invites invite
-    set use_count = invite.use_count + 1
-    where invite.id = v_invite.id
-      and invite.use_count < invite.max_uses
-    returning * into v_invite;
-
-    if not found then
-      raise exception using errcode = 'P0001', message = 'INVITE_INVALID';
+    if not found and not v_already_active then
+      raise exception using errcode = 'P0001', message = 'INTERNAL';
     end if;
-  end if;
+
+    insert into private.consent_records (
+      user_id,
+      consent_type,
+      document_version,
+      locale
+    ) values (
+      v_user_id,
+      'group_sharing',
+      'mvp08-group-sharing-v1',
+      p_locale
+    )
+    on conflict (user_id, consent_type, document_version) do nothing;
+
+    if not v_already_active then
+      insert into private.group_invite_uses (
+        invite_id,
+        user_id,
+        membership_id,
+        used_at
+      ) values (
+        v_invite.id,
+        v_user_id,
+        v_membership.id,
+        v_joined_at
+      )
+      on conflict (invite_id, user_id) do nothing;
+
+      if not found then
+        raise exception using errcode = 'P0001', message = 'INVITE_INVALID';
+      end if;
+
+      update private.group_invites invite
+      set use_count = invite.use_count + 1
+      where invite.id = v_invite.id
+        and invite.use_count < invite.max_uses
+      returning * into v_invite;
+
+      if not found then
+        raise exception using errcode = 'P0001', message = 'INVITE_INVALID';
+      end if;
+    end if;
+  exception
+    when sqlstate 'P0001' then
+      if v_is_manual_code and sqlerrm = 'INVITE_INVALID' then
+        return private.invite_invalid_response(v_user_id, true, pg_catalog.clock_timestamp());
+      end if;
+
+      raise;
+  end;
 
   select *
   into v_membership

@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(33);
+select plan(48);
 
 select has_function(
   'private',
@@ -120,6 +120,16 @@ values (
   25,
   0,
   now() - interval '1 hour'
+), (
+  'bbbbbbbb-0000-4000-8000-000000000002',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
+  '11111111-1111-4111-8111-111111111111',
+  private.group_invite_token_hash(repeat('R', 43)),
+  private.group_invite_code_hash('RACE2345AA'),
+  now() + interval '1 day',
+  1,
+  0,
+  now() - interval '1 hour'
 );
 
 delete from private.rate_limit_buckets
@@ -180,6 +190,149 @@ select results_eq(
   $$,
   array[2::bigint],
   'invalid manual accept persists another failed-attempt hit'
+);
+
+delete from private.rate_limit_buckets
+where actor_key = '44444444-4444-4444-8444-444444444444'
+  and action_key = 'invite_code_verification';
+
+set local role authenticated;
+set local "request.jwt.claim.role" = 'authenticated';
+set local "request.jwt.claim.sub" = '44444444-4444-4444-8444-444444444444';
+select throws_ok(
+  $$ select public.preview_group_invite('token', repeat('Z', 43)) $$,
+  'P0001',
+  'INVITE_INVALID',
+  'invalid invite token preview keeps token flow exception behavior'
+);
+select throws_ok(
+  $$ select public.accept_group_invite('token', repeat('Z', 43), 'de') $$,
+  'P0001',
+  'INVITE_INVALID',
+  'invalid invite token accept keeps token flow exception behavior'
+);
+reset role;
+
+select results_eq(
+  $$
+    select coalesce(sum(hit_count), 0)::bigint
+    from private.rate_limit_buckets
+    where actor_key = '44444444-4444-4444-8444-444444444444'
+      and action_key = 'invite_code_verification'
+      and window_key = 'minute'
+  $$,
+  array[0::bigint],
+  'invalid invite token checks do not create manual-code minute buckets'
+);
+select results_eq(
+  $$
+    select coalesce(sum(hit_count), 0)::bigint
+    from private.rate_limit_buckets
+    where actor_key = '44444444-4444-4444-8444-444444444444'
+      and action_key = 'invite_code_verification'
+      and window_key = 'failed_hour'
+  $$,
+  array[0::bigint],
+  'invalid invite token checks do not create manual-code failed-hour buckets'
+);
+
+delete from private.rate_limit_buckets
+where actor_key = '44444444-4444-4444-8444-444444444444'
+  and action_key = 'invite_code_verification';
+
+create function private.test_force_invite_exhaustion()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if new.invite_id = 'bbbbbbbb-0000-4000-8000-000000000002'::uuid then
+    update private.group_invites invite
+    set use_count = invite.max_uses
+    where invite.id = new.invite_id;
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger test_force_invite_exhaustion_trigger
+after insert on private.group_invite_uses
+for each row
+execute function private.test_force_invite_exhaustion();
+
+create temp table manual_accept_exhaustion_race (
+  response jsonb
+);
+grant insert, select on table manual_accept_exhaustion_race to authenticated;
+
+set local role authenticated;
+set local "request.jwt.claim.role" = 'authenticated';
+set local "request.jwt.claim.sub" = '44444444-4444-4444-8444-444444444444';
+select lives_ok(
+  $$ insert into manual_accept_exhaustion_race(response) select public.accept_group_invite('code', 'RACE2345AA', 'de') $$,
+  'manual invite exhaustion race returns a response instead of raising'
+);
+reset role;
+
+drop trigger test_force_invite_exhaustion_trigger on private.group_invite_uses;
+drop function private.test_force_invite_exhaustion();
+
+select is(
+  (select response->'error'->>'code' from manual_accept_exhaustion_race limit 1),
+  'INVITE_INVALID',
+  'manual invite exhaustion race returns neutral INVITE_INVALID response code'
+);
+select ok(
+  (
+    select response ?& array['error', 'request_id', 'server_time']
+    from manual_accept_exhaustion_race
+    limit 1
+  ),
+  'manual invite exhaustion race returns the neutral structured envelope'
+);
+select results_eq(
+  $$
+    select count(*)::bigint
+    from public.group_memberships
+    where group_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'
+      and user_id = '44444444-4444-4444-8444-444444444444'
+      and left_at is null
+  $$,
+  array[0::bigint],
+  'manual invite exhaustion race rolls back membership writes'
+);
+select results_eq(
+  $$
+    select count(*)::bigint
+    from private.group_invite_uses
+    where invite_id = 'bbbbbbbb-0000-4000-8000-000000000002'
+      and user_id = '44444444-4444-4444-8444-444444444444'
+  $$,
+  array[0::bigint],
+  'manual invite exhaustion race rolls back invite-use writes'
+);
+select results_eq(
+  $$
+    select coalesce(sum(hit_count), 0)::bigint
+    from private.rate_limit_buckets
+    where actor_key = '44444444-4444-4444-8444-444444444444'
+      and action_key = 'invite_code_verification'
+      and window_key = 'minute'
+  $$,
+  array[1::bigint],
+  'manual invite exhaustion race keeps manual-code minute usage persisted'
+);
+select results_eq(
+  $$
+    select coalesce(sum(hit_count), 0)::bigint
+    from private.rate_limit_buckets
+    where actor_key = '44444444-4444-4444-8444-444444444444'
+      and action_key = 'invite_code_verification'
+      and window_key = 'failed_hour'
+  $$,
+  array[1::bigint],
+  'manual invite exhaustion race records one failed-hour hit'
 );
 
 create temp table failed_hour_window as
@@ -451,9 +604,38 @@ from day_window;
 set local role authenticated;
 set local "request.jwt.claim.role" = 'authenticated';
 set local "request.jwt.claim.sub" = '44444444-4444-4444-8444-444444444444';
+create temp table tenth_group_creation as
+select public.create_group('dddddddd-0000-4000-8000-000000000001', 'Rate Group 1', 'Europe/Berlin') as response;
+select ok(
+  (
+    select
+      response->'group'->>'id' = 'dddddddd-0000-4000-8000-000000000001'
+      and not (response ? 'error')
+    from tenth_group_creation
+  ),
+  'tenth group creation in the day succeeds with the requested id'
+);
+create temp table tenth_group_creation_replay (
+  response jsonb
+);
+grant insert, select on table tenth_group_creation_replay to authenticated;
 select lives_ok(
-  $$ select public.create_group('dddddddd-0000-4000-8000-000000000001', 'Rate Group 1', 'Europe/Berlin') $$,
-  'tenth group creation in the day still succeeds'
+  $$ insert into tenth_group_creation_replay(response) select public.create_group('dddddddd-0000-4000-8000-000000000001', 'Rate Group 1', 'Europe/Berlin') $$,
+  'idempotent replay of the same group id succeeds even after hitting the daily cap'
+);
+select ok(
+  (
+    select
+      response->'group'->>'id' = 'dddddddd-0000-4000-8000-000000000001'
+      and not (response ? 'error')
+    from tenth_group_creation_replay
+  ),
+  'idempotent replay of the same group id returns a successful payload'
+);
+select is(
+  (select response->'membership'->>'id' from tenth_group_creation_replay),
+  (select response->'membership'->>'id' from tenth_group_creation),
+  'idempotent replay of the same group id returns the original membership id'
 );
 select throws_ok(
   $$ select public.create_group('dddddddd-0000-4000-8000-000000000002', 'Rate Group 2', 'Europe/Berlin') $$,
@@ -463,6 +645,18 @@ select throws_ok(
 );
 reset role;
 
+select results_eq(
+  $$
+    select hit_count
+    from private.rate_limit_buckets
+    where actor_key = '44444444-4444-4444-8444-444444444444'
+      and action_key = 'create_group'
+      and window_key = 'day'
+      and bucket_start = (select bucket_start from day_window)
+  $$,
+  array[10],
+  'idempotent replay does not consume an extra create_group day slot'
+);
 select results_eq(
   $$
     select count(*)::bigint
