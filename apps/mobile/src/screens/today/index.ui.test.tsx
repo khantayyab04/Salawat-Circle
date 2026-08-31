@@ -6,9 +6,23 @@ const mockCreate = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
 const mockEntries = jest.fn();
 
 jest.mock("@/lib/entries", () => ({
+  describeGoalProgress: (achieved: string, eligible: string) =>
+    eligible === "0" ? null : { achievedDays: achieved, eligibleDays: eligible },
   parseEntryAmount: (value: string) => Number(value),
   useEntries: () => mockEntries(),
 }));
+jest.mock("@/components", () => {
+  const actual = jest.requireActual<typeof import("@/components")>("@/components");
+  const { Text } = jest.requireActual<typeof import("react-native")>(
+    "react-native",
+  );
+  return {
+    ...actual,
+    GoalSection: ({ goal }: { goal: string | null }) => (
+      <Text>{`goal:${goal ?? "none"}`}</Text>
+    ),
+  };
+});
 jest.mock("@/localization", () => ({
   formatAppNumber: (value: string) => value,
   useTranslation: () => ({
@@ -38,7 +52,14 @@ function entries(overrides = {}) {
   return {
     viewState: "content",
     entries: [],
-    summary: { todayTotal: "42", weekTotal: "42", allTimeTotal: "100" },
+    summary: {
+      todayTotal: "42",
+      weekTotal: "42",
+      allTimeTotal: "100",
+      todayGoal: null,
+      achievedDays: "0",
+      eligibleGoalDays: "0",
+    },
     timeZone: "Europe/Berlin",
     hasMore: false,
     loadingMore: false,
@@ -47,6 +68,8 @@ function entries(overrides = {}) {
     conflictEntryId: null,
     create: mockCreate,
     delete: jest.fn(),
+    setGoal: jest.fn(),
+    clearGoal: jest.fn(),
     loadMore: jest.fn(),
     ...overrides,
   };
@@ -73,7 +96,7 @@ describe("TodayScreen", () => {
 
     expect(mockCreate).toHaveBeenCalledWith(42);
     expect(view.getByLabelText("42 Salawat")).toBeTruthy();
-    expect(view.getByText("100")).toBeTruthy();
+    expect(view.getAllByText("100")).not.toHaveLength(0);
     expect(view.getAllByText("42")).not.toHaveLength(0);
   });
 
@@ -88,5 +111,26 @@ describe("TodayScreen", () => {
     expect(
       view.getByRole("button", { name: "Weitere Einträge laden" }),
     ).toBeTruthy();
+  });
+
+  it("shows the server-calculated daily goal and weekly progress", async () => {
+    mockEntries.mockReturnValue(
+      entries({
+        summary: {
+          todayTotal: "42",
+          weekTotal: "42",
+          allTimeTotal: "100",
+          todayGoal: "100",
+          achievedDays: "2",
+          eligibleGoalDays: "4",
+        },
+      }),
+    );
+
+    const view = await render(<TodayScreen />);
+
+    expect(view.getAllByText("100")).not.toHaveLength(0);
+    expect(view.getByText("2/4")).toBeTruthy();
+    expect(view.getByText("goal:100")).toBeTruthy();
   });
 });

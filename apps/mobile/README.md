@@ -26,6 +26,24 @@ den Supabase-Gateway, den optimistischen Store und dessen React-Provider.
 Oberflächen. Persistente Offline-Queues gehören nicht zu MVP05, sondern MVP07;
 Tagesziel und Zielerfolg folgen in MVP06.
 
+## Tagesziel und Dashboard
+
+Unter den Kennzahlen der Heute-Ansicht steht der Zielbereich. Der `@expo/ui`
+Slider ermöglicht Werte in 100er-Schritten bis 10.000; das gekoppelte
+Zahlenfeld erlaubt zusätzlich jeden ganzen Wert bis 10.000.000. Ein Ziel gilt
+ab heute, kann deaktiviert werden und zeigt den serverseitig berechneten
+Wochenfortschritt als erreichte/relevante Tage. Ohne relevante Zieltage zeigt
+die App `Noch kein Zieltag`, niemals `0/0`.
+
+Der E2E-Vertrag für Setzen, tagesgleiches Ändern und Deaktivieren läuft mit:
+
+```sh
+pnpm test:goals-integration
+```
+
+Die Offline-Persistenz der Zielmutationen ist bewusst noch nicht enthalten und
+folgt mit MVP07.
+
 ## Theme
 
 Farben, Abstände, Radien, Bewegung und Typografie liegen unter `src/theme`.

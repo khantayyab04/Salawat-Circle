@@ -13,6 +13,9 @@ export class EntriesStore {
       todayTotal: "0",
       weekTotal: "0",
       allTimeTotal: "0",
+      todayGoal: null,
+      achievedDays: "0",
+      eligibleGoalDays: "0",
     } as EntrySummary,
     timeZone: "",
     hasMore: false,
@@ -279,6 +282,54 @@ export class EntriesStore {
       if (errorCode === "ENTRY_VERSION_CONFLICT") {
         this.snapshot.conflictEntryId = id;
       }
+      throw new Error(errorCode);
+    } finally {
+      this.snapshot.busy = false;
+      this.notify();
+    }
+  }
+
+  async setGoal(amount: number) {
+    if (this.snapshot.busy) return;
+    const before = { ...this.snapshot.summary };
+    this.snapshot.busy = true;
+    this.snapshot.errorCode = null;
+    this.snapshot.summary.todayGoal = String(amount);
+    this.notify();
+    try {
+      await this.gateway.setGoal(
+        amount,
+        getPersonalDate(this.now(), this.snapshot.timeZone),
+      );
+      await this.refreshSummary();
+    } catch (error) {
+      this.snapshot.summary = before;
+      const errorCode = getEntriesErrorCode(error);
+      this.snapshot.errorCode = errorCode;
+      throw new Error(errorCode);
+    } finally {
+      this.snapshot.busy = false;
+      this.notify();
+    }
+  }
+
+  async clearGoal() {
+    if (this.snapshot.busy) return;
+    const before = { ...this.snapshot.summary };
+    this.snapshot.busy = true;
+    this.snapshot.errorCode = null;
+    this.snapshot.summary.todayGoal = null;
+    this.notify();
+    try {
+      await this.gateway.setGoal(
+        null,
+        getPersonalDate(this.now(), this.snapshot.timeZone),
+      );
+      await this.refreshSummary();
+    } catch (error) {
+      this.snapshot.summary = before;
+      const errorCode = getEntriesErrorCode(error);
+      this.snapshot.errorCode = errorCode;
       throw new Error(errorCode);
     } finally {
       this.snapshot.busy = false;

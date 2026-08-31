@@ -2,11 +2,16 @@ import {
   AppButton,
   AppCard,
   EntryRow,
+  GoalSection,
   AppText,
   FormField,
   StateFeedback,
 } from "@/components";
-import { parseEntryAmount, useEntries } from "@/lib/entries";
+import {
+  describeGoalProgress,
+  parseEntryAmount,
+  useEntries,
+} from "@/lib/entries";
 import { formatAppNumber, useTranslation } from "@/localization";
 import { spacing, useAppTheme } from "@/theme";
 import { useState } from "react";
@@ -31,6 +36,10 @@ export function TodayScreen() {
   const [amount, setAmount] = useState("");
   const [inputError, setInputError] = useState<string | undefined>();
   const stacked = width < 360 || fontScale >= 1.3;
+  const goalProgress = describeGoalProgress(
+    entries.summary.achievedDays,
+    entries.summary.eligibleGoalDays,
+  );
 
   const submit = async () => {
     let parsedAmount: number;
@@ -93,9 +102,29 @@ export function TodayScreen() {
           label={t("todayWeek")}
           value={formatAppNumber(BigInt(entries.summary.weekTotal), localeTag)}
         />
-        <Metric label={t("todayGoal")} value={t("todayNoGoal")} />
-        <Metric label={t("todayGoalDays")} value={t("todayNoGoalDay")} />
+        <Metric
+          label={t("todayGoal")}
+          value={
+            entries.summary.todayGoal
+              ? formatAppNumber(BigInt(entries.summary.todayGoal), localeTag)
+              : t("todayNoGoal")
+          }
+        />
+        <Metric
+          label={t("todayGoalDays")}
+          value={
+            goalProgress
+              ? `${goalProgress.achievedDays}/${goalProgress.eligibleDays}`
+              : t("todayNoGoalDay")
+          }
+        />
       </View>
+      <GoalSection
+        busy={entries.busy}
+        goal={entries.summary.todayGoal}
+        onClear={entries.clearGoal}
+        onSave={entries.setGoal}
+      />
       <AppText variant="title">{t("todayHistory")}</AppText>
     </View>
   );

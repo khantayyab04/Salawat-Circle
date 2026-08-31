@@ -7,4 +7,5 @@ export {
   type EntrySummary,
 } from "./entries-gateway";
 export { EntriesStore } from "./entries-store";
+export { describeGoalProgress, parseGoalAmount } from "./goal";
 export { EntriesProvider, useEntries } from "./provider";

@@ -17,6 +17,9 @@ describe("EntriesProvider", () => {
         todayTotal: "42",
         weekTotal: "42",
         allTimeTotal: "42",
+        todayGoal: null,
+        achievedDays: "0",
+        eligibleGoalDays: "0",
       }),
       list: jest.fn<EntriesGateway["list"]>().mockResolvedValue({
         items: [],
@@ -26,6 +29,7 @@ describe("EntriesProvider", () => {
       create: jest.fn<EntriesGateway["create"]>(),
       update: jest.fn<EntriesGateway["update"]>(),
       delete: jest.fn<EntriesGateway["delete"]>(),
+      setGoal: jest.fn<EntriesGateway["setGoal"]>(),
     };
     const view = await render(
       <EntriesProvider gateway={gateway} createId={() => "test-id"}>
