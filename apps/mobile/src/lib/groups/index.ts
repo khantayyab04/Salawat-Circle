@@ -6,7 +6,11 @@ export {
   type InviteSecret,
 } from "./invite-link";
 export { createSupabaseGroupsGateway, type GroupsGateway } from "./groups-gateway";
-export { GroupsStore, createGroupsSnapshot } from "./groups-store";
+export {
+  GroupsStore,
+  createGroupsSnapshot,
+  type GroupsLeaderboardPeriodState,
+} from "./groups-store";
 export {
   GroupsController,
   type LoadLeaderboardOptions,

@@ -21,6 +21,7 @@ let mockRouteGroupId = "group-1";
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush, replace: jest.fn() }),
   useLocalSearchParams: () => ({ id: mockRouteGroupId }),
+  Stack: { Screen: () => null },
 }));
 
 jest.mock("@/lib/groups", () => ({
@@ -100,6 +101,8 @@ const copy: Record<string, string> = {
   groupDetailAnonymityMemberStatusOff: "Rangliste zeigt Anzeigenamen.",
   groupDetailAnonymityConflict:
     "Zwischenzeitlich wurde eine neuere Änderung gespeichert. Wir laden den aktuellen Stand neu.",
+  groupDetailAnonymityRevisionMissing:
+    "Die Einstellung konnte nicht gespeichert werden. Bitte aktualisiere die Gruppe und versuche es erneut.",
   groupDetailInviteAction: "Einladungen verwalten",
   statePartialErrorTitle: "Nicht alles konnte geladen werden",
   statePartialErrorBody: "Die vorhandenen Inhalte bleiben sichtbar.",
@@ -238,14 +241,10 @@ const errorCases: ["OFFLINE" | "RATE_LIMITED" | "NOT_FOUND" | "INTERNAL", string
 ];
 
 describe("Task 14 group detail screen", () => {
-  it("loads week by default, uses stack title only, and renders group metadata", async () => {
+  it("keeps preloaded week data, uses stack title only, and renders group metadata", async () => {
     const view = await render(<GroupDetailRoute />);
 
-    await waitFor(() =>
-      expect(mockLoadLeaderboard).toHaveBeenCalledWith("group-1", "week", {
-        mode: "reset",
-      }),
-    );
+    expect(mockLoadLeaderboard).not.toHaveBeenCalled();
 
     expect(view.queryByText("Private Gruppe")).toBeNull();
     expect(view.getByText("Alpha Circle")).toBeTruthy();
@@ -333,6 +332,32 @@ describe("Task 14 group detail screen", () => {
   });
 
   it("shows owner anonymity controls, own alias, and invite navigation", async () => {
+    mockUseGroups.mockReturnValue(
+      createGroupsState({
+        leaderboard: {
+          selectedGroupId: "group-1",
+          selectedPeriod: "week",
+          byGroup: {
+            "group-1": {
+              week: createPeriodState("week", {
+                group: {
+                  id: "group-1",
+                  name: "Alpha Circle",
+                  timezone: "Europe/Berlin",
+                  leaderboardAnonymous: true,
+                  memberCount: "5",
+                  role: "owner",
+                  isOwner: true,
+                  revision: 7,
+                },
+              }),
+              all_time: createPeriodState("all_time"),
+            },
+          },
+        },
+      }),
+    );
+
     const view = await render(<GroupDetailRoute />);
 
     expect(view.getByRole("switch", { name: "Rangliste anonym anzeigen" })).toBeTruthy();
@@ -353,7 +378,7 @@ describe("Task 14 group detail screen", () => {
       await Promise.resolve();
     });
     await waitFor(() =>
-      expect(mockSetAnonymity).toHaveBeenCalledWith("group-1", true, 7),
+      expect(mockSetAnonymity).toHaveBeenCalledWith("group-1", false, 7),
     );
 
     fireEvent.press(view.getByRole("button", { name: "Einladungen verwalten" }));
@@ -394,7 +419,59 @@ describe("Task 14 group detail screen", () => {
 
     expect(view.queryByRole("switch")).toBeNull();
     expect(view.getByText("Anonyme Rangliste ist aktiv.")).toBeTruthy();
+    expect(view.getByText("Dein Alias in dieser Gruppe: Ruhiger Garten")).toBeTruthy();
+    expect(
+      view.getByText(
+        "Hinweis: Bereits gesehene Anzeigenamen lassen sich nicht rückwirkend verbergen.",
+      ),
+    ).toBeTruthy();
     expect(view.queryByRole("button", { name: "Einladungen verwalten" })).toBeNull();
+  });
+
+  it("shows a visible error when owner anonymity toggle is attempted without a revision", async () => {
+    mockUseGroups.mockReturnValue(
+      createGroupsState({
+        groups: {
+          status: "ready",
+          items: [],
+          errorCode: null,
+        },
+        leaderboard: {
+          selectedGroupId: "group-1",
+          selectedPeriod: "week",
+          byGroup: {
+            "group-1": {
+              week: createPeriodState("week", {
+                group: {
+                  id: "group-1",
+                  name: "Alpha Circle",
+                  timezone: "Europe/Berlin",
+                  leaderboardAnonymous: true,
+                  memberCount: "5",
+                  role: "owner",
+                  isOwner: true,
+                  revision: undefined,
+                },
+              }),
+            },
+          },
+        },
+      }),
+    );
+
+    const view = await render(<GroupDetailRoute />);
+
+    await act(async () => {
+      fireEvent.press(view.getByRole("switch", { name: "Rangliste anonym anzeigen" }));
+      await Promise.resolve();
+    });
+
+    expect(
+      view.getByText(
+        "Die Einstellung konnte nicht gespeichert werden. Bitte aktualisiere die Gruppe und versuche es erneut.",
+      ),
+    ).toBeTruthy();
+    expect(mockSetAnonymity).not.toHaveBeenCalled();
   });
 
   it("refreshes leaderboard and shows conflict text when anonymity toggle hits a revision conflict", async () => {

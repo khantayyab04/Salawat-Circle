@@ -185,6 +185,8 @@ export const de = {
   groupDetailAnonymityMemberStatusOff: "Rangliste zeigt Anzeigenamen.",
   groupDetailAnonymityConflict:
     "Zwischenzeitlich wurde eine neuere Änderung gespeichert. Wir laden den aktuellen Stand neu.",
+  groupDetailAnonymityRevisionMissing:
+    "Die Einstellung konnte nicht gespeichert werden. Bitte aktualisiere die Gruppe und versuche es erneut.",
   groupDetailInviteAction: "Einladungen verwalten",
   groupMembersTitle: "Mitglieder",
   groupInvitesTitle: "Einladungen",

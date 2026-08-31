@@ -6,7 +6,7 @@ import {
 } from "@/components";
 import {
   useGroups,
-  type GroupsErrorCode,
+  type GroupsLeaderboardPeriodState,
   type GroupLeaderboardRow,
   type GroupListItem,
   type LeaderboardPeriod,
@@ -20,7 +20,7 @@ import {
 } from "@/localization";
 import { radius, spacing, useAppTheme } from "@/theme";
 import { Host, Switch } from "@expo/ui";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
   memo,
   useCallback,
@@ -46,31 +46,6 @@ type LeaderboardErrorCopy = {
   title: string;
   body: string;
   tone: "offline" | "error";
-};
-
-type LeaderboardPeriodStateLike = {
-  period: LeaderboardPeriod;
-  loading: boolean;
-  loadingMore: boolean;
-  errorCode: GroupsErrorCode | null;
-  items: GroupLeaderboardRow[];
-  nextCursor: unknown;
-  hasMore: boolean;
-  calculatedAt: string | null;
-  group: {
-    id: string;
-    name: string;
-    timezone: string;
-    leaderboardAnonymous: boolean;
-    memberCount: string;
-    role: "owner" | "member";
-    isOwner: boolean;
-    revision: number;
-  } | null;
-  ownAlias: string | null;
-  ownRank: number | null;
-  periodStart: string | null;
-  periodEnd: string | null;
 };
 
 const SWITCH_ERROR_REFRESH_CODES = new Set(["ENTRY_VERSION_CONFLICT", "CONFLICT"]);
@@ -126,7 +101,7 @@ function formatTimestamp(
   )}`;
 }
 
-function getFallbackPeriodState(period: LeaderboardPeriod): LeaderboardPeriodStateLike {
+function getFallbackPeriodState(period: LeaderboardPeriod): GroupsLeaderboardPeriodState {
   return {
     period,
     loading: false,
@@ -142,6 +117,27 @@ function getFallbackPeriodState(period: LeaderboardPeriod): LeaderboardPeriodSta
     periodStart: null,
     periodEnd: null,
   };
+}
+
+function hasLoadedPeriodState(state: GroupsLeaderboardPeriodState | undefined) {
+  if (!state) {
+    return false;
+  }
+
+  return (
+    state.loading ||
+    state.loadingMore ||
+    state.errorCode !== null ||
+    state.group !== null ||
+    state.calculatedAt !== null ||
+    state.items.length > 0 ||
+    state.nextCursor !== null ||
+    state.hasMore ||
+    state.ownAlias !== null ||
+    state.ownRank !== null ||
+    state.periodStart !== null ||
+    state.periodEnd !== null
+  );
 }
 
 function resolveLeaderboardErrorCopy(
@@ -335,10 +331,12 @@ export function GroupDetailScreen() {
   }, [groupId, groups.items]);
 
   const fallbackPeriodState = useMemo(() => getFallbackPeriodState(period), [period]);
-  const groupPeriodState: LeaderboardPeriodStateLike =
+  const groupPeriodState: GroupsLeaderboardPeriodState =
     groupId && leaderboard.byGroup[groupId]
       ? leaderboard.byGroup[groupId][period]
       : fallbackPeriodState;
+  const weekState = groupId ? leaderboard.byGroup[groupId]?.week : undefined;
+  const shouldLoadInitialWeek = !!groupId && !hasLoadedPeriodState(weekState);
 
   const groupMeta = groupPeriodState.group;
   const groupName = groupMeta?.name ?? listGroup?.name ?? t("groupDetailNotFoundTitle");
@@ -379,9 +377,9 @@ export function GroupDetailScreen() {
   }, [groupId, period]);
 
   useEffect(() => {
-    if (!groupId) return;
+    if (!groupId || !shouldLoadInitialWeek) return;
     void loadLeaderboard(groupId, "week", { mode: "reset" }).catch(() => undefined);
-  }, [groupId, loadLeaderboard]);
+  }, [groupId, loadLeaderboard, shouldLoadInitialWeek]);
 
   const refreshCurrentPeriod = useCallback(async () => {
     if (!groupId) return;
@@ -438,7 +436,11 @@ export function GroupDetailScreen() {
 
   const handleAnonymityToggle = useCallback(
     async (value: boolean) => {
-      if (!groupId || !isOwner || typeof revision !== "number") return;
+      if (!groupId || !isOwner) return;
+      if (typeof revision !== "number") {
+        setSwitchErrorMessage(t("groupDetailAnonymityRevisionMissing"));
+        return;
+      }
 
       setSwitchErrorMessage(null);
       try {
@@ -462,6 +464,7 @@ export function GroupDetailScreen() {
 
   const listHeader = (
     <View style={{ gap: spacing.lg }}>
+      <Stack.Screen options={{ title: groupName }} />
       <AppCard>
         <AppText variant="bodyStrong">{groupName}</AppText>
         <AppText style={tabularNumberStyle}>{`${memberCountText} ${t(
@@ -508,12 +511,6 @@ export function GroupDetailScreen() {
               />
             </Host>
             <AppText variant="caption">{t("groupDetailAnonymityOwnerHint")}</AppText>
-            {groupPeriodState.ownAlias ? (
-              <AppText variant="caption">{`${t(
-                "groupDetailAnonymityAliasPrefix",
-              )}: ${groupPeriodState.ownAlias}`}</AppText>
-            ) : null}
-            <AppText variant="caption">{t("groupDetailAnonymityCaveat")}</AppText>
             <AppButton
               label={t("groupDetailInviteAction")}
               variant="secondary"
@@ -529,6 +526,14 @@ export function GroupDetailScreen() {
               : t("groupDetailAnonymityMemberStatusOff")}
           </AppText>
         )}
+        {anonymityEnabled && groupPeriodState.ownAlias ? (
+          <>
+            <AppText variant="caption">{`${t(
+              "groupDetailAnonymityAliasPrefix",
+            )}: ${groupPeriodState.ownAlias}`}</AppText>
+            <AppText variant="caption">{t("groupDetailAnonymityCaveat")}</AppText>
+          </>
+        ) : null}
         {switchErrorMessage ? (
           <AppText accessibilityLiveRegion="polite">{switchErrorMessage}</AppText>
         ) : null}

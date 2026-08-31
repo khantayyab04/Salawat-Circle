@@ -180,6 +180,8 @@ export const en = {
   groupDetailAnonymityMemberStatusOff: "Ranking shows display names.",
   groupDetailAnonymityConflict:
     "A newer change was saved in the meantime. We are reloading current details.",
+  groupDetailAnonymityRevisionMissing:
+    "We could not save this setting. Please refresh the group and try again.",
   groupDetailInviteAction: "Manage invitations",
   groupMembersTitle: "Members",
   groupInvitesTitle: "Invitations",
