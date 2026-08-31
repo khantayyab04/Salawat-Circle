@@ -3,44 +3,11 @@ import {
   AppCard,
   AppScreen,
   AppText,
-  FormField,
   StateFeedback,
 } from "@/components";
 import { useTranslation } from "@/localization";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
 import { View } from "react-native";
-
-export function GroupsScreen() {
-  const { t } = useTranslation();
-  const router = useRouter();
-  return (
-    <AppScreen>
-      <AppButton
-        label={t("groupsCreate")}
-        onPress={() => router.push("/groups/create")}
-      />
-      <AppCard>
-        <AppText variant="title">{t("groupsEmptyTitle")}</AppText>
-        <AppText>{t("groupsEmptyBody")}</AppText>
-      </AppCard>
-    </AppScreen>
-  );
-}
-export function GroupCreateScreen() {
-  const { t } = useTranslation();
-  const [name, setName] = useState("");
-  return (
-    <AppScreen>
-      <FormField
-        label={t("groupNameLabel")}
-        value={name}
-        onChangeText={setName}
-      />
-      <AppButton disabled label={t("groupsCreate")} />
-    </AppScreen>
-  );
-}
 export function GroupDetailScreen() {
   const { t } = useTranslation();
   const router = useRouter();

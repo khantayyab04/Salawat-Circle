@@ -97,6 +97,45 @@ export const de = {
     "Du bist noch in keiner Gruppe. Erstelle eine private Gruppe oder tritt über einen Einladungslink bei.",
   groupCreateTitle: "Gruppe erstellen",
   groupNameLabel: "Gruppenname",
+  groupNameHint: "2 bis 50 sichtbare Zeichen.",
+  groupNameInvalid: "Der Gruppenname muss 2 bis 50 Zeichen lang sein.",
+  groupTimezoneLabel: "Zeitzone",
+  groupTimezoneHint: "IANA-Zeitzone, zum Beispiel Europe/Berlin.",
+  groupTimezoneInvalid: "Bitte gib eine gültige IANA-Zeitzone ein.",
+  groupCreateAnonymousLabel: "Rangliste anonym anzeigen",
+  groupCreateAnonymousHint:
+    "Andere Mitglieder sehen dann stabile Aliasnamen statt Anzeigenamen.",
+  groupCreateAnonymousCaveat:
+    "Hinweis: Wenn jemand die Rangliste vorher mit Anzeigenamen gesehen hat, wirkt die Anonymisierung nicht rückwirkend.",
+  groupCreateRulesLabel:
+    "Ich bestätige die Gruppenregeln und die freiwillige Teilnahme.",
+  groupCreateRulesHint: "Ohne Zustimmung kann die Gruppe nicht erstellt werden.",
+  groupCreateErrorOffline:
+    "Du bist offline. Verbinde dich und versuche es erneut.",
+  groupCreateErrorNameRejected:
+    "Dieser Gruppenname ist nicht zulässig. Bitte wähle einen anderen Namen.",
+  groupCreateErrorConsentRequired:
+    "Bitte bestätige die Gruppenregeln, um fortzufahren.",
+  groupCreateErrorRateLimited:
+    "Zu viele Versuche. Bitte warte kurz und versuche es erneut.",
+  groupCreateErrorGeneral:
+    "Die Gruppe konnte nicht erstellt werden. Bitte versuche es erneut.",
+  groupsListLoadingTitle: "Gruppen werden geladen",
+  groupsListLoadingBody: "Wir holen den aktuellen Serverstand.",
+  groupsListErrorTitle: "Gruppen konnten nicht geladen werden",
+  groupsListErrorBody: "Bitte versuche es erneut.",
+  groupsListOfflineTitle: "Offline",
+  groupsListOfflineBody:
+    "Verbinde dich mit dem Internet, um Gruppen zu laden.",
+  groupsListRefresh: "Aktualisieren",
+  groupsListWeekTotalLabel: "Diese Woche",
+  groupsListRankLabel: "Rang",
+  groupsListRankUnranked: "ohne Rang",
+  groupsListMembersLabel: "aktive Mitglieder",
+  groupsListCalculatedLabel: "Berechnet",
+  groupsListUpdatedLabel: "Aktualisiert",
+  groupsListAnonymousOn: "Anonyme Rangliste aktiv",
+  groupsListAnonymousOff: "Rangliste mit Anzeigenamen",
   groupTitle: "Private Gruppe",
   groupRanking: "Rangliste",
   groupMembers: "Mitglieder verwalten",

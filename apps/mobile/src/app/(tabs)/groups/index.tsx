@@ -1,4 +1,4 @@
-import { GroupsScreen } from "@/screens/main";
+import { GroupsScreen } from "@/screens/groups";
 export default function GroupsRoute() {
   return <GroupsScreen />;
 }
