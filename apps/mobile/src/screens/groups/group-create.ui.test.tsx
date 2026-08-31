@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import {
-  act,
   fireEvent,
   render,
   screen,
@@ -150,31 +149,44 @@ function submitButton(view: Awaited<ReturnType<typeof render>>) {
   return buttons[buttons.length - 1];
 }
 
+function createDeferred<T>() {
+  let resolve: ((value: T | PromiseLike<T>) => void) | undefined;
+  let reject: ((reason?: unknown) => void) | undefined;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  if (!resolve || !reject) {
+    throw new Error("Deferred promise setup failed.");
+  }
+  return { promise, resolve, reject };
+}
+
 async function changeText(
   view: Awaited<ReturnType<typeof render>>,
   testId: string,
   value: string,
 ) {
-  await act(async () => {
-    fireEvent.changeText(view.getByTestId(testId), value);
-  });
+  fireEvent.changeText(view.getByTestId(testId), value);
+  await Promise.resolve();
 }
 
 async function press(
   view: Awaited<ReturnType<typeof render>>,
   target: "rules" | "anonymous" | "submit",
 ) {
-  await act(async () => {
-    if (target === "rules") {
-      fireEvent.press(view.getByTestId("group-create-rules-switch"));
-      return;
-    }
-    if (target === "anonymous") {
-      fireEvent.press(view.getByTestId("group-create-anonymous-switch"));
-      return;
-    }
-    fireEvent.press(submitButton(view));
-  });
+  if (target === "rules") {
+    fireEvent.press(view.getByTestId("group-create-rules-switch"));
+    await Promise.resolve();
+    return;
+  }
+  if (target === "anonymous") {
+    fireEvent.press(view.getByTestId("group-create-anonymous-switch"));
+    await Promise.resolve();
+    return;
+  }
+  fireEvent.press(submitButton(view));
+  await Promise.resolve();
 }
 
 async function fillValidCreateForm(view: Awaited<ReturnType<typeof render>>) {
@@ -225,9 +237,7 @@ describe("MVP08 group create screen", () => {
     );
 
     fireEvent.press(
-      view.getByRole("button", {
-        name: "Nutzungsbedingungen und Regeln öffnen",
-      }),
+      view.getByRole("button", { name: "Nutzungsbedingungen und Regeln öffnen" }),
     );
     expect(mockPush).toHaveBeenCalledWith("/settings/legal");
 
@@ -346,6 +356,53 @@ describe("MVP08 group create screen", () => {
     );
   });
 
+  it("clears server timezone feedback after unrelated edits and allows resubmit with valid timezone", async () => {
+    mockCreateGroup
+      .mockRejectedValueOnce(new GroupsError("INVALID_INPUT"))
+      .mockResolvedValueOnce({ group: { id: "group-456" } });
+
+    const view = await render(<GroupCreateScreen />);
+    await fillValidCreateForm(view);
+    await press(view, "submit");
+
+    await waitFor(() =>
+      expect(
+        view.queryAllByText(
+          "Diese Zeitzone wurde nicht akzeptiert. Prüfe das Format, z. B. Europe/Berlin.",
+        ).length,
+      ).toBeGreaterThan(0),
+    );
+
+    await changeText(view, "group-create-name-input", "Alpha Circle 2");
+
+    await waitFor(() =>
+      expect(
+        view.queryByText(
+          "Diese Zeitzone wurde nicht akzeptiert. Prüfe das Format, z. B. Europe/Berlin.",
+        ),
+      ).toBeNull(),
+    );
+    await waitFor(() =>
+      expect(submitButton(view).props.accessibilityState.disabled).toBe(false),
+    );
+
+    await press(view, "submit");
+
+    await waitFor(() =>
+      expect(mockCreateGroup).toHaveBeenNthCalledWith(
+        2,
+        "Alpha Circle 2",
+        "Europe/Berlin",
+        false,
+        true,
+      ),
+    );
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: "/groups/[id]",
+      params: { id: "group-456" },
+    });
+  });
+
   it("disables submit while the create mutation is pending", async () => {
     const groupsState = createGroupsState();
     mockUseGroups.mockImplementation(() => groupsState);
@@ -426,23 +483,23 @@ describe("MVP08 group create screen", () => {
   });
 
   it("prevents rapid double submit before provider pending state updates", async () => {
-    mockCreateGroup.mockResolvedValue({ group: { id: "group-123" } });
+    const deferred = createDeferred<{ group: { id: string } }>();
+    mockCreateGroup.mockReturnValue(deferred.promise);
 
     const view = await render(<GroupCreateScreen />);
-    fireEvent.changeText(view.getByTestId("group-create-name-input"), "Alpha Circle");
-    fireEvent.changeText(
-      view.getByTestId("group-create-timezone-input"),
-      "Europe/Berlin",
-    );
-    fireEvent.press(view.getByTestId("group-create-rules-switch"));
+    await changeText(view, "group-create-name-input", "Alpha Circle");
+    await changeText(view, "group-create-timezone-input", "Europe/Berlin");
+    await press(view, "rules");
     await waitFor(() =>
       expect(submitButton(view).props.accessibilityState.disabled).toBe(false),
     );
 
     fireEvent.press(submitButton(view));
-    fireEvent.press(submitButton(view));
+    submitButton(view).props.onPress?.();
 
     await waitFor(() => expect(mockCreateGroup).toHaveBeenCalledTimes(1));
+    expect(submitButton(view).props.accessibilityState.disabled).toBe(false);
+    deferred.resolve({ group: { id: "group-123" } });
     await waitFor(() =>
       expect(mockReplace).toHaveBeenCalledWith({
         pathname: "/groups/[id]",
@@ -452,5 +509,19 @@ describe("MVP08 group create screen", () => {
     await waitFor(() =>
       expect(submitButton(view).props.accessibilityState.disabled).toBe(false),
     );
+  });
+
+  it("keeps the legal ghost action left aligned with a 48x48 minimum target", async () => {
+    const view = await render(<GroupCreateScreen />);
+    const [legalButton] = view.getAllByRole("button");
+
+    expect(legalButton).toHaveStyle({
+      alignSelf: "flex-start",
+      minHeight: 48,
+      minWidth: 48,
+      paddingHorizontal: 0,
+    });
+    fireEvent.press(legalButton);
+    expect(mockPush).toHaveBeenCalledWith("/settings/legal");
   });
 });

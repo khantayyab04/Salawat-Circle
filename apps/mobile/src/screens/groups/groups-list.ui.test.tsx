@@ -140,6 +140,14 @@ describe("MVP08 groups list screen", () => {
     );
     const error = await render(<GroupsScreen />);
     expect(error.getByText("Gruppen konnten nicht geladen werden")).toBeTruthy();
+    const errorAlert = error.getByRole("alert");
+    const errorRetry = error.getByRole("button", { name: "Aktualisieren" });
+    expect(errorAlert).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(errorRetry);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(mockRefreshGroups).toHaveBeenCalledTimes(1));
 
     mockUseGroups.mockReturnValue(
       createGroupsState({
@@ -149,6 +157,14 @@ describe("MVP08 groups list screen", () => {
     );
     const offline = await render(<GroupsScreen />);
     expect(offline.getByText("Offline")).toBeTruthy();
+    const offlineAlert = offline.getByRole("alert");
+    const offlineRetry = offline.getByRole("button", { name: "Aktualisieren" });
+    expect(offlineAlert).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(offlineRetry);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(mockRefreshGroups).toHaveBeenCalledTimes(2));
   });
 
   it("keeps the empty state copy visible when offline with ready status", async () => {
@@ -277,6 +293,7 @@ describe("MVP08 groups list screen", () => {
     const refreshButton = view.getByRole("button", { name: "Aktualisieren" });
     await act(async () => {
       fireEvent.press(refreshButton);
+      await Promise.resolve();
     });
     await waitFor(() => expect(mockRefreshGroups).toHaveBeenCalledTimes(1));
   });

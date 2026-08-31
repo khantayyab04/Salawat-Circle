@@ -15,9 +15,16 @@ import {
 import { spacing } from "@/theme";
 import { useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useState } from "react";
-import { Pressable, RefreshControl, type TextStyle, View } from "react-native";
+import {
+  Pressable,
+  RefreshControl,
+  type TextStyle,
+  type ViewStyle,
+  View,
+} from "react-native";
 
 const tabularNumbersStyle: TextStyle = { fontVariant: ["tabular-nums"] };
+const retryButtonStyle: ViewStyle = { alignSelf: "flex-start" };
 
 function formatNumeric(value: string, localeTag: string) {
   try {
@@ -119,17 +126,24 @@ function StateCard({
   onAction?: () => void;
 }) {
   return (
-    <AppCard
-      accessible
-      accessibilityRole="alert"
-      style={{ alignItems: "flex-start", justifyContent: "center", minHeight: 160 }}
-    >
-      <AppText variant="title">{title}</AppText>
-      <AppText>{body}</AppText>
+    <View style={{ gap: spacing.sm }}>
+      <AppCard
+        accessible
+        accessibilityRole="alert"
+        style={{ alignItems: "flex-start", justifyContent: "center", minHeight: 160 }}
+      >
+        <AppText variant="title">{title}</AppText>
+        <AppText>{body}</AppText>
+      </AppCard>
       {actionLabel && onAction ? (
-        <AppButton label={actionLabel} variant="secondary" onPress={onAction} />
+        <AppButton
+          label={actionLabel}
+          variant="secondary"
+          style={retryButtonStyle}
+          onPress={onAction}
+        />
       ) : null}
-    </AppCard>
+    </View>
   );
 }
 
@@ -203,6 +217,7 @@ export function GroupsScreen() {
           <AppButton
             label={t("groupsListRefresh")}
             variant="secondary"
+            style={retryButtonStyle}
             onPress={() => {
               void handleRefresh();
             }}

@@ -12,6 +12,12 @@ import { spacing } from "@/theme";
 import { Host, Switch } from "@expo/ui";
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
+import { type ViewStyle } from "react-native";
+
+const legalActionButtonStyle: ViewStyle = {
+  alignSelf: "flex-start",
+  paddingHorizontal: 0,
+};
 
 function normalizeGroupName(value: string) {
   return value.normalize("NFC").trim().replace(/\s+/gu, " ");
@@ -151,7 +157,6 @@ export function GroupCreateScreen() {
       const errorCode = readErrorCode(error);
       if (errorCode === "INVALID_INPUT") {
         setTimeZoneTouched(true);
-        setTimeZoneValid(false);
       }
       setSubmitErrorCode(errorCode);
     } finally {
@@ -222,6 +227,7 @@ export function GroupCreateScreen() {
         <AppButton
           label={t("groupCreateLegalAction")}
           variant="ghost"
+          style={legalActionButtonStyle}
           accessibilityHint={t("groupCreateLegalActionHint")}
           onPress={() => router.push("/settings/legal")}
         />
