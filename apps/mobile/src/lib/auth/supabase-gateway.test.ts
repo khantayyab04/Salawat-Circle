@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Database } from "@/types/database.types";
+import type { Database } from "@salawat-circle/shared-types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAuthGateway } from "./supabase-gateway";
 
