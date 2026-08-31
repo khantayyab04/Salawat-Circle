@@ -34,7 +34,10 @@ begin
   if v_membership.alias_name is not null
      and v_membership.alias_normalized is not null
      and v_membership.alias_key is not null then
-    return v_membership;
+    if p_disallowed_alias_normalized is null
+       or v_membership.alias_normalized is distinct from p_disallowed_alias_normalized then
+      return v_membership;
+    end if;
   end if;
 
   if v_membership.alias_name is not null
@@ -101,10 +104,23 @@ begin
       update public.group_memberships
       set alias_name = v_candidate.alias_name,
           alias_normalized = v_candidate.alias_normalized,
-          alias_key = coalesce(alias_key, extensions.gen_random_uuid())
+          alias_key = case
+            when p_disallowed_alias_normalized is not null
+                 and alias_normalized = p_disallowed_alias_normalized
+              then extensions.gen_random_uuid()
+            else coalesce(alias_key, extensions.gen_random_uuid())
+          end
       where id = v_membership.id
         and left_at is null
-        and (alias_name is null or alias_normalized is null or alias_key is null)
+        and (
+          alias_name is null
+          or alias_normalized is null
+          or alias_key is null
+          or (
+            p_disallowed_alias_normalized is not null
+            and alias_normalized = p_disallowed_alias_normalized
+          )
+        )
       returning * into v_membership;
 
       if found then
@@ -118,7 +134,10 @@ begin
       if v_membership.alias_name is not null
          and v_membership.alias_normalized is not null
          and v_membership.alias_key is not null then
-        return v_membership;
+        if p_disallowed_alias_normalized is null
+           or v_membership.alias_normalized is distinct from p_disallowed_alias_normalized then
+          return v_membership;
+        end if;
       end if;
     exception
       when unique_violation then

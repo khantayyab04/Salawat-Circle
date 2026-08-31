@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(22);
+select plan(25);
 
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at
@@ -271,6 +271,43 @@ select results_eq(
   $$,
   array[true],
   'reactivating a historical membership assigns complete active alias identity'
+);
+
+create temp table alias_reassign_before as
+select alias_name, alias_normalized, alias_key
+from public.group_memberships
+where id = '33333333-3333-4333-8333-333333333333';
+
+select lives_ok(
+  $$
+    select private.assign_membership_alias(
+      '33333333-3333-4333-8333-333333333333'::uuid,
+      (select alias_normalized from alias_reassign_before)
+    )
+  $$,
+  '2-arg assignment accepts the currently stored alias as a disallowed value'
+);
+select results_eq(
+  $$
+    select count(*)
+    from public.group_memberships membership
+    cross join alias_reassign_before previous
+    where membership.id = '33333333-3333-4333-8333-333333333333'
+      and membership.alias_normalized is distinct from previous.alias_normalized
+  $$,
+  array[1::bigint],
+  'disallowed current alias must rotate canonical alias instead of early return'
+);
+select results_eq(
+  $$
+    select count(*)
+    from public.group_memberships membership
+    cross join alias_reassign_before previous
+    where membership.id = '33333333-3333-4333-8333-333333333333'
+      and membership.alias_key is distinct from previous.alias_key
+  $$,
+  array[1::bigint],
+  'disallowed current alias must rotate opaque row key instead of early return'
 );
 
 create temp table alias_target_before as
