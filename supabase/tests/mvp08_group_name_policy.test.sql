@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(23);
+select plan(25);
 
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at
@@ -457,6 +457,70 @@ select results_eq(
       ('whatsapp-scheme', 'NAME_REJECTED')
   $$,
   'group names reject dangerous schemes and email or contact advertising'
+);
+
+select results_eq(
+  $$
+    select case_name, pg_temp.create_group_error(group_id, candidate)
+    from (
+      values
+        ('contact-handle-de', '73000000-0000-4000-8000-000000000251'::uuid, 'Kontakt @username'),
+        ('contact-handle-en', '73000000-0000-4000-8000-000000000252'::uuid, 'Contact @circle_help'),
+        ('international-plus-phone', '73000000-0000-4000-8000-000000000253'::uuid, '+49 30 12345678'),
+        ('international-zero-phone', '73000000-0000-4000-8000-000000000254'::uuid, '0044 20 7946 0958'),
+        ('local-phone', '73000000-0000-4000-8000-000000000255'::uuid, '030 12345678'),
+        ('platform-handle', '73000000-0000-4000-8000-000000000256'::uuid, 'Instagram @salawatkreis'),
+        ('platform-local-phone', '73000000-0000-4000-8000-000000000257'::uuid, 'Telefon 0176 12345678'),
+        ('whatsapp-country-number', '73000000-0000-4000-8000-000000000258'::uuid, 'WhatsApp 491234567890')
+    ) as cases(case_name, group_id, candidate)
+    order by case_name
+  $$,
+  $$
+    values
+      ('contact-handle-de', 'NAME_REJECTED'),
+      ('contact-handle-en', 'NAME_REJECTED'),
+      ('international-plus-phone', 'NAME_REJECTED'),
+      ('international-zero-phone', 'NAME_REJECTED'),
+      ('local-phone', 'NAME_REJECTED'),
+      ('platform-handle', 'NAME_REJECTED'),
+      ('platform-local-phone', 'NAME_REJECTED'),
+      ('whatsapp-country-number', 'NAME_REJECTED')
+  $$,
+  'group names reject conservative phone patterns and keyword-qualified social handles'
+);
+
+reset role;
+delete from private.rate_limit_buckets
+where actor_key = '73000000-0000-4000-8000-000000000001'
+  and action_key = 'create_group';
+set local role authenticated;
+set local "request.jwt.claim.sub" = '73000000-0000-4000-8000-000000000001';
+set local "request.jwt.claim.role" = 'authenticated';
+
+select results_eq(
+  $$
+    select case_name, pg_temp.create_group_error(group_id, candidate)
+    from (
+      values
+        ('at-with-spaces', '73000000-0000-4000-8000-000000000261'::uuid, 'Ali @ Home'),
+        ('contact-year', '73000000-0000-4000-8000-000000000262'::uuid, 'Kontakt 2026'),
+        ('group-year', '73000000-0000-4000-8000-000000000263'::uuid, 'Gruppe 2026'),
+        ('large-count', '73000000-0000-4000-8000-000000000264'::uuid, '1000000 Salawat'),
+        ('platform-year', '73000000-0000-4000-8000-000000000265'::uuid, 'Signal Gruppe 2026'),
+        ('salawat-count', '73000000-0000-4000-8000-000000000266'::uuid, '100 Salawat')
+    ) as cases(case_name, group_id, candidate)
+    order by case_name
+  $$,
+  $$
+    values
+      ('at-with-spaces', null::text),
+      ('contact-year', null::text),
+      ('group-year', null::text),
+      ('large-count', null::text),
+      ('platform-year', null::text),
+      ('salawat-count', null::text)
+  $$,
+  'contact rules do not reject ordinary counts, years or spaced-at group names'
 );
 
 select results_eq(

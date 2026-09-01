@@ -1,9 +1,9 @@
-import { AppScreen, StateFeedback } from "@/components";
+import { AppButton, AppScreen, StateFeedback } from "@/components";
 import { useAuth } from "@/lib/auth";
 import { normalizeTokenInvite } from "@/lib/groups";
 import { useTranslation } from "@/localization";
 import { JoinScreen } from "@/screens/groups";
-import { Redirect, useLocalSearchParams } from "expo-router";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { useEffect, useState } from "react";
 
@@ -17,11 +17,13 @@ function readValidatedTokenParam(value: string | string[] | undefined) {
 
 export default function JoinRoute() {
   const { t } = useTranslation();
+  const { replace } = useRouter();
   const { status, rememberInvite } = useAuth();
   const { token: tokenParam } = useLocalSearchParams<{ token?: string | string[] }>();
   const token = readValidatedTokenParam(tokenParam);
   const [stored, setStored] = useState(!token);
   const [storeFailed, setStoreFailed] = useState(false);
+  const [storeRevision, setStoreRevision] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -40,10 +42,10 @@ export default function JoinRoute() {
     return () => {
       active = false;
     };
-  }, [rememberInvite, status, token]);
+  }, [rememberInvite, status, storeRevision, token]);
 
   if (status === "loading") return null;
-  if (status === "ready") {
+  if (status === "ready" && (stored || !token)) {
     return (
       <>
         <Stack.Screen options={{ title: t("joinTitle") }} />
@@ -58,6 +60,18 @@ export default function JoinRoute() {
     return (
       <AppScreen contentContainerStyle={{ justifyContent: "center" }}>
         <StateFeedback state="error" />
+        <AppButton
+          label={t("joinStorageRetry")}
+          onPress={() => {
+            setStoreFailed(false);
+            setStoreRevision((current) => current + 1);
+          }}
+        />
+        <AppButton
+          label={t("joinExitAction")}
+          variant="secondary"
+          onPress={() => replace(status === "ready" ? "/today" : "/")}
+        />
       </AppScreen>
     );
   }

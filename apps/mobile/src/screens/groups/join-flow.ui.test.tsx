@@ -84,6 +84,7 @@ const copy: Record<string, string> = {
     "Zu viele Versuche. Bitte warte kurz und versuche es erneut.",
   joinOfflineMessage:
     "Du bist offline. Verbinde dich mit dem Internet und versuche es erneut.",
+  joinStorageRetry: "Erneut versuchen",
   joinAbandonAction: "Einladung verwerfen",
   joinAbandonTitle: "Einladung verwerfen?",
   joinAbandonBody:
@@ -265,9 +266,23 @@ describe("Task 15 join flows", () => {
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
-  it("allows a ready user to preview and accept when invite persistence fails", async () => {
+  it("blocks a ready user's preview until failed invite persistence is retried", async () => {
     mockRememberInvite.mockRejectedValueOnce(new Error("keychain unavailable"));
     const view = await render(<JoinTokenRoute />);
+
+    await waitFor(() =>
+      expect(
+        view.getByRole("button", { name: copy.joinStorageRetry }),
+      ).toBeTruthy(),
+    );
+    expect(mockPreviewInvite).not.toHaveBeenCalled();
+    expect(view.queryByText("Alpha Circle")).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(
+        view.getByRole("button", { name: copy.joinStorageRetry }),
+      );
+    });
 
     await waitFor(() =>
       expect(mockPreviewInvite).toHaveBeenCalledWith(
@@ -275,21 +290,7 @@ describe("Task 15 join flows", () => {
         "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       ),
     );
-    await act(async () => {
-      fireEvent.press(view.getByRole("button", { name: "Einladung annehmen" }));
-    });
-
-    await waitFor(() =>
-      expect(mockAcceptInvite).toHaveBeenCalledWith(
-        "token",
-        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-        "de",
-      ),
-    );
-    expect(mockReplace).toHaveBeenCalledWith({
-      pathname: "/groups/[id]",
-      params: { id: "group-1" },
-    });
+    expect(view.getByText("Alpha Circle")).toBeTruthy();
   });
 
   it("confirms explicit invite abandonment while cancel keeps the token", async () => {

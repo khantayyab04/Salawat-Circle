@@ -262,6 +262,7 @@ export const de = {
     "Du bist offline. Verbinde dich mit dem Internet und versuche es erneut.",
   joinErrorMessage: "Die Einladung konnte nicht geladen werden. Bitte versuche es erneut.",
   joinRefresh: "Erneut prüfen",
+  joinStorageRetry: "Erneut versuchen",
   joinAbandonAction: "Einladung verwerfen",
   joinAbandonTitle: "Einladung verwerfen?",
   joinAbandonBody:

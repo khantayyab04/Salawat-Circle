@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import { render, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
 import JoinRoute from "@/app/join/[token]";
 
 let mockStatus = "signed_out";
 let mockTokenParam: string | string[] | undefined =
   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const mockRememberInvite = jest.fn<(token: string) => Promise<void>>();
+const mockReplace = jest.fn();
 
 jest.mock("@/lib/auth", () => ({
   useAuth: () => ({
@@ -14,10 +15,21 @@ jest.mock("@/lib/auth", () => ({
   }),
 }));
 jest.mock("@/components", () => {
-  const { Text, View } = jest.requireActual<typeof import("react-native")>(
+  const { Pressable, Text, View } = jest.requireActual<typeof import("react-native")>(
     "react-native",
   );
   return {
+    AppButton: ({
+      label,
+      onPress,
+    }: {
+      label: string;
+      onPress?: () => void;
+    }) => (
+      <Pressable accessibilityRole="button" onPress={onPress}>
+        <Text>{label}</Text>
+      </Pressable>
+    ),
     AppScreen: ({ children }: { children: React.ReactNode }) => (
       <View>{children}</View>
     ),
@@ -25,7 +37,7 @@ jest.mock("@/components", () => {
   };
 });
 jest.mock("@/localization", () => ({
-  useTranslation: () => ({ t: () => "Einladung" }),
+  useTranslation: () => ({ t: (key: string) => key }),
 }));
 jest.mock("@/screens/groups", () => {
   const { Text } = jest.requireActual<typeof import("react-native")>(
@@ -40,6 +52,7 @@ jest.mock("expo-router", () => {
   return {
     Redirect: ({ href }: { href: string }) => <Text>{href}</Text>,
     useLocalSearchParams: () => ({ token: mockTokenParam }),
+    useRouter: () => ({ replace: mockReplace }),
   };
 });
 jest.mock("expo-router/stack", () => ({
@@ -67,6 +80,13 @@ describe("MVP08 join route", () => {
 
   it("persists a ready user's token before keeping the join preview reachable", async () => {
     mockStatus = "ready";
+    let finishPersistence!: () => void;
+    mockRememberInvite.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishPersistence = resolve;
+        }),
+    );
     const view = await render(<JoinRoute />);
 
     await waitFor(() =>
@@ -74,7 +94,57 @@ describe("MVP08 join route", () => {
         "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       ),
     );
-    expect(view.getByText("join-preview")).toBeTruthy();
+    expect(view.queryByText("join-preview")).toBeNull();
+
+    await act(async () => {
+      finishPersistence();
+    });
+
+    await waitFor(() => expect(view.getByText("join-preview")).toBeTruthy());
+  });
+
+  it("retries failed ready-user persistence before rendering the join preview", async () => {
+    mockStatus = "ready";
+    let finishRetry!: () => void;
+    mockRememberInvite.mockRejectedValueOnce(new Error("keychain unavailable"));
+    mockRememberInvite.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishRetry = resolve;
+        }),
+    );
+    const view = await render(<JoinRoute />);
+
+    await waitFor(() =>
+      expect(view.getByText("invite-storage-error")).toBeTruthy(),
+    );
+    expect(view.queryByText("join-preview")).toBeNull();
+
+    fireEvent.press(view.getByText("joinStorageRetry"));
+
+    await waitFor(() => expect(mockRememberInvite).toHaveBeenCalledTimes(2));
+    expect(view.queryByText("join-preview")).toBeNull();
+
+    await act(async () => {
+      finishRetry();
+    });
+
+    await waitFor(() => expect(view.getByText("join-preview")).toBeTruthy());
+  });
+
+  it("lets a ready user leave safely after invite persistence fails", async () => {
+    mockStatus = "ready";
+    mockRememberInvite.mockRejectedValueOnce(new Error("keychain unavailable"));
+    const view = await render(<JoinRoute />);
+
+    await waitFor(() =>
+      expect(view.getByText("invite-storage-error")).toBeTruthy(),
+    );
+
+    fireEvent.press(view.getByText("joinExitAction"));
+
+    expect(mockReplace).toHaveBeenCalledWith("/today");
+    expect(view.queryByText("join-preview")).toBeNull();
   });
 
   it("waits for session restoration before deciding to persist an invite", async () => {

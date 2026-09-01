@@ -85,13 +85,24 @@ begin
   if v_folded ~ '(^|[^[:alnum:]])(cunt|faggot|fotze|hurensohn|nigger)($|[^[:alnum:]])' then
     raise exception using errcode = 'P0001', message = 'NAME_REJECTED';
   end if;
+  if (
+       v_folded ~ '(^|[^[:alnum:]_])(contact|discord|facebook|instagram|insta|kontakt|mobil|mobile|phone|signal|snapchat|telegram|telefon|tiktok|twitter|whatsapp)([^[:alnum:]_]|$)'
+       and (
+         v_folded ~ '(^|[^[:alnum:]_])@[[:alnum:]_][[:alnum:]_.-]{2,31}($|[^[:alnum:]_.-])'
+         or v_folded ~ '(^|[^[:digit:]])[[:digit:]]([[:space:]()./-]*[[:digit:]]){6,14}($|[^[:digit:]])'
+       )
+     )
+     or v_folded ~ '(^|[^[:alnum:]])(\+|00)[[:digit:]]([[:space:]()./-]*[[:digit:]]){6,14}($|[^[:alnum:]])'
+     or v_folded ~ '(^|[^[:alnum:]])0[[:digit:]]([[:space:]()./-]*[[:digit:]]){7,13}($|[^[:alnum:]])' then
+    raise exception using errcode = 'P0001', message = 'NAME_REJECTED';
+  end if;
 
   return v_name;
 end;
 $$;
 
 comment on function private.normalise_group_name(text) is
-  'NFC-normalizes and validates group names. Exact blocked tokens: cunt, faggot, fotze, hurensohn, nigger. This deliberately narrow de/en list contains only unmistakably abusive standalone slurs or sexualized insults; general profanity and religious, theological, or political terms are excluded to reduce false positives.';
+  'NFC-normalizes and validates group names, including conservative URL, contact-keyword, social-handle and phone-pattern detection. Exact blocked tokens: cunt, faggot, fotze, hurensohn, nigger. This deliberately narrow de/en list contains only unmistakably abusive standalone slurs or sexualized insults; general profanity and religious, theological, or political terms are excluded to reduce false positives.';
 
 create or replace function public.create_group(
   p_client_group_id uuid,
