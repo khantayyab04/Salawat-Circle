@@ -29,9 +29,19 @@ function gateway(overrides: Partial<EntriesGateway> = {}): EntriesGateway {
     create: vi.fn().mockResolvedValue(existingEntry),
     update: vi.fn().mockResolvedValue(existingEntry),
     delete: vi.fn().mockResolvedValue(undefined),
+    setGoal: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
+
+const emptyGoalSummary = {
+  todayTotal: "5",
+  weekTotal: "5",
+  allTimeTotal: "5",
+  todayGoal: null,
+  achievedDays: "0",
+  eligibleGoalDays: "0",
+};
 
 describe("EntriesStore", () => {
   it("shows an optimistic entry once while creation is pending", async () => {
@@ -332,5 +342,88 @@ describe("EntriesStore", () => {
 
     expect(store.snapshot.paginationError).toBe(true);
     expect(store.snapshot.hasMore).toBe(true);
+  });
+
+  it("shows a goal optimistically and reconciles the canonical summary", async () => {
+    let resolveGoal: () => void = () => undefined;
+    const setGoal = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveGoal = resolve;
+        }),
+    );
+    const getSummary = vi
+      .fn()
+      .mockResolvedValueOnce(emptyGoalSummary)
+      .mockResolvedValueOnce({
+        ...emptyGoalSummary,
+        todayGoal: "100",
+        eligibleGoalDays: "1",
+      });
+    const store = new EntriesStore(
+      gateway({ getSummary, setGoal }),
+      "UTC",
+      () => new Date("2026-08-31T10:00:00.000Z"),
+      () => "unused",
+    );
+    await store.load();
+
+    const first = store.setGoal(100);
+    const second = store.setGoal(200);
+
+    expect(store.snapshot.summary.todayGoal).toBe("100");
+    expect(setGoal).toHaveBeenCalledWith(100, "2026-08-31");
+    await expect(second).resolves.toBeUndefined();
+
+    resolveGoal();
+    await first;
+
+    expect(store.snapshot.summary).toMatchObject({
+      todayGoal: "100",
+      eligibleGoalDays: "1",
+    });
+  });
+
+  it("restores the previous goal after the backend rejects a new target", async () => {
+    const store = new EntriesStore(
+      gateway({
+        getSummary: vi.fn().mockResolvedValue({
+          ...emptyGoalSummary,
+          todayGoal: "100",
+          eligibleGoalDays: "1",
+        }),
+        setGoal: vi.fn().mockRejectedValue(new Error("INVALID_AMOUNT")),
+      }),
+      "UTC",
+      () => new Date("2026-08-31T10:00:00.000Z"),
+      () => "unused",
+    );
+    await store.load();
+
+    await expect(store.setGoal(200)).rejects.toThrow("INVALID_AMOUNT");
+
+    expect(store.snapshot.summary.todayGoal).toBe("100");
+    expect(store.snapshot.errorCode).toBe("INVALID_AMOUNT");
+  });
+
+  it("clears the goal and restores it when deactivation fails", async () => {
+    const store = new EntriesStore(
+      gateway({
+        getSummary: vi.fn().mockResolvedValue({
+          ...emptyGoalSummary,
+          todayGoal: "100",
+          eligibleGoalDays: "1",
+        }),
+        setGoal: vi.fn().mockRejectedValue(new Error("INTERNAL")),
+      }),
+      "UTC",
+      () => new Date("2026-08-31T10:00:00.000Z"),
+      () => "unused",
+    );
+    await store.load();
+
+    await expect(store.clearGoal()).rejects.toThrow("INTERNAL");
+
+    expect(store.snapshot.summary.todayGoal).toBe("100");
   });
 });

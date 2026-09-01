@@ -19,6 +19,8 @@ type EntriesContextValue = EntriesStore["snapshot"] & {
   create(amount: number): Promise<void>;
   update(id: string, amount: number, entryDate: string): Promise<void>;
   delete(id: string): Promise<void>;
+  setGoal(amount: number): Promise<void>;
+  clearGoal(): Promise<void>;
   loadMore(): Promise<void>;
 };
 
@@ -35,6 +37,7 @@ function unavailableGateway(): EntriesGateway {
     create: unavailable,
     update: unavailable,
     delete: unavailable,
+    setGoal: unavailable,
   };
 }
 
@@ -87,6 +90,8 @@ export function EntriesProvider({
     create: (amount) => store.create(amount),
     update: (id, amount, entryDate) => store.update(id, amount, entryDate),
     delete: (id) => store.delete(id),
+    setGoal: (amount) => store.setGoal(amount),
+    clearGoal: () => store.clearGoal(),
     loadMore: () => store.loadMore(),
   };
 

@@ -31,6 +31,9 @@ describe("Supabase entries gateway", () => {
           today_total: "42",
           week_total: "42",
           all_time_total: "42",
+          today_goal: "100",
+          achieved_days: "2",
+          eligible_goal_days: "4",
         },
         error: null,
       });
@@ -83,7 +86,12 @@ describe("Supabase entries gateway", () => {
       todayTotal: "42",
       weekTotal: "42",
       allTimeTotal: "42",
+      todayGoal: "100",
+      achievedDays: "2",
+      eligibleGoalDays: "4",
     });
+    await expect(gateway.setGoal(100, "2026-08-31")).resolves.toBeUndefined();
+    await expect(gateway.setGoal(null, "2026-08-31")).resolves.toBeUndefined();
     await expect(gateway.getTimeZone("UTC")).resolves.toBe("Europe/Berlin");
 
     expect(rpc).toHaveBeenCalledWith("create_entry", {
@@ -94,5 +102,13 @@ describe("Supabase entries gateway", () => {
       p_recorded_at_client: "2026-08-31T10:00:00.000Z",
     });
     expect(rpc).toHaveBeenCalledWith("list_entries", { p_limit: 30 });
+    expect(rpc).toHaveBeenCalledWith("set_daily_goal", {
+      p_amount: 100,
+      p_effective_from: "2026-08-31",
+    });
+    expect(rpc).toHaveBeenCalledWith("set_daily_goal", {
+      p_amount: null,
+      p_effective_from: "2026-08-31",
+    });
   });
 });

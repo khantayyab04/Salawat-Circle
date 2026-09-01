@@ -23,6 +23,9 @@ export type EntrySummary = {
   todayTotal: string;
   weekTotal: string;
   allTimeTotal: string;
+  todayGoal: string | null;
+  achievedDays: string;
+  eligibleGoalDays: string;
 };
 
 export type CreateEntryInput = {
@@ -49,6 +52,7 @@ export type EntriesGateway = {
     expectedRevision: number;
   }): Promise<Entry>;
   delete(input: { id: string; expectedRevision: number }): Promise<void>;
+  setGoal(amount: number | null, effectiveFrom: string): Promise<void>;
 };
 
 type RawEntry = {
@@ -101,11 +105,16 @@ export function createSupabaseEntriesGateway(
         today_total?: string;
         week_total?: string;
         all_time_total?: string;
+        today_goal?: string | null;
+        achieved_days?: string;
+        eligible_goal_days?: string;
       } | null;
       if (
         !summary?.today_total ||
         !summary.week_total ||
-        !summary.all_time_total
+        !summary.all_time_total ||
+        !summary.achieved_days ||
+        !summary.eligible_goal_days
       ) {
         throw new Error("INTERNAL");
       }
@@ -113,6 +122,9 @@ export function createSupabaseEntriesGateway(
         todayTotal: summary.today_total,
         weekTotal: summary.week_total,
         allTimeTotal: summary.all_time_total,
+        todayGoal: summary.today_goal ?? null,
+        achievedDays: summary.achieved_days,
+        eligibleGoalDays: summary.eligible_goal_days,
       };
     },
 
@@ -185,6 +197,14 @@ export function createSupabaseEntriesGateway(
       const { error } = await client.rpc("delete_entry", {
         p_id: input.id,
         p_expected_revision: input.expectedRevision,
+      });
+      ensureSuccess(error);
+    },
+
+    async setGoal(amount, effectiveFrom) {
+      const { error } = await client.rpc("set_daily_goal", {
+        p_amount: amount as number,
+        p_effective_from: effectiveFrom,
       });
       ensureSuccess(error);
     },

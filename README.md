@@ -149,6 +149,25 @@ pnpm test:entries-integration
 Die persistente, verschlüsselte Offline-Queue folgt erst mit MVP07. Tagesziel
 und Zielerfolg bleiben Teil von MVP06.
 
+### MVP06 – Tagesziel und persönliches Dashboard
+
+Die Heute-Ansicht zeigt das serverseitig berechnete Tagesziel und den
+Zielerfolg der laufenden Woche. Ein Ziel kann über einen Regler bis 10.000 oder
+über ein genaues Zahlenfeld bis 10.000.000 gesetzt und wieder deaktiviert
+werden. Änderungen wirken ab heute; mehrere Änderungen am selben Tag ersetzen
+nur die aktuelle Zielversion und schreiben historische Zielversionen nicht um.
+
+`get_home_summary` zählt erreichte und relevante Zieltage ausschließlich von
+Montag bis heute. Die korrigierte Berechnung, Ziel-Mutationen und Deaktivierung
+lassen sich lokal zusätzlich prüfen:
+
+```bash
+pnpm test:goals-integration
+```
+
+Die persistente, verschlüsselte Offline-Queue einschließlich Retry und
+Konfliktbehandlung bleibt Bestandteil von MVP07.
+
 ### Qualitätsprüfung
 
 ```bash
