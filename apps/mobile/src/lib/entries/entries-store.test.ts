@@ -622,6 +622,149 @@ describe("EntriesStore", () => {
     expect(restartedList).toHaveBeenLastCalledWith(firstPageCursor, 30);
   });
 
+  it("replaces a cached synced tail when an online restart hydrates the first page", async () => {
+    const firstPageCursor = {
+      entryDate: "2026-08-30",
+      createdAt: "2026-08-30T10:00:00.000Z",
+      id: "00000000-0000-4000-8000-000000000002",
+    };
+    const secondPageCursor = {
+      entryDate: "2026-08-29",
+      createdAt: "2026-08-29T10:00:00.000Z",
+      id: "00000000-0000-4000-8000-000000000003",
+    };
+    const secondPageEntry = {
+      ...existingEntry,
+      id: firstPageCursor.id,
+      entryDate: firstPageCursor.entryDate,
+      createdAt: firstPageCursor.createdAt,
+      updatedAt: firstPageCursor.createdAt,
+    };
+    const staleThirdPageEntry = {
+      ...existingEntry,
+      id: secondPageCursor.id,
+      entryDate: secondPageCursor.entryDate,
+      createdAt: secondPageCursor.createdAt,
+      updatedAt: secondPageCursor.createdAt,
+    };
+    const pendingEntry = {
+      ...existingEntry,
+      id: "entry-local-old",
+      amount: "11",
+      entryDate: "2026-06-01",
+      createdAt: "2026-06-01T10:00:00.000Z",
+      updatedAt: "2026-06-01T10:00:00.000Z",
+      revision: 0,
+      localState: "pending_create" as const,
+      serverRevision: null,
+      lastAttemptAt: null,
+      retryCount: 0,
+      lastErrorCode: null,
+    };
+    let persisted: OfflineAccountState | null = emptyOfflineState();
+    persisted.timeZone = "Europe/Berlin";
+    persisted.summary = { ...emptyGoalSummary };
+    persisted.entries = [
+      existingEntry,
+      secondPageEntry,
+      staleThirdPageEntry,
+    ].map((entry) => ({
+      ...entry,
+      localState: "synced" as const,
+      serverRevision: entry.revision,
+      lastAttemptAt: null,
+      retryCount: 0,
+      lastErrorCode: null,
+    }));
+    persisted.entries.push(pendingEntry);
+    persisted.queue = [
+      {
+        id: "mutation-local-old",
+        entity: "entry",
+        operation: "create",
+        entityId: pendingEntry.id,
+        payload: {
+          amount: Number(pendingEntry.amount),
+          entryDate: pendingEntry.entryDate,
+          timezone: pendingEntry.timezone,
+          recordedAtClient: pendingEntry.recordedAtClient,
+        },
+        expectedRevision: null,
+        createdAt: pendingEntry.createdAt,
+        status: "pending",
+        lastAttemptAt: null,
+        retryCount: 0,
+        lastErrorCode: null,
+        nextAttemptAt: null,
+      },
+    ];
+    persisted.serverCursor = {
+      entryDate: "2026-08-28",
+      createdAt: "2026-08-28T10:00:00.000Z",
+      id: "00000000-0000-4000-8000-000000000004",
+    };
+    persisted.hasMore = true;
+    const persistence = {
+      load: vi.fn(async () => structuredClone(persisted)),
+      save: vi.fn(async (state: OfflineAccountState) => {
+        persisted = structuredClone(state);
+      }),
+      clear: vi.fn(),
+    };
+    const list = vi
+      .fn()
+      .mockResolvedValueOnce({
+        items: [existingEntry],
+        nextCursor: firstPageCursor,
+        hasMore: true,
+      })
+      .mockResolvedValueOnce({
+        items: [secondPageEntry],
+        nextCursor: secondPageCursor,
+        hasMore: true,
+      });
+    const entriesGateway = gateway({ list });
+    const offline = new OfflineController(
+      persistence,
+      entriesGateway,
+      () => new Date("2026-08-31T10:01:00.000Z"),
+      () => "mutation-restarted",
+      { drain: vi.fn().mockResolvedValue(undefined) },
+    );
+    const store = new EntriesStore(
+      entriesGateway,
+      "UTC",
+      () => new Date("2026-08-31T10:01:00.000Z"),
+      () => "unused",
+      offline,
+    );
+
+    await store.load();
+
+    expect(store.snapshot.entries.map(({ id }) => id)).toEqual([
+      existingEntry.id,
+      pendingEntry.id,
+    ]);
+    expect(store.snapshot.entries[1]).toMatchObject({
+      id: pendingEntry.id,
+      localState: "pending_create",
+    });
+    expect(offline.state).toMatchObject({
+      serverCursor: firstPageCursor,
+      hasMore: true,
+      queue: [{ entityId: pendingEntry.id, status: "pending" }],
+    });
+
+    await store.loadMore();
+
+    expect(list).toHaveBeenNthCalledWith(2, firstPageCursor, 30);
+    expect(store.snapshot.entries.map(({ id }) => id)).toEqual([
+      existingEntry.id,
+      secondPageEntry.id,
+      pendingEntry.id,
+    ]);
+  });
+
   it("advances and persists the gateway cursor after every offline page", async () => {
     const firstCursor = {
       entryDate: "2026-08-30",

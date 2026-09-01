@@ -135,18 +135,11 @@ export class OfflineController {
         retryCount: 0,
         lastErrorCode: null,
       }));
-      const retainedSynced = next.entries.filter(
-        (entry) =>
-          entry.localState === "synced" &&
-          input.hasMore &&
-          !serverEntries.some(({ id }) => id === entry.id),
-      );
       next.entries = [
         ...serverEntries.map((entry) => pendingById.get(entry.id) ?? entry),
         ...Array.from(pendingById.values()).filter(
           (entry) => !serverEntries.some(({ id }) => id === entry.id),
         ),
-        ...retainedSynced,
       ];
       if (next.queue.length === 0) next.summary = input.summary;
       next.timeZone = input.timeZone;
