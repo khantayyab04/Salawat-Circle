@@ -14,6 +14,7 @@ export {
 export {
   GroupsController,
   type LoadLeaderboardOptions,
+  type LoadMembersOptions,
 } from "./groups-controller";
 export { GroupsProvider, useGroups } from "./provider";
 export {
@@ -32,6 +33,9 @@ export type {
   GroupInvite,
   GroupInviteStatus,
   GroupInviteWithSecret,
+  GroupMember,
+  GroupMemberCursor,
+  GroupMembersGroup,
   GroupLeaderboardCursor,
   GroupLeaderboardGroup,
   GroupLeaderboardResponse,
@@ -44,8 +48,14 @@ export type {
   InvitePreviewGroup,
   LeaderboardPeriod,
   ListInvitesResponse,
+  ListGroupMembersResponse,
   ListMyGroupsResponse,
   PreviewInviteResponse,
   RevokeInviteResponse,
   SetLeaderboardAnonymityResponse,
+  UpdateGroupNameResponse,
+  RemoveGroupMemberResponse,
+  LeaveGroupResponse,
+  TransferGroupOwnershipResponse,
+  DeleteGroupResponse,
 } from "./types";

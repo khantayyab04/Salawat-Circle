@@ -1,6 +1,9 @@
 import type { GroupsErrorCode } from "./errors";
 import type {
   GroupInvite,
+  GroupMember,
+  GroupMemberCursor,
+  GroupMembersGroup,
   GroupLeaderboardCursor,
   GroupLeaderboardGroup,
   GroupLeaderboardRow,
@@ -48,6 +51,16 @@ export type GroupsInvitesState = {
   errorCode: GroupsErrorCode | null;
 };
 
+export type GroupsMembersState = {
+  groupId: string | null;
+  status: GroupsLoadStatus;
+  group: GroupMembersGroup | null;
+  items: GroupMember[];
+  nextCursor: GroupMemberCursor | null;
+  hasMore: boolean;
+  errorCode: GroupsErrorCode | null;
+};
+
 export type GroupsInvitePreviewState = {
   status: GroupsLoadStatus;
   data: PreviewInviteResponse | null;
@@ -60,6 +73,11 @@ export type GroupsMutationKind =
   | "create_invite"
   | "revoke_invite"
   | "accept_invite"
+  | "update_group_name"
+  | "remove_member"
+  | "leave_group"
+  | "transfer_ownership"
+  | "delete_group"
   | null;
 
 export type GroupsMutationState = {
@@ -78,6 +96,7 @@ export type GroupsSnapshot = {
     byGroup: GroupsLeaderboardByGroup;
   };
   invites: GroupsInvitesState;
+  members: GroupsMembersState;
   invitePreview: GroupsInvitePreviewState;
   mutation: GroupsMutationState;
 };
@@ -123,6 +142,15 @@ export function createGroupsSnapshot(
       groupId: null,
       status: "idle",
       items: [],
+      errorCode: null,
+    },
+    members: {
+      groupId: null,
+      status: "idle",
+      group: null,
+      items: [],
+      nextCursor: null,
+      hasMore: false,
       errorCode: null,
     },
     invitePreview: {

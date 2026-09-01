@@ -7,9 +7,17 @@ import type {
   CreateGroupResponse,
   CreateInviteOptions,
   CreateInviteResponse,
+  DeleteGroupResponse,
   GroupInvite,
   GroupInviteStatus,
   GroupInviteWithSecret,
+  GroupMember,
+  GroupMemberCursor,
+  ListGroupMembersResponse,
+  LeaveGroupResponse,
+  RemoveGroupMemberResponse,
+  TransferGroupOwnershipResponse,
+  UpdateGroupNameResponse,
   GroupLeaderboardCursor,
   GroupLeaderboardResponse,
   GroupLeaderboardRow,
@@ -58,6 +66,31 @@ export type GroupsGateway = {
     secret: string,
     locale: AppLocale,
   ): Promise<AcceptInviteResponse>;
+  listGroupMembers(
+    groupId: string,
+    cursor: GroupMemberCursor | null,
+    limit: number,
+  ): Promise<ListGroupMembersResponse>;
+  updateGroupName(
+    groupId: string,
+    name: string,
+    expectedRevision: number,
+  ): Promise<UpdateGroupNameResponse>;
+  removeGroupMember(
+    groupId: string,
+    membershipId: string,
+    expectedRevision: number,
+  ): Promise<RemoveGroupMemberResponse>;
+  leaveGroup(groupId: string): Promise<LeaveGroupResponse>;
+  transferGroupOwnership(
+    groupId: string,
+    membershipId: string,
+    expectedRevision: number,
+  ): Promise<TransferGroupOwnershipResponse>;
+  deleteGroup(
+    groupId: string,
+    expectedRevision: number,
+  ): Promise<DeleteGroupResponse>;
 };
 
 type RpcResponse = {
@@ -293,6 +326,46 @@ function parseGroupMembership(
   };
 }
 
+function parseGroupMember(memberValue: unknown): GroupMember {
+  const member = readRecord(memberValue);
+
+  return {
+    membershipId: readString(member, "membership_id"),
+    displayName: readString(member, "display_name"),
+    role: readRole(member, "role"),
+    joinedAt: readString(member, "joined_at"),
+    isSelf: readBoolean(member, "is_self"),
+  };
+}
+
+function parseListGroupMembersResponse(dataValue: unknown): ListGroupMembersResponse {
+  const data = readRecord(dataValue);
+  const group = readRecord(data.group);
+  const cursor = data.next_cursor;
+
+  let nextCursor: GroupMemberCursor | null = null;
+  if (cursor !== null) {
+    const cursorRecord = readRecord(cursor);
+    nextCursor = {
+      sortName: readString(cursorRecord, "sort_name"),
+      membershipId: readString(cursorRecord, "membership_id"),
+    };
+  }
+
+  return {
+    group: {
+      id: readString(group, "id"),
+      name: readString(group, "name"),
+      timezone: readString(group, "timezone"),
+      leaderboardAnonymous: readBoolean(group, "leaderboard_anonymous"),
+      revision: readInteger(group, "revision"),
+    },
+    items: readArray(data, "items").map(parseGroupMember),
+    nextCursor,
+    hasMore: readBoolean(data, "has_more"),
+  };
+}
+
 function parseInvitePreviewGroup(groupValue: unknown): InvitePreviewGroup {
   const group = readRecord(groupValue);
 
@@ -427,6 +500,39 @@ function parseSetLeaderboardAnonymityResponse(
   };
 }
 
+function parseUpdateGroupNameResponse(dataValue: unknown): UpdateGroupNameResponse {
+  const data = readRecord(dataValue);
+  return { group: parseGroupSnapshot(data.group) };
+}
+
+function parseRemoveGroupMemberResponse(dataValue: unknown): RemoveGroupMemberResponse {
+  const data = readRecord(dataValue);
+  return {
+    group: parseGroupSnapshot(data.group),
+    membershipId: readString(data, "membership_id"),
+  };
+}
+
+function parseLeaveGroupResponse(dataValue: unknown): LeaveGroupResponse {
+  const data = readRecord(dataValue);
+  return {
+    groupId: readString(data, "group_id"),
+    membershipId: readString(data, "membership_id"),
+  };
+}
+
+function parseTransferGroupOwnershipResponse(
+  dataValue: unknown,
+): TransferGroupOwnershipResponse {
+  const data = readRecord(dataValue);
+  return { group: parseGroupSnapshot(data.group) };
+}
+
+function parseDeleteGroupResponse(dataValue: unknown): DeleteGroupResponse {
+  const data = readRecord(dataValue);
+  return { groupId: readString(data, "group_id") };
+}
+
 function parseCreateInviteResponse(dataValue: unknown): CreateInviteResponse {
   const data = readRecord(dataValue);
 
@@ -498,6 +604,20 @@ export function createSupabaseGroupsGateway(
       return parseCreateGroupResponse(data);
     },
 
+    async listGroupMembers(groupId, cursor, limit) {
+      const data = await callRpc(client, "list_group_members", {
+        p_group_id: groupId,
+        ...(cursor
+          ? {
+              p_cursor_sort_name: cursor.sortName,
+              p_cursor_membership_id: cursor.membershipId,
+            }
+          : {}),
+        p_limit: limit,
+      });
+      return parseListGroupMembersResponse(data);
+    },
+
     async getLeaderboard(groupId, period, cursor, limit) {
       const cursorArgs = cursor
         ? {
@@ -523,6 +643,48 @@ export function createSupabaseGroupsGateway(
         p_expected_revision: expectedRevision,
       });
       return parseSetLeaderboardAnonymityResponse(data);
+    },
+
+    async updateGroupName(groupId, name, expectedRevision) {
+      const data = await callRpc(client, "update_group_name", {
+        p_group_id: groupId,
+        p_name: name,
+        p_expected_revision: expectedRevision,
+      });
+      return parseUpdateGroupNameResponse(data);
+    },
+
+    async removeGroupMember(groupId, membershipId, expectedRevision) {
+      const data = await callRpc(client, "remove_group_member", {
+        p_group_id: groupId,
+        p_membership_id: membershipId,
+        p_expected_revision: expectedRevision,
+      });
+      return parseRemoveGroupMemberResponse(data);
+    },
+
+    async leaveGroup(groupId) {
+      const data = await callRpc(client, "leave_group", {
+        p_group_id: groupId,
+      });
+      return parseLeaveGroupResponse(data);
+    },
+
+    async transferGroupOwnership(groupId, membershipId, expectedRevision) {
+      const data = await callRpc(client, "transfer_group_ownership", {
+        p_group_id: groupId,
+        p_membership_id: membershipId,
+        p_expected_revision: expectedRevision,
+      });
+      return parseTransferGroupOwnershipResponse(data);
+    },
+
+    async deleteGroup(groupId, expectedRevision) {
+      const data = await callRpc(client, "delete_group", {
+        p_group_id: groupId,
+        p_expected_revision: expectedRevision,
+      });
+      return parseDeleteGroupResponse(data);
     },
 
     async createInvite(groupId, options) {

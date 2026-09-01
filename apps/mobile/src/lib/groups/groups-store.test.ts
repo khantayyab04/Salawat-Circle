@@ -6,12 +6,16 @@ import { GroupsStore } from "./groups-store";
 import type {
   AcceptInviteResponse,
   CreateInviteResponse,
+  DeleteGroupResponse,
+  GroupMember,
   GroupInvite,
   GroupLeaderboardResponse,
   GroupListItem,
   InviteKind,
   LeaderboardPeriod,
   PreviewInviteResponse,
+  RemoveGroupMemberResponse,
+  TransferGroupOwnershipResponse,
 } from "./types";
 
 function deferred<T>() {
@@ -116,6 +120,23 @@ const acceptResponse: AcceptInviteResponse = {
   alreadyActive: false,
 };
 
+const groupMembers: GroupMember[] = [
+  {
+    membershipId: "membership-owner",
+    displayName: "Alpha Owner",
+    role: "owner",
+    joinedAt: "2026-08-31T19:00:00.000Z",
+    isSelf: true,
+  },
+  {
+    membershipId: "membership-member",
+    displayName: "Beta Member",
+    role: "member",
+    joinedAt: "2026-08-31T20:00:00.000Z",
+    isSelf: false,
+  },
+];
+
 function leaderboardPage(
   period: LeaderboardPeriod,
   items: GroupLeaderboardResponse["items"],
@@ -206,6 +227,62 @@ function createGateway(overrides: Partial<GroupsGateway> = {}): GroupsGateway {
     }),
     previewInvite: vi.fn().mockResolvedValue(previewResponse),
     acceptInvite: vi.fn().mockResolvedValue(acceptResponse),
+    listGroupMembers: vi.fn().mockResolvedValue({
+      group: {
+        id: baseGroup.id,
+        name: baseGroup.name,
+        timezone: baseGroup.timezone,
+        leaderboardAnonymous: baseGroup.leaderboardAnonymous,
+        revision: baseGroup.revision,
+      },
+      items: groupMembers,
+      nextCursor: null,
+      hasMore: false,
+    }),
+    updateGroupName: vi.fn().mockResolvedValue({
+      group: {
+        id: baseGroup.id,
+        name: "Renamed Circle",
+        timezone: baseGroup.timezone,
+        status: "active",
+        leaderboardAnonymous: baseGroup.leaderboardAnonymous,
+        createdAt: baseGroup.updatedAt,
+        updatedAt: "2026-08-31T21:00:00.000Z",
+        revision: 4,
+      },
+    }),
+    removeGroupMember: vi.fn().mockResolvedValue({
+      group: {
+        id: baseGroup.id,
+        name: baseGroup.name,
+        timezone: baseGroup.timezone,
+        status: "active",
+        leaderboardAnonymous: baseGroup.leaderboardAnonymous,
+        createdAt: baseGroup.updatedAt,
+        updatedAt: "2026-08-31T21:00:00.000Z",
+        revision: 4,
+      },
+      membershipId: "membership-member",
+    } satisfies RemoveGroupMemberResponse),
+    leaveGroup: vi.fn().mockResolvedValue({
+      groupId: baseGroup.id,
+      membershipId: "membership-owner",
+    }),
+    transferGroupOwnership: vi.fn().mockResolvedValue({
+      group: {
+        id: baseGroup.id,
+        name: baseGroup.name,
+        timezone: baseGroup.timezone,
+        status: "active",
+        leaderboardAnonymous: baseGroup.leaderboardAnonymous,
+        createdAt: baseGroup.updatedAt,
+        updatedAt: "2026-08-31T21:00:00.000Z",
+        revision: 4,
+      },
+    } satisfies TransferGroupOwnershipResponse),
+    deleteGroup: vi.fn().mockResolvedValue({
+      groupId: baseGroup.id,
+    } satisfies DeleteGroupResponse),
     ...overrides,
   };
 }
@@ -253,6 +330,45 @@ describe("GroupsController / GroupsStore", () => {
     expect(store.getSnapshot().groups.status).toBe("ready");
     expect(store.getSnapshot().groups.items).toEqual([baseGroup]);
     expect(store.getSnapshot().groups.errorCode).toBeNull();
+  });
+
+  it("loads members and applies management mutations to the active snapshot", async () => {
+    const { controller, store } = setup();
+    await controller.initialize("account-1");
+
+    await controller.loadMembers(baseGroup.id);
+    expect(store.getSnapshot().members).toMatchObject({
+      groupId: baseGroup.id,
+      status: "ready",
+      items: groupMembers,
+      hasMore: false,
+    });
+
+    await controller.updateGroupName(baseGroup.id, "Renamed Circle", 3);
+    expect(store.getSnapshot().groups.items[0]).toMatchObject({
+      name: "Renamed Circle",
+      revision: 4,
+    });
+
+    await controller.removeMember(baseGroup.id, "membership-member", 4);
+    expect(store.getSnapshot().members.items).toEqual([groupMembers[0]]);
+
+    await controller.leaveGroup(baseGroup.id);
+    expect(store.getSnapshot().groups.items).toEqual([]);
+    expect(store.getSnapshot().members.groupId).toBeNull();
+  });
+
+  it("removes a deleted group from every client collection", async () => {
+    const { controller, store } = setup();
+    await controller.initialize("account-1");
+    await controller.loadMembers(baseGroup.id);
+    await controller.loadLeaderboard(baseGroup.id, "week");
+
+    await controller.deleteGroup(baseGroup.id, 3);
+
+    expect(store.getSnapshot().groups.items).toEqual([]);
+    expect(store.getSnapshot().members.groupId).toBeNull();
+    expect(store.getSnapshot().leaderboard.byGroup[baseGroup.id]).toBeUndefined();
   });
 
   it("returns OFFLINE on refresh while keeping existing groups stable", async () => {

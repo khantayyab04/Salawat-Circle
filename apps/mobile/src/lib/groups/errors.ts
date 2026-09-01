@@ -9,6 +9,7 @@ const DOMAIN_ERROR_CODES = new Set([
   "ENTRY_VERSION_CONFLICT",
   "INVITE_INVALID",
   "RATE_LIMITED",
+  "OWNER_MUST_TRANSFER",
 ]);
 
 export type GroupsDomainErrorCode = typeof DOMAIN_ERROR_CODES extends Set<infer Code>

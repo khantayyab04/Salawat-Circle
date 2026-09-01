@@ -240,6 +240,40 @@ Domain-Konfiguration (AASA / `assetlinks.json`), automatisierte Bereinigung vera
 Rate-Limit-Buckets, erweiterte Missbrauchserkennung/Moderation sowie manuelle
 iOS/Android- und Accessibility-Geräteabnahmen.
 
+### MVP09 – Gruppenverwaltung
+
+MVP09 ergänzt die private Mitgliederverwaltung: Aktive Mitglieder können die
+Mitgliederliste sehen und eine Gruppe verlassen. Inhaber können den
+Gruppennamen ändern, Mitglieder entfernen, die Inhaberschaft an ein aktives
+Mitglied übertragen und eine Gruppe löschen.
+
+Wichtigste Eigenschaften und Sicherheitsgrenzen:
+- **Alias-Schutz:** Ist die Rangliste anonym, zeigt die Mitgliederliste fremde
+  Mitglieder ebenfalls nur unter ihrem stabilen Gruppenalias. Das eigene Konto
+  bleibt erkennbar.
+- **RPC-only Boundary:** Lesen und alle Verwaltungsaktionen laufen ausschließlich
+  über geschützte RPCs. Nichtmitglieder und ehemalige Mitglieder erhalten keine
+  Mitgliederliste.
+- **Eigentumsschutz:** Ein Inhaber kann weder sich selbst entfernen noch
+  austreten, bevor die Inhaberschaft übertragen oder die Gruppe gelöscht wurde.
+  Übertragung, Entfernen und Löschen verwenden eine Revisionsprüfung gegen
+  parallele Änderungen.
+- **Endgültige Löschung:** Eine Löschung entfernt die Gruppe, Mitgliedschaften
+  und Einladungen per Cascade. Persönliche Salawat-Einträge haben keinen
+  Gruppen-Fremdschlüssel und bleiben daher unverändert erhalten. Die UI verlangt
+  zur Bestätigung die exakte Eingabe des Gruppennamens.
+
+Der lokale End-to-End-Vertrag für Gruppenverwaltung lässt sich zusätzlich
+ausführen:
+
+```bash
+pnpm test:management-integration
+```
+
+**Verbleibende Production-Arbeit:** Melden, Blockieren, Moderation und
+Audit-Prozesse (PROD02), Lastoptimierung für große Gruppen sowie manuelle
+iOS/Android- und Accessibility-Geräteabnahmen.
+
 ### Qualitätsprüfung
 
 ```bash

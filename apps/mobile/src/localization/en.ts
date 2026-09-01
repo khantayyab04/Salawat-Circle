@@ -186,7 +186,51 @@ export const en = {
   groupDetailAnonymityRevisionMissing:
     "We could not save this setting. Please refresh the group and try again.",
   groupDetailInviteAction: "Manage invitations",
+  groupDetailRenameAction: "Rename group",
+  groupDetailRenameLabel: "New group name",
+  groupDetailRenameHint: "2 to 50 characters, without contact details or links.",
+  groupDetailRenameSaveAction: "Save name",
+  groupDetailLeaveAction: "Leave group",
+  groupDetailLeaveConfirmBody:
+    "You will leave this private group. Your personal entries will remain.",
+  groupDetailLeaveConfirmAction: "Leave group",
+  groupDetailDeleteAction: "Delete group",
+  groupDetailDeleteConfirmBody:
+    "The group, its memberships, and invitations will be deleted permanently. Personal entries will remain.",
+  groupDetailDeleteLabel: "Enter the group name to confirm",
+  groupDetailDeleteHint: 'Enter "%{name}" exactly.',
+  groupDetailDeleteConfirmAction: "Delete group permanently",
   groupMembersTitle: "Members",
+  groupMembersOwner: "Owner",
+  groupMembersMember: "Member",
+  groupMembersJoined: "Joined: %{date}",
+  groupMembersLoadMore: "Load more",
+  groupMembersLoadingTitle: "Loading members",
+  groupMembersLoadingBody: "Fetching the latest group state.",
+  groupMembersEmptyTitle: "No active members",
+  groupMembersEmptyBody: "There are currently no visible members in this group.",
+  groupMembersOfflineTitle: "Offline",
+  groupMembersOfflineBody:
+    "Connect to the internet to manage members.",
+  groupMembersNotFoundTitle: "Group not found",
+  groupMembersNotFoundBody:
+    "This group is no longer available or you do not have access.",
+  groupMembersRateLimitedTitle: "Please wait a moment",
+  groupMembersRateLimitedBody:
+    "Too many actions in a short time. Please try again shortly.",
+  groupMembersErrorTitle: "Members could not be loaded",
+  groupMembersErrorBody: "Please try again.",
+  groupMembersAnonymousTitle: "Alias mode is enabled",
+  groupMembersAnonymousBody:
+    "Other members appear here under their group alias. Disable alias mode in group details to manage display names.",
+  groupMembersRemoveAction: "Remove",
+  groupMembersRemoveConfirmTitle: "Remove member?",
+  groupMembersRemoveConfirmBody:
+    "%{name} will be removed from this private group.",
+  groupMembersTransferAction: "Transfer ownership",
+  groupMembersTransferConfirmTitle: "Transfer ownership?",
+  groupMembersTransferConfirmBody:
+    "%{name} will manage this group afterward. You will remain a member.",
   groupInvitesTitle: "Invitations",
   groupInvitesCreateAction: "Create new invitation",
   groupInvitesLoadingTitle: "Loading invitations",

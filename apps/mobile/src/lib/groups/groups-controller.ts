@@ -5,14 +5,18 @@ import {
   createGroupsSnapshot,
   ensureLeaderboardState,
   type GroupsMutationKind,
+  type GroupsSnapshot,
   type GroupsStore,
 } from "./groups-store";
 import type {
   AppLocale,
   CreateInviteOptions,
   GroupInvite,
+  GroupMember,
+  GroupMembersGroup,
   GroupLeaderboardRow,
   GroupListItem,
+  GroupSnapshot,
   InviteKind,
   LeaderboardPeriod,
 } from "./types";
@@ -21,6 +25,7 @@ type ControllerOptions = {
   isOnline: () => Promise<boolean>;
   createId?: () => string;
   leaderboardPageSize?: number;
+  membersPageSize?: number;
 };
 
 export type LoadLeaderboardOptions = {
@@ -31,17 +36,24 @@ export type RefreshGroupsOptions = {
   force?: boolean;
 };
 
+export type LoadMembersOptions = {
+  mode?: "reset" | "next";
+};
+
 const DEFAULT_LEADERBOARD_PAGE_SIZE = 30;
+const DEFAULT_MEMBERS_PAGE_SIZE = 30;
 
 export class GroupsController {
   private readonly isOnline: () => Promise<boolean>;
   private readonly createId: () => string;
   private readonly leaderboardPageSize: number;
+  private readonly membersPageSize: number;
   private readonly inflight = new Map<string, Promise<unknown>>();
   private readonly leaderboardRequestIds = new Map<string, number>();
   private session = 0;
   private groupsRequestId = 0;
   private invitesRequestId = 0;
+  private membersRequestId = 0;
   private previewRequestId = 0;
   private mutationQueue: Promise<void> = Promise.resolve();
 
@@ -55,6 +67,10 @@ export class GroupsController {
     this.leaderboardPageSize = Math.max(
       1,
       options.leaderboardPageSize ?? DEFAULT_LEADERBOARD_PAGE_SIZE,
+    );
+    this.membersPageSize = Math.max(
+      1,
+      options.membersPageSize ?? DEFAULT_MEMBERS_PAGE_SIZE,
     );
   }
 
@@ -95,6 +111,7 @@ export class GroupsController {
     this.leaderboardRequestIds.clear();
     this.groupsRequestId = 0;
     this.invitesRequestId = 0;
+    this.membersRequestId = 0;
     this.previewRequestId = 0;
     this.mutationQueue = Promise.resolve();
     this.replaceSnapshot(accountId);
@@ -107,6 +124,7 @@ export class GroupsController {
     this.leaderboardRequestIds.clear();
     this.groupsRequestId = 0;
     this.invitesRequestId = 0;
+    this.membersRequestId = 0;
     this.previewRequestId = 0;
     this.mutationQueue = Promise.resolve();
     this.replaceSnapshot(null);
@@ -414,6 +432,186 @@ export class GroupsController {
     });
   }
 
+  async loadMembers(groupId: string, options: LoadMembersOptions = {}) {
+    this.requireAccountId();
+    const mode = options.mode ?? "reset";
+    const session = this.session;
+    const existing = this.store.getSnapshot().members;
+    const cursor = mode === "next" ? existing.nextCursor : null;
+    if (
+      mode === "next" &&
+      (existing.groupId !== groupId ||
+        existing.status === "loading" ||
+        !existing.hasMore)
+    ) {
+      return;
+    }
+
+    const cursorKey = cursor
+      ? `${cursor.sortName}:${cursor.membershipId}`
+      : "start";
+    const key = `members:${session}:${groupId}:${mode}:${cursorKey}`;
+    return this.withDedup(key, async () => {
+      const requestId = this.membersRequestId + 1;
+      this.membersRequestId = requestId;
+      this.store.update((state) => {
+        const sameGroup = state.members.groupId === groupId;
+        state.members.groupId = groupId;
+        if (!sameGroup || mode === "reset") {
+          state.members.items = mode === "reset" ? state.members.items : [];
+          state.members.nextCursor = mode === "reset" ? state.members.nextCursor : null;
+        }
+        if (!sameGroup || state.members.items.length === 0) {
+          state.members.status = "loading";
+        }
+        state.members.errorCode = null;
+      });
+
+      try {
+        await this.requireOnline();
+        const response = await this.gateway.listGroupMembers(
+          groupId,
+          cursor,
+          this.membersPageSize,
+        );
+        if (!this.isActiveMembersRequest(session, requestId, groupId)) return;
+
+        this.store.update((state) => {
+          state.members.groupId = groupId;
+          state.members.status = "ready";
+          state.members.group = response.group;
+          state.members.items =
+            mode === "reset"
+              ? response.items
+              : dedupeMembers(state.members.items, response.items);
+          state.members.nextCursor = response.nextCursor;
+          state.members.hasMore = response.hasMore;
+          state.members.errorCode = null;
+          this.applyGroupMetadata(state, response.group);
+        });
+      } catch (error) {
+        const groupsError = toGroupsError(error);
+        if (!this.isActiveMembersRequest(session, requestId, groupId)) return;
+        this.store.update((state) => {
+          state.members.errorCode = groupsError.code;
+          if (state.members.items.length === 0) {
+            state.members.status = "error";
+          }
+        });
+        throw groupsError;
+      }
+    });
+  }
+
+  async updateGroupName(
+    groupId: string,
+    name: string,
+    expectedRevision?: number,
+  ) {
+    this.requireAccountId();
+    const resolvedRevision =
+      expectedRevision ?? this.resolveExpectedRevision(groupId);
+
+    return this.runMutation("update_group_name", async (session) => {
+      await this.requireOnline();
+      const response = await this.gateway.updateGroupName(
+        groupId,
+        name,
+        resolvedRevision,
+      );
+      if (!this.isSessionCurrent(session)) return response;
+      this.store.update((state) => this.applyGroupSnapshot(state, response.group));
+      return response;
+    });
+  }
+
+  async removeMember(
+    groupId: string,
+    membershipId: string,
+    expectedRevision?: number,
+  ) {
+    this.requireAccountId();
+    const resolvedRevision =
+      expectedRevision ?? this.resolveExpectedRevision(groupId);
+
+    return this.runMutation("remove_member", async (session) => {
+      await this.requireOnline();
+      const response = await this.gateway.removeGroupMember(
+        groupId,
+        membershipId,
+        resolvedRevision,
+      );
+      if (!this.isSessionCurrent(session)) return response;
+      this.store.update((state) => {
+        this.applyGroupSnapshot(state, response.group);
+        if (state.members.groupId === groupId) {
+          state.members.items = state.members.items.filter(
+            (member) => member.membershipId !== response.membershipId,
+          );
+        }
+      });
+      return response;
+    });
+  }
+
+  async leaveGroup(groupId: string) {
+    this.requireAccountId();
+    return this.runMutation("leave_group", async (session) => {
+      await this.requireOnline();
+      const response = await this.gateway.leaveGroup(groupId);
+      if (!this.isSessionCurrent(session)) return response;
+      this.store.update((state) => this.removeGroupState(state, groupId));
+      return response;
+    });
+  }
+
+  async transferGroupOwnership(
+    groupId: string,
+    membershipId: string,
+    expectedRevision?: number,
+  ) {
+    this.requireAccountId();
+    const resolvedRevision =
+      expectedRevision ?? this.resolveExpectedRevision(groupId);
+
+    return this.runMutation("transfer_ownership", async (session) => {
+      await this.requireOnline();
+      const response = await this.gateway.transferGroupOwnership(
+        groupId,
+        membershipId,
+        resolvedRevision,
+      );
+      if (!this.isSessionCurrent(session)) return response;
+      this.store.update((state) => {
+        this.applyGroupSnapshot(state, response.group, "member");
+        if (state.members.groupId === groupId) {
+          state.members.items = state.members.items.map((member) =>
+            member.membershipId === membershipId
+              ? { ...member, role: "owner" }
+              : member.isSelf
+                ? { ...member, role: "member" }
+                : member,
+          );
+        }
+      });
+      return response;
+    });
+  }
+
+  async deleteGroup(groupId: string, expectedRevision?: number) {
+    this.requireAccountId();
+    const resolvedRevision =
+      expectedRevision ?? this.resolveExpectedRevision(groupId);
+
+    return this.runMutation("delete_group", async (session) => {
+      await this.requireOnline();
+      const response = await this.gateway.deleteGroup(groupId, resolvedRevision);
+      if (!this.isSessionCurrent(session)) return response;
+      this.store.update((state) => this.removeGroupState(state, groupId));
+      return response;
+    });
+  }
+
   async createInvite(groupId: string, options?: CreateInviteOptions) {
     this.requireAccountId();
     return this.runMutation("create_invite", async (session) => {
@@ -564,6 +762,18 @@ export class GroupsController {
     return this.store.getSnapshot().invites.groupId === groupId;
   }
 
+  private isActiveMembersRequest(
+    session: number,
+    requestId: number,
+    groupId: string,
+  ) {
+    return (
+      this.isSessionCurrent(session) &&
+      this.membersRequestId === requestId &&
+      this.store.getSnapshot().members.groupId === groupId
+    );
+  }
+
   private isActivePreviewRequest(session: number, requestId: number) {
     return this.isSessionCurrent(session) && this.previewRequestId === requestId;
   }
@@ -577,6 +787,76 @@ export class GroupsController {
     const fromLeaderboard = selectedGroup?.[selectedPeriod]?.group?.revision;
     if (typeof fromLeaderboard === "number") return fromLeaderboard;
     throw new GroupsError("NOT_FOUND");
+  }
+
+  private applyGroupMetadata(
+    state: GroupsSnapshot,
+    group: GroupMembersGroup,
+  ) {
+    const index = state.groups.items.findIndex(({ id }) => id === group.id);
+    if (index < 0) return;
+    state.groups.items[index] = {
+      ...state.groups.items[index],
+      name: group.name,
+      timezone: group.timezone,
+      leaderboardAnonymous: group.leaderboardAnonymous,
+      revision: group.revision,
+    };
+  }
+
+  private applyGroupSnapshot(
+    state: GroupsSnapshot,
+    group: GroupSnapshot,
+    role?: GroupListItem["role"],
+  ) {
+    const index = state.groups.items.findIndex(({ id }) => id === group.id);
+    if (index >= 0) {
+      state.groups.items[index] = {
+        ...state.groups.items[index],
+        name: group.name,
+        timezone: group.timezone,
+        leaderboardAnonymous: group.leaderboardAnonymous,
+        revision: group.revision,
+        updatedAt: group.updatedAt,
+        ...(role ? { role } : {}),
+      };
+    }
+    if (state.members.groupId === group.id && state.members.group) {
+      state.members.group = {
+        ...state.members.group,
+        name: group.name,
+        timezone: group.timezone,
+        leaderboardAnonymous: group.leaderboardAnonymous,
+        revision: group.revision,
+      };
+    }
+  }
+
+  private removeGroupState(state: GroupsSnapshot, groupId: string) {
+    state.groups.items = state.groups.items.filter((group) => group.id !== groupId);
+    delete state.leaderboard.byGroup[groupId];
+    if (state.leaderboard.selectedGroupId === groupId) {
+      state.leaderboard.selectedGroupId = null;
+    }
+    if (state.invites.groupId === groupId) {
+      state.invites = {
+        groupId: null,
+        status: "idle",
+        items: [],
+        errorCode: null,
+      };
+    }
+    if (state.members.groupId === groupId) {
+      state.members = {
+        groupId: null,
+        status: "idle",
+        group: null,
+        items: [],
+        nextCursor: null,
+        hasMore: false,
+        errorCode: null,
+      };
+    }
   }
 
   private upsertGroup(group: GroupListItem) {
@@ -643,6 +923,11 @@ function dedupeLeaderboardRows(
 ) {
   const seen = new Set(previous.map(({ rowId }) => rowId));
   return [...previous, ...incoming.filter(({ rowId }) => !seen.has(rowId))];
+}
+
+function dedupeMembers(previous: GroupMember[], incoming: GroupMember[]) {
+  const seen = new Set(previous.map(({ membershipId }) => membershipId));
+  return [...previous, ...incoming.filter(({ membershipId }) => !seen.has(membershipId))];
 }
 
 function createFallbackGroupId() {

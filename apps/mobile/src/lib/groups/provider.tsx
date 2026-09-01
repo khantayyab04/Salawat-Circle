@@ -11,7 +11,11 @@ import {
   useSyncExternalStore,
 } from "react";
 import { getSupabaseClient } from "@/lib/auth/supabase-client";
-import { GroupsController, type LoadLeaderboardOptions } from "./groups-controller";
+import {
+  GroupsController,
+  type LoadLeaderboardOptions,
+  type LoadMembersOptions,
+} from "./groups-controller";
 import type { GroupsGateway } from "./groups-gateway";
 import { createSupabaseGroupsGateway } from "./groups-gateway";
 import { GroupsStore } from "./groups-store";
@@ -21,10 +25,15 @@ import type {
   CreateGroupResponse,
   CreateInviteOptions,
   CreateInviteResponse,
+  DeleteGroupResponse,
   InviteKind,
+  LeaveGroupResponse,
   LeaderboardPeriod,
+  RemoveGroupMemberResponse,
   RevokeInviteResponse,
   SetLeaderboardAnonymityResponse,
+  TransferGroupOwnershipResponse,
+  UpdateGroupNameResponse,
 } from "./types";
 
 type GroupsContextValue = ReturnType<GroupsStore["getSnapshot"]> & {
@@ -47,6 +56,10 @@ type GroupsContextValue = ReturnType<GroupsStore["getSnapshot"]> & {
     expectedRevision?: number,
   ): Promise<SetLeaderboardAnonymityResponse>;
   loadInvites(groupId: string): Promise<void>;
+  loadMembers(
+    groupId: string,
+    options?: LoadMembersOptions,
+  ): Promise<void>;
   createInvite(
     groupId: string,
     options?: CreateInviteOptions,
@@ -58,6 +71,26 @@ type GroupsContextValue = ReturnType<GroupsStore["getSnapshot"]> & {
     secret: string,
     locale: AppLocale,
   ): Promise<AcceptInviteResponse>;
+  updateGroupName(
+    groupId: string,
+    name: string,
+    expectedRevision?: number,
+  ): Promise<UpdateGroupNameResponse>;
+  removeMember(
+    groupId: string,
+    membershipId: string,
+    expectedRevision?: number,
+  ): Promise<RemoveGroupMemberResponse>;
+  leaveGroup(groupId: string): Promise<LeaveGroupResponse>;
+  transferGroupOwnership(
+    groupId: string,
+    membershipId: string,
+    expectedRevision?: number,
+  ): Promise<TransferGroupOwnershipResponse>;
+  deleteGroup(
+    groupId: string,
+    expectedRevision?: number,
+  ): Promise<DeleteGroupResponse>;
 };
 
 const GroupsContext = createContext<GroupsContextValue | null>(null);
@@ -93,6 +126,12 @@ function unavailableGateway(): GroupsGateway {
     revokeInvite: unavailable,
     previewInvite: unavailable,
     acceptInvite: unavailable,
+    listGroupMembers: unavailable,
+    updateGroupName: unavailable,
+    removeGroupMember: unavailable,
+    leaveGroup: unavailable,
+    transferGroupOwnership: unavailable,
+    deleteGroup: unavailable,
   };
 }
 
@@ -209,6 +248,11 @@ export function GroupsProvider({
     (groupId: string) => controller.loadInvites(groupId),
     [controller],
   );
+  const loadMembers = useCallback(
+    (groupId: string, options?: LoadMembersOptions) =>
+      controller.loadMembers(groupId, options),
+    [controller],
+  );
   const createInvite = useCallback(
     (groupId: string, options?: CreateInviteOptions) =>
       controller.createInvite(groupId, options),
@@ -227,6 +271,30 @@ export function GroupsProvider({
       controller.acceptInvite(kind, secret, locale),
     [controller],
   );
+  const updateGroupName = useCallback(
+    (groupId: string, name: string, expectedRevision?: number) =>
+      controller.updateGroupName(groupId, name, expectedRevision),
+    [controller],
+  );
+  const removeMember = useCallback(
+    (groupId: string, membershipId: string, expectedRevision?: number) =>
+      controller.removeMember(groupId, membershipId, expectedRevision),
+    [controller],
+  );
+  const leaveGroup = useCallback(
+    (groupId: string) => controller.leaveGroup(groupId),
+    [controller],
+  );
+  const transferGroupOwnership = useCallback(
+    (groupId: string, membershipId: string, expectedRevision?: number) =>
+      controller.transferGroupOwnership(groupId, membershipId, expectedRevision),
+    [controller],
+  );
+  const deleteGroup = useCallback(
+    (groupId: string, expectedRevision?: number) =>
+      controller.deleteGroup(groupId, expectedRevision),
+    [controller],
+  );
 
   const value = useMemo<GroupsContextValue>(
     () => ({
@@ -237,22 +305,34 @@ export function GroupsProvider({
       loadLeaderboard,
       setAnonymity,
       loadInvites,
+      loadMembers,
       createInvite,
       revokeInvite,
       previewInvite,
       acceptInvite,
+      updateGroupName,
+      removeMember,
+      leaveGroup,
+      transferGroupOwnership,
+      deleteGroup,
     }),
     [
       acceptInvite,
       createGroup,
       createInvite,
       loadInvites,
+      loadMembers,
       loadLeaderboard,
       previewInvite,
       refreshGroups,
       revision,
       revokeInvite,
       setAnonymity,
+      updateGroupName,
+      removeMember,
+      leaveGroup,
+      transferGroupOwnership,
+      deleteGroup,
       snapshot,
     ],
   );

@@ -191,7 +191,51 @@ export const de = {
   groupDetailAnonymityRevisionMissing:
     "Die Einstellung konnte nicht gespeichert werden. Bitte aktualisiere die Gruppe und versuche es erneut.",
   groupDetailInviteAction: "Einladungen verwalten",
+  groupDetailRenameAction: "Gruppe umbenennen",
+  groupDetailRenameLabel: "Neuer Gruppenname",
+  groupDetailRenameHint: "2 bis 50 Zeichen, ohne Kontaktangaben oder Links.",
+  groupDetailRenameSaveAction: "Namen speichern",
+  groupDetailLeaveAction: "Gruppe verlassen",
+  groupDetailLeaveConfirmBody:
+    "Du verlässt diese private Gruppe. Deine persönlichen Einträge bleiben erhalten.",
+  groupDetailLeaveConfirmAction: "Gruppe verlassen",
+  groupDetailDeleteAction: "Gruppe löschen",
+  groupDetailDeleteConfirmBody:
+    "Die Gruppe, ihre Mitgliedschaften und Einladungen werden endgültig gelöscht. Persönliche Einträge bleiben erhalten.",
+  groupDetailDeleteLabel: "Gruppennamen zur Bestätigung eingeben",
+  groupDetailDeleteHint: "Gib „%{name}“ genau ein.",
+  groupDetailDeleteConfirmAction: "Gruppe endgültig löschen",
   groupMembersTitle: "Mitglieder",
+  groupMembersOwner: "Inhaber",
+  groupMembersMember: "Mitglied",
+  groupMembersJoined: "Beigetreten: %{date}",
+  groupMembersLoadMore: "Mehr laden",
+  groupMembersLoadingTitle: "Mitglieder werden geladen",
+  groupMembersLoadingBody: "Wir holen den aktuellen Gruppenstand.",
+  groupMembersEmptyTitle: "Keine aktiven Mitglieder",
+  groupMembersEmptyBody: "In dieser Gruppe sind derzeit keine Mitglieder sichtbar.",
+  groupMembersOfflineTitle: "Offline",
+  groupMembersOfflineBody:
+    "Verbinde dich mit dem Internet, um Mitglieder zu verwalten.",
+  groupMembersNotFoundTitle: "Gruppe nicht gefunden",
+  groupMembersNotFoundBody:
+    "Diese Gruppe ist nicht mehr verfügbar oder du hast keinen Zugriff.",
+  groupMembersRateLimitedTitle: "Bitte kurz warten",
+  groupMembersRateLimitedBody:
+    "Zu viele Aktionen in kurzer Zeit. Versuche es gleich erneut.",
+  groupMembersErrorTitle: "Mitglieder konnten nicht geladen werden",
+  groupMembersErrorBody: "Bitte versuche es erneut.",
+  groupMembersAnonymousTitle: "Alias-Modus aktiv",
+  groupMembersAnonymousBody:
+    "Andere Mitglieder erscheinen hier mit ihrem Gruppenalias. Deaktiviere den Alias-Modus in den Gruppendetails, um Anzeigenamen zu verwalten.",
+  groupMembersRemoveAction: "Entfernen",
+  groupMembersRemoveConfirmTitle: "Mitglied entfernen?",
+  groupMembersRemoveConfirmBody:
+    "%{name} wird aus dieser privaten Gruppe entfernt.",
+  groupMembersTransferAction: "Inhaberschaft übertragen",
+  groupMembersTransferConfirmTitle: "Inhaberschaft übertragen?",
+  groupMembersTransferConfirmBody:
+    "%{name} verwaltet diese Gruppe danach. Du bleibst Mitglied.",
   groupInvitesTitle: "Einladungen",
   groupInvitesCreateAction: "Neue Einladung erstellen",
   groupInvitesLoadingTitle: "Einladungen werden geladen",
