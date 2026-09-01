@@ -20,6 +20,7 @@
     "supabase:stop": "supabase stop",
     "supabase:types": "supabase gen types typescript --local --schema public | sed '${/^$/d;}' > packages/shared-types/src/database.types.ts",
     "test:auth-integration": "node --test scripts/mvp03-auth.integration.test.mjs",
+    "test:entries-integration": "node --test scripts/mvp05-entries.integration.test.mjs",
     "verify": "pnpm test && pnpm lint && pnpm typecheck"
   },
   "devDependencies": {

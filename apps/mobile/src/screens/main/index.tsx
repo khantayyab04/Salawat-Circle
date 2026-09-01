@@ -6,76 +6,10 @@ import {
   FormField,
   StateFeedback,
 } from "@/components";
-import { formatAppNumber, useTranslation } from "@/localization";
-import { spacing } from "@/theme";
+import { useTranslation } from "@/localization";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
-import { View, useWindowDimensions } from "react-native";
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <AppCard style={{ flex: 1, minWidth: 140 }}>
-      <AppText variant="caption">{label}</AppText>
-      <AppText variant="bodyStrong">{value}</AppText>
-    </AppCard>
-  );
-}
-
-export function TodayScreen() {
-  const { t, localeTag } = useTranslation();
-  const { width, fontScale } = useWindowDimensions();
-  const [amount, setAmount] = useState("");
-  const stacked = width < 360 || fontScale >= 1.3;
-  return (
-    <AppScreen>
-      <AppCard>
-        <AppText>{t("todayHeading")}</AppText>
-        <AppText
-          accessibilityLabel={`${formatAppNumber(0, localeTag)} Salawat`}
-          variant="displayNumber"
-        >
-          {formatAppNumber(0, localeTag)}
-        </AppText>
-        <FormField
-          keyboardType="number-pad"
-          label={t("todayAddLabel")}
-          hint={t("todayAddHint")}
-          value={amount}
-          onChangeText={setAmount}
-        />
-        <AppButton disabled label={t("todaySubmit")} />
-      </AppCard>
-      <AppText variant="title">{t("todayDashboard")}</AppText>
-      <View
-        style={{
-          flexDirection: stacked ? "column" : "row",
-          flexWrap: stacked ? "nowrap" : "wrap",
-          gap: spacing.md,
-        }}
-      >
-        <Metric label={t("todayTotal")} value={formatAppNumber(0, localeTag)} />
-        <Metric label={t("todayWeek")} value={formatAppNumber(0, localeTag)} />
-        <Metric label={t("todayGoal")} value={t("todayNoGoal")} />
-        <Metric label={t("todayGoalDays")} value={t("todayNoGoalDay")} />
-      </View>
-      <AppText variant="title">{t("todayHistory")}</AppText>
-      <AppCard>
-        <AppText>{t("todayHistoryEmpty")}</AppText>
-      </AppCard>
-    </AppScreen>
-  );
-}
-
-export function EntryEditScreen() {
-  const { t } = useTranslation();
-  return (
-    <AppScreen>
-      <FormField editable={false} label={t("entryAmountLabel")} />
-      <FormField editable={false} label={t("entryDateLabel")} />
-      <AppButton disabled label={t("commonSave")} />
-    </AppScreen>
-  );
-}
+import { View } from "react-native";
 
 export function GroupsScreen() {
   const { t } = useTranslation();

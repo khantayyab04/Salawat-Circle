@@ -14,11 +14,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@salawat-circle/shared-types": "workspace:*",
     "@expo/ui": "~57.0.14",
+    "@salawat-circle/shared-types": "workspace:*",
     "@supabase/supabase-js": "^2.112.4",
     "expo": "~57.0.18",
     "expo-constants": "~57.0.16",
+    "expo-crypto": "~57.0.2",
     "expo-linking": "~57.0.8",
     "expo-localization": "~57.0.1",
     "expo-router": "~57.0.17",
