@@ -363,7 +363,9 @@ export class OfflineController {
       const conflict = this.selectedConflict(next, entryId);
       if (!conflict) return;
       const mutation = next.queue.find(
-        (candidate) => candidate.entityId === conflict.entryId,
+        (candidate) =>
+          candidate.entity === "entry" &&
+          candidate.entityId === conflict.entryId,
       );
       const entry = next.entries.find(
         (candidate) => candidate.id === conflict.entryId,

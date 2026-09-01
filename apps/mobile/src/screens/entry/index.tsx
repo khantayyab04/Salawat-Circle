@@ -4,6 +4,7 @@ import {
   AppScreen,
   AppText,
   FormField,
+  OfflineLoadErrorCard,
   OfflineRecoveryCard,
   StateFeedback,
 } from "@/components";
@@ -29,12 +30,23 @@ export function EntryEditScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const entries = useEntries();
 
-  if (entries.errorCode === "INVALID_OFFLINE_STATE") {
+  if (entries.offlineLoadErrorCode === "INVALID_OFFLINE_STATE") {
     return (
       <AppScreen>
         <OfflineRecoveryCard
           busy={entries.busy}
           onReset={entries.resetOfflineState}
+        />
+      </AppScreen>
+    );
+  }
+
+  if (entries.offlineLoadErrorCode === "INTERNAL") {
+    return (
+      <AppScreen>
+        <OfflineLoadErrorCard
+          busy={entries.busy}
+          onRetry={entries.retryOfflineLoad}
         />
       </AppScreen>
     );
@@ -93,33 +105,6 @@ function EntryEditForm({ entry }: { entry: ReturnType<typeof useEntries>["entrie
 
   return (
     <AppScreen>
-      <FormField
-        keyboardType="number-pad"
-        label={t("entryAmountLabel")}
-        value={amount}
-        error={error}
-        onChangeText={setAmount}
-      />
-      <FormField
-        autoCapitalize="none"
-        label={t("entryDateLabel")}
-        value={entryDate}
-        onChangeText={setEntryDate}
-      />
-      <View style={{ flexDirection: "row", gap: spacing.sm }}>
-        <AppButton
-          label={t("entryToday")}
-          variant="secondary"
-          onPress={() => setEntryDate(today)}
-          style={{ flex: 1 }}
-        />
-        <AppButton
-          label={t("entryYesterday")}
-          variant="secondary"
-          onPress={() => setEntryDate(previousDate(today))}
-          style={{ flex: 1 }}
-        />
-      </View>
       {conflict ? (
         <AppCard>
           <AppText accessibilityLiveRegion="polite" variant="bodyStrong">
@@ -148,12 +133,41 @@ function EntryEditForm({ entry }: { entry: ReturnType<typeof useEntries>["entrie
           />
         </AppCard>
       ) : (
-        <AppButton
-          disabled={!amount.trim() || !entryDate.trim()}
-          label={t("commonSave")}
-          loading={entries.busy}
-          onPress={() => void save()}
-        />
+        <>
+          <FormField
+            keyboardType="number-pad"
+            label={t("entryAmountLabel")}
+            value={amount}
+            error={error}
+            onChangeText={setAmount}
+          />
+          <FormField
+            autoCapitalize="none"
+            label={t("entryDateLabel")}
+            value={entryDate}
+            onChangeText={setEntryDate}
+          />
+          <View style={{ flexDirection: "row", gap: spacing.sm }}>
+            <AppButton
+              label={t("entryToday")}
+              variant="secondary"
+              onPress={() => setEntryDate(today)}
+              style={{ flex: 1 }}
+            />
+            <AppButton
+              label={t("entryYesterday")}
+              variant="secondary"
+              onPress={() => setEntryDate(previousDate(today))}
+              style={{ flex: 1 }}
+            />
+          </View>
+          <AppButton
+            disabled={!amount.trim() || !entryDate.trim()}
+            label={t("commonSave")}
+            loading={entries.busy}
+            onPress={() => void save()}
+          />
+        </>
       )}
     </AppScreen>
   );

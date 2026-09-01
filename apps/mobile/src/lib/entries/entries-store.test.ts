@@ -825,6 +825,43 @@ describe("EntriesStore", () => {
     expect((await persistence.load()).queue).toHaveLength(1);
   });
 
+  it("keeps transient cache loads retryable until a retry succeeds", async () => {
+    const persistence = {
+      load: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("INTERNAL"))
+        .mockRejectedValueOnce(new Error("INTERNAL"))
+        .mockResolvedValue(emptyOfflineState()),
+      save: vi.fn(),
+      clear: vi.fn(),
+    };
+    const entriesGateway = gateway();
+    const store = new EntriesStore(
+      entriesGateway,
+      "UTC",
+      () => new Date("2026-08-31T10:00:00.000Z"),
+      () => "unused",
+      new OfflineController(
+        persistence,
+        entriesGateway,
+        () => new Date("2026-08-31T10:00:00.000Z"),
+        () => "mutation-generated",
+      ),
+    );
+
+    await store.load();
+    expect(store.snapshot.offlineLoadErrorCode).toBe("INTERNAL");
+
+    await store.retryOfflineLoad();
+    expect(store.snapshot.offlineLoadErrorCode).toBe("INTERNAL");
+
+    await store.retryOfflineLoad();
+    expect(store.snapshot.offlineLoadErrorCode).toBeNull();
+    expect(store.snapshot.viewState).toBe("content");
+    expect(persistence.load).toHaveBeenCalledTimes(3);
+    expect(persistence.clear).not.toHaveBeenCalled();
+  });
+
   it("clears invalid local state and reloads canonical server data on explicit recovery", async () => {
     const malformed = emptyOfflineState();
     malformed.summary = {
@@ -919,6 +956,7 @@ describe("EntriesStore", () => {
       errorCode: "INVALID_OFFLINE_STATE",
     });
     expect(persistence.save).not.toHaveBeenCalled();
+    expect(await persistence.load()).toEqual(malformed);
   });
 
   it("keeps conflict sync state and counts after resolving one selected entry", async () => {

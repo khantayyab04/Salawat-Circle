@@ -274,6 +274,117 @@ describe("OfflineController", () => {
     });
   });
 
+  it("rejects a direct update while explicit conflict resolution is pending", async () => {
+    const persistence = storage();
+    const controller = new OfflineController(
+      persistence,
+      gateway(),
+      () => new Date(now),
+      () => "mutation-2",
+      { drain: vi.fn().mockResolvedValue(undefined) },
+    );
+    const conflict = {
+      entryId: entry.id,
+      operation: "update" as const,
+      localAmount: "8",
+      localEntryDate: entry.entryDate,
+      serverEntry: { ...entry, amount: "7", revision: 2 },
+    };
+    controller.state.entries = [
+      {
+        ...entry,
+        amount: "8",
+        localState: "conflict",
+        serverRevision: 1,
+        lastAttemptAt: now,
+        retryCount: 1,
+        lastErrorCode: "ENTRY_VERSION_CONFLICT",
+      },
+    ];
+    controller.state.queue = [
+      {
+        id: "mutation-1",
+        entity: "entry",
+        operation: "update",
+        entityId: entry.id,
+        payload: { amount: 8, entryDate: entry.entryDate },
+        expectedRevision: 1,
+        createdAt: now,
+        status: "conflict",
+        lastAttemptAt: now,
+        retryCount: 1,
+        lastErrorCode: "ENTRY_VERSION_CONFLICT",
+        nextAttemptAt: null,
+      },
+    ];
+    controller.state.conflicts = [conflict];
+    controller.state.conflict = conflict;
+    const before = structuredClone(controller.state);
+    persistence.save.mockClear();
+
+    await expect(
+      controller.update(entry.id, 9, entry.entryDate),
+    ).rejects.toThrow("ENTRY_VERSION_CONFLICT");
+
+    expect(controller.state).toEqual(before);
+    expect(persistence.save).not.toHaveBeenCalled();
+  });
+
+  it("rejects a direct delete while explicit conflict resolution is pending", async () => {
+    const persistence = storage();
+    const controller = new OfflineController(
+      persistence,
+      gateway(),
+      () => new Date(now),
+      () => "mutation-2",
+      { drain: vi.fn().mockResolvedValue(undefined) },
+    );
+    const conflict = {
+      entryId: entry.id,
+      operation: "delete" as const,
+      localAmount: entry.amount,
+      localEntryDate: entry.entryDate,
+      serverEntry: { ...entry, amount: "7", revision: 2 },
+    };
+    controller.state.entries = [
+      {
+        ...entry,
+        localState: "conflict",
+        serverRevision: 1,
+        lastAttemptAt: now,
+        retryCount: 1,
+        lastErrorCode: "ENTRY_VERSION_CONFLICT",
+      },
+    ];
+    controller.state.queue = [
+      {
+        id: "mutation-1",
+        entity: "entry",
+        operation: "delete",
+        entityId: entry.id,
+        payload: null,
+        expectedRevision: 1,
+        createdAt: now,
+        status: "conflict",
+        lastAttemptAt: now,
+        retryCount: 1,
+        lastErrorCode: "ENTRY_VERSION_CONFLICT",
+        nextAttemptAt: null,
+      },
+    ];
+    controller.state.conflicts = [conflict];
+    controller.state.conflict = conflict;
+    const before = structuredClone(controller.state);
+    persistence.save.mockClear();
+
+    await expect(controller.delete(entry.id)).rejects.toThrow(
+      "ENTRY_VERSION_CONFLICT",
+    );
+
+    expect(controller.state).toEqual(before);
+    expect(persistence.save).not.toHaveBeenCalled();
+  });
+
   it("keeps other conflicts visible after resolving one conflict entry", async () => {
     const persistence = storage();
     const controller = new OfflineController(
@@ -547,6 +658,87 @@ describe("OfflineController", () => {
         entity: "goal",
       }),
     ]);
+  });
+
+  it("reapplies only the entry mutation when a goal has the same entity id", async () => {
+    const controller = new OfflineController(
+      storage(),
+      gateway(),
+      () => new Date(now),
+      () => "mutation-3",
+      { drain: vi.fn().mockResolvedValue(undefined) },
+    );
+    const collidingEntry = {
+      ...entry,
+      id: "2026-08-31",
+      amount: "8",
+    };
+    const conflict = {
+      entryId: collidingEntry.id,
+      operation: "update" as const,
+      localAmount: "8",
+      localEntryDate: collidingEntry.entryDate,
+      serverEntry: { ...collidingEntry, amount: "7", revision: 2 },
+    };
+    controller.state.entries = [
+      {
+        ...collidingEntry,
+        localState: "conflict",
+        serverRevision: 1,
+        lastAttemptAt: now,
+        retryCount: 1,
+        lastErrorCode: "ENTRY_VERSION_CONFLICT",
+      },
+    ];
+    controller.state.queue = [
+      {
+        id: "mutation-goal",
+        entity: "goal",
+        operation: "set_goal",
+        entityId: collidingEntry.id,
+        payload: { amount: 100, effectiveFrom: collidingEntry.id },
+        expectedRevision: null,
+        createdAt: now,
+        status: "pending",
+        lastAttemptAt: null,
+        retryCount: 0,
+        lastErrorCode: null,
+        nextAttemptAt: null,
+      },
+      {
+        id: "mutation-entry",
+        entity: "entry",
+        operation: "update",
+        entityId: collidingEntry.id,
+        payload: { amount: 8, entryDate: collidingEntry.entryDate },
+        expectedRevision: 1,
+        createdAt: now,
+        status: "conflict",
+        lastAttemptAt: now,
+        retryCount: 1,
+        lastErrorCode: "ENTRY_VERSION_CONFLICT",
+        nextAttemptAt: null,
+      },
+    ];
+    controller.state.conflicts = [conflict];
+    controller.state.conflict = conflict;
+
+    await controller.reapplyConflict(collidingEntry.id);
+
+    expect(controller.state.queue).toEqual([
+      expect.objectContaining({
+        id: "mutation-goal",
+        entity: "goal",
+        expectedRevision: null,
+      }),
+      expect.objectContaining({
+        id: "mutation-entry",
+        entity: "entry",
+        expectedRevision: 2,
+        status: "pending",
+      }),
+    ]);
+    expect(controller.state.conflicts).toEqual([]);
   });
 
   it("keeps resolver memory unchanged when persistence fails", async () => {

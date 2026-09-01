@@ -18,6 +18,7 @@ export function EntryRow({
   onDelete(id: string): void;
 }) {
   const { t, localeTag } = useTranslation();
+  const hasConflict = entry.localState === "conflict";
   const syncLabel =
     entry.localState === "synced"
       ? t("entrySyncSynced")
@@ -63,11 +64,12 @@ export function EntryRow({
         </View>
         <View style={{ gap: spacing.sm }}>
           <AppButton
-            label={t("entryEdit")}
+            label={hasConflict ? t("entryResolveConflict") : t("entryEdit")}
             variant="secondary"
             onPress={() => onEdit(entry.id)}
           />
           <AppButton
+            disabled={hasConflict}
             label={t("entryDelete")}
             variant="destructive"
             onPress={requestDelete}

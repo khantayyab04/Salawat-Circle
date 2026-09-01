@@ -60,52 +60,63 @@ function createRowBackend(database: SQLiteDatabase): EncryptedRowBackend {
 }
 
 export function createExpoOfflineStorage(accountId: string) {
-  let instanceGeneration = storageGeneration;
-  const initialize = accountTransition.then(async () => {
-    const database = await openOfflineDatabase();
-    const backend = createRowBackend(database);
-    const keys = createDatabaseKeyStore(SecureStore, getRandomBytes);
-    const previousAccountId = await SecureStore.getItemAsync(ACTIVE_ACCOUNT_KEY);
-    if (previousAccountId && previousAccountId !== accountId) {
-      storageGeneration += 1;
-      await Promise.all([
-        backend.remove(previousAccountId),
-        keys.remove(previousAccountId),
-      ]);
-    }
-    await SecureStore.setItemAsync(ACTIVE_ACCOUNT_KEY, accountId);
-    const key = await keys.getOrCreate(accountId);
-    instanceGeneration = storageGeneration;
-    return {
-      storage: new EncryptedAccountStorage(
-        accountId,
-        key,
-        backend,
-        () => getRandomBytes(12),
-      ),
-      generation: instanceGeneration,
-    };
-  });
-  accountTransition = initialize.then(
-    () => undefined,
-    () => undefined,
-  );
+  let initialize: Promise<{
+    storage: EncryptedAccountStorage;
+    generation: number;
+  }> | null = null;
+  const startInitialization = () => {
+    const attempt = accountTransition.then(async () => {
+      const database = await openOfflineDatabase();
+      const backend = createRowBackend(database);
+      const keys = createDatabaseKeyStore(SecureStore, getRandomBytes);
+      const previousAccountId =
+        await SecureStore.getItemAsync(ACTIVE_ACCOUNT_KEY);
+      if (previousAccountId && previousAccountId !== accountId) {
+        storageGeneration += 1;
+        await Promise.all([
+          backend.remove(previousAccountId),
+          keys.remove(previousAccountId),
+        ]);
+      }
+      await SecureStore.setItemAsync(ACTIVE_ACCOUNT_KEY, accountId);
+      const key = await keys.getOrCreate(accountId);
+      return {
+        storage: new EncryptedAccountStorage(
+          accountId,
+          key,
+          backend,
+          () => getRandomBytes(12),
+        ),
+        generation: storageGeneration,
+      };
+    });
+    accountTransition = attempt.then(
+      () => undefined,
+      () => undefined,
+    );
+    initialize = attempt;
+    void attempt.catch(() => {
+      if (initialize === attempt) initialize = null;
+    });
+    return attempt;
+  };
+  const getReady = () => initialize ?? startInitialization();
 
   return {
     async load() {
-      const ready = await initialize;
+      const ready = await getReady();
       if (ready.generation !== storageGeneration) return null;
       return ready.storage.load();
     },
     async save(state: Parameters<EncryptedAccountStorage["save"]>[0]) {
-      const ready = await initialize;
+      const ready = await getReady();
       if (ready.generation !== storageGeneration) {
         throw new Error("OFFLINE_STORAGE_CLEARED");
       }
       return ready.storage.save(state);
     },
     async clear() {
-      const ready = await initialize;
+      const ready = await getReady();
       if (ready.generation !== storageGeneration) return;
       return ready.storage.clear();
     },

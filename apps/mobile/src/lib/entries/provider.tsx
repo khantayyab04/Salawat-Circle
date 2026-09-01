@@ -26,6 +26,7 @@ type EntriesContextValue = EntriesStore["snapshot"] & {
   clearGoal(): Promise<void>;
   loadMore(): Promise<void>;
   retrySync(): Promise<void>;
+  retryOfflineLoad(): Promise<void>;
   resetOfflineState(): Promise<void>;
   keepServerVersion(entryId?: string): Promise<void>;
   reapplyConflict(entryId?: string): Promise<void>;
@@ -184,6 +185,7 @@ export function EntriesProvider({
     clearGoal: () => store.clearGoal(),
     loadMore: () => store.loadMore(),
     retrySync: () => store.retrySync(),
+    retryOfflineLoad: () => store.retryOfflineLoad(),
     resetOfflineState: () => store.resetOfflineState(),
     keepServerVersion: (entryId) => store.keepServerVersion(entryId),
     reapplyConflict: (entryId) => store.reapplyConflict(entryId),

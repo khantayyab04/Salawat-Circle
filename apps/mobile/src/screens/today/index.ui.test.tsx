@@ -60,6 +60,10 @@ jest.mock("@/localization", () => ({
         offlineRecoveryConfirmBody:
           "Nicht synchronisierte Änderungen auf diesem Gerät gehen verloren.",
         offlineRecoveryConfirmAction: "Zurücksetzen",
+        offlineLoadRetryTitle: "Lokale Daten sind gerade nicht verfügbar",
+        offlineLoadRetryBody:
+          "Der lokale Speicher konnte nicht geladen werden. Versuche es erneut.",
+        offlineLoadRetryAction: "Erneut laden",
         commonCancel: "Abbrechen",
       })[key] ?? key,
   }),
@@ -82,6 +86,7 @@ function entries(overrides = {}) {
     loadingMore: false,
     busy: false,
     errorCode: null,
+    offlineLoadErrorCode: null,
     conflictEntryId: null,
     conflict: null,
     syncState: "idle",
@@ -93,6 +98,7 @@ function entries(overrides = {}) {
     clearGoal: jest.fn(),
     loadMore: jest.fn(),
     retrySync: jest.fn(),
+    retryOfflineLoad: jest.fn(),
     resetOfflineState: jest.fn(),
     ...overrides,
   };
@@ -175,6 +181,7 @@ describe("TodayScreen", () => {
       entries({
         viewState: "error",
         errorCode: "INVALID_OFFLINE_STATE",
+        offlineLoadErrorCode: "INVALID_OFFLINE_STATE",
       }),
     );
 
@@ -205,6 +212,7 @@ describe("TodayScreen", () => {
       entries({
         viewState: "error",
         errorCode: "INVALID_OFFLINE_STATE",
+        offlineLoadErrorCode: "INVALID_OFFLINE_STATE",
         resetOfflineState,
       }),
     );
@@ -228,5 +236,38 @@ describe("TodayScreen", () => {
     confirm?.onPress?.();
     expect(resetOfflineState).toHaveBeenCalledTimes(1);
     alert.mockRestore();
+  });
+
+  it("shows retry-only recovery for a transient local cache load failure", async () => {
+    const retryOfflineLoad = jest.fn<() => Promise<void>>().mockResolvedValue(
+      undefined,
+    );
+    mockEntries.mockReturnValue(
+      entries({
+        viewState: "error",
+        errorCode: "INTERNAL",
+        offlineLoadErrorCode: "INTERNAL",
+        retryOfflineLoad,
+      }),
+    );
+
+    const view = await render(<TodayScreen />);
+
+    expect(
+      view.getByText("Lokale Daten sind gerade nicht verfügbar"),
+    ).toBeTruthy();
+    expect(
+      view.getByText(
+        "Der lokale Speicher konnte nicht geladen werden. Versuche es erneut.",
+      ),
+    ).toBeTruthy();
+    expect(
+      view.queryByRole("button", { name: "Lokalen Speicher zurücksetzen" }),
+    ).toBeNull();
+    expect(
+      view.queryByRole("button", { name: "Eintragen" }),
+    ).toBeNull();
+    fireEvent.press(view.getByRole("button", { name: "Erneut laden" }));
+    expect(retryOfflineLoad).toHaveBeenCalledTimes(1);
   });
 });

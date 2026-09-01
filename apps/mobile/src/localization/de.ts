@@ -86,6 +86,7 @@ export const de = {
   entryToday: "Heute",
   entryYesterday: "Gestern",
   entryEdit: "Bearbeiten",
+  entryResolveConflict: "Konflikt lösen",
   entryDelete: "Löschen",
   entryDeleteTitle: "Eintrag löschen?",
   entryDeleteBody: "Dieser Eintrag wird endgültig gelöscht.",
@@ -313,6 +314,10 @@ export const de = {
   offlineRecoveryConfirmBody:
     "Nicht synchronisierte Einträge und Zieländerungen auf diesem Gerät gehen verloren. Bereits synchronisierte Daten werden anschließend erneut vom Server geladen.",
   offlineRecoveryConfirmAction: "Zurücksetzen",
+  offlineLoadRetryTitle: "Lokale Daten sind gerade nicht verfügbar",
+  offlineLoadRetryBody:
+    "Der lokale Speicher konnte nicht geladen werden. Versuche es erneut.",
+  offlineLoadRetryAction: "Erneut laden",
   statePartialErrorTitle: "Nicht alles konnte geladen werden",
   statePartialErrorBody: "Die vorhandenen Inhalte bleiben sichtbar.",
   stateErrorTitle: "Verbindung nicht möglich",

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { EntriesGateway } from "@/lib/entries/entries-gateway";
 import { OfflineController } from "./controller";
+import { encryptJson } from "./local-crypto";
 import { EncryptedAccountStorage, type EncryptedRowBackend } from "./storage";
 import { emptyOfflineState, type OfflineAccountState } from "./types";
 
@@ -37,6 +38,25 @@ describe("EncryptedAccountStorage", () => {
       retryCount: 0,
       lastErrorCode: null,
     });
+    state.queue.push({
+      id: "mutation-1",
+      entity: "entry",
+      operation: "create",
+      entityId: "entry-1",
+      payload: {
+        amount: 424242,
+        entryDate: "2026-08-31",
+        timezone: "Europe/Berlin",
+        recordedAtClient: "2026-08-31T10:00:00.000Z",
+      },
+      expectedRevision: null,
+      createdAt: "2026-08-31T10:00:00.000Z",
+      status: "pending",
+      lastAttemptAt: null,
+      retryCount: 0,
+      lastErrorCode: null,
+      nextAttemptAt: null,
+    });
     const storage = new EncryptedAccountStorage(
       "account-a",
       new Uint8Array(32).fill(7),
@@ -48,6 +68,79 @@ describe("EncryptedAccountStorage", () => {
 
     expect(rows.rows.get("account-a")).not.toContain("424242");
     expect(await storage.load()).toEqual(state);
+  });
+
+  it("rejects loader-invalid writes without replacing recoverable state", async () => {
+    const rows = backend();
+    const storage = new EncryptedAccountStorage(
+      "account-a",
+      new Uint8Array(32).fill(7),
+      rows.value,
+      () => new Uint8Array(12).fill(1),
+    );
+    const valid = emptyOfflineState();
+    valid.timeZone = "Europe/Berlin";
+    await storage.save(valid);
+    const invalid = structuredClone(valid);
+    invalid.entries = [
+      {
+        id: "entry-1",
+        amount: "42",
+        entryDate: "2026-08-31",
+        timezone: "Europe/Berlin",
+        recordedAtClient: "2026-08-31T10:00:00.000Z",
+        createdAt: "2026-08-31T10:00:00.000Z",
+        updatedAt: "2026-08-31T10:00:00.000Z",
+        revision: 1,
+        localState: "conflict",
+        serverRevision: 1,
+        lastAttemptAt: "2026-08-31T10:00:00.000Z",
+        retryCount: 1,
+        lastErrorCode: "ENTRY_VERSION_CONFLICT",
+      },
+    ];
+    invalid.queue = [
+      {
+        id: "mutation-1",
+        entity: "entry",
+        operation: "update",
+        entityId: "entry-1",
+        payload: { amount: 42, entryDate: "2026-08-31" },
+        expectedRevision: 1,
+        createdAt: "2026-08-31T10:00:00.000Z",
+        status: "conflict",
+        lastAttemptAt: "2026-08-31T10:00:00.000Z",
+        retryCount: 1,
+        lastErrorCode: "ENTRY_VERSION_CONFLICT",
+        nextAttemptAt: null,
+      },
+    ];
+
+    await expect(storage.save(invalid)).rejects.toThrow(
+      "INVALID_OFFLINE_STATE",
+    );
+
+    expect(await storage.load()).toEqual(valid);
+  });
+
+  it("maps unreadable encrypted data to recovery without deleting it", async () => {
+    const rows = backend();
+    const storage = new EncryptedAccountStorage(
+      "account-a",
+      new Uint8Array(32).fill(7),
+      rows.value,
+      () => new Uint8Array(12).fill(1),
+    );
+    await storage.save(emptyOfflineState());
+    const encrypted = rows.rows.get("account-a")!;
+    const tampered = `${encrypted.slice(0, -1)}${
+      encrypted.endsWith("0") ? "1" : "0"
+    }`;
+    rows.rows.set("account-a", tampered);
+
+    await expect(storage.load()).rejects.toThrow("INVALID_OFFLINE_STATE");
+
+    expect(rows.rows.get("account-a")).toBe(tampered);
   });
 
   it("isolates and removes the selected account", async () => {
@@ -161,7 +254,12 @@ describe("EncryptedAccountStorage", () => {
       rows.value,
       () => new Uint8Array(12).fill(1),
     );
-    await encryptedStorage.save(false as unknown as OfflineAccountState);
+    rows.rows.set(
+      "account-a",
+      encryptJson(false, new Uint8Array(32).fill(7), () =>
+        new Uint8Array(12).fill(1),
+      ),
+    );
     const gateway = {
       getTimeZone: vi.fn(),
       getSummary: vi.fn(),

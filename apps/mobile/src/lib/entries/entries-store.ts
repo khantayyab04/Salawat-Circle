@@ -35,6 +35,10 @@ export class EntriesStore {
     pendingCount: 0,
     failedCount: 0,
     errorCode: null as EntriesErrorCode | null,
+    offlineLoadErrorCode: null as
+      | "INVALID_OFFLINE_STATE"
+      | "INTERNAL"
+      | null,
     conflictEntryId: null as string | null,
     conflict: null as EntryConflict | null,
     conflicts: [] as EntryConflict[],
@@ -120,8 +124,13 @@ export class EntriesStore {
       let cached;
       try {
         cached = await this.offline.load();
+        this.snapshot.offlineLoadErrorCode = null;
       } catch (error) {
-        this.setError(error);
+        this.snapshot.offlineLoadErrorCode =
+          getEntriesErrorCode(error) === "INVALID_OFFLINE_STATE"
+            ? "INVALID_OFFLINE_STATE"
+            : "INTERNAL";
+        this.snapshot.errorCode = this.snapshot.offlineLoadErrorCode;
         this.snapshot.viewState = "error";
         this.notify();
         return;
@@ -589,7 +598,7 @@ export class EntriesStore {
   async resetOfflineState() {
     if (
       !this.offline ||
-      this.snapshot.errorCode !== "INVALID_OFFLINE_STATE" ||
+      this.snapshot.offlineLoadErrorCode !== "INVALID_OFFLINE_STATE" ||
       this.snapshot.busy
     ) {
       return;
@@ -601,8 +610,27 @@ export class EntriesStore {
       this.applyOfflineState();
       await this.load();
     } catch {
+      this.snapshot.offlineLoadErrorCode = "INVALID_OFFLINE_STATE";
       this.snapshot.errorCode = "INVALID_OFFLINE_STATE";
       this.snapshot.viewState = "error";
+    } finally {
+      this.snapshot.busy = false;
+      this.notify();
+    }
+  }
+
+  async retryOfflineLoad() {
+    if (
+      !this.offline ||
+      this.snapshot.offlineLoadErrorCode !== "INTERNAL" ||
+      this.snapshot.busy
+    ) {
+      return;
+    }
+    this.snapshot.busy = true;
+    this.notify();
+    try {
+      await this.load();
     } finally {
       this.snapshot.busy = false;
       this.notify();

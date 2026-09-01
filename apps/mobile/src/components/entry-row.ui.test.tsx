@@ -10,6 +10,7 @@ jest.mock("@/localization", () => ({
     t: (key: string) =>
       ({
         entryEdit: "Bearbeiten",
+        entryResolveConflict: "Konflikt lösen",
         entryDelete: "Löschen",
         entryDeleteTitle: "Eintrag löschen?",
         entryDeleteBody: "Dieser Eintrag wird endgültig gelöscht.",
@@ -79,5 +80,38 @@ describe("EntryRow", () => {
     );
 
     expect(view.getByText("Ausstehend")).toBeTruthy();
+  });
+
+  it("offers only explicit conflict resolution for a conflicted entry", async () => {
+    const onEdit = jest.fn();
+    const onDelete = jest.fn();
+    const view = await render(
+      <EntryRow
+        entry={{
+          id: "entry-1",
+          amount: "42",
+          entryDate: "2026-08-31",
+          timezone: "Europe/Berlin",
+          recordedAtClient: "2026-08-31T10:00:00.000Z",
+          createdAt: "2026-08-31T10:00:00.000Z",
+          updatedAt: "2026-08-31T10:00:00.000Z",
+          revision: 1,
+          localState: "conflict",
+        }}
+        onDelete={onDelete}
+        onEdit={onEdit}
+        showTime={false}
+      />,
+    );
+
+    fireEvent.press(view.getByRole("button", { name: "Konflikt lösen" }));
+    fireEvent.press(view.getByRole("button", { name: "Löschen" }));
+
+    expect(onEdit).toHaveBeenCalledWith("entry-1");
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(
+      view.getByRole("button", { name: "Löschen" }).props.accessibilityState
+        .disabled,
+    ).toBe(true);
   });
 });

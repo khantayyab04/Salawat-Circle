@@ -85,6 +85,7 @@ export const en = {
   entryToday: "Today",
   entryYesterday: "Yesterday",
   entryEdit: "Edit",
+  entryResolveConflict: "Resolve conflict",
   entryDelete: "Delete",
   entryDeleteTitle: "Delete entry?",
   entryDeleteBody: "This entry will be permanently deleted.",
@@ -306,6 +307,9 @@ export const en = {
   offlineRecoveryConfirmBody:
     "Unsynchronized entries and goal changes on this device will be discarded. Synchronized data will then be loaded again from the server.",
   offlineRecoveryConfirmAction: "Reset",
+  offlineLoadRetryTitle: "Local data is temporarily unavailable",
+  offlineLoadRetryBody: "Local storage could not be loaded. Try again.",
+  offlineLoadRetryAction: "Load again",
   statePartialErrorTitle: "Some content could not load",
   statePartialErrorBody: "Available content remains visible.",
   stateErrorTitle: "Unable to connect",

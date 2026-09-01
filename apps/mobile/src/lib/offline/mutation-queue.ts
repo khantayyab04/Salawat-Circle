@@ -25,6 +25,20 @@ function entryAndMutation(state: OfflineAccountState, entryId: string) {
   return { entry, mutation };
 }
 
+function assertNoConflict(
+  state: OfflineAccountState,
+  entryId: string,
+  mutation: QueueMutation | undefined,
+) {
+  if (
+    mutation?.status === "conflict" ||
+    state.conflicts.some((conflict) => conflict.entryId === entryId) ||
+    state.conflict?.entryId === entryId
+  ) {
+    throw new Error("ENTRY_VERSION_CONFLICT");
+  }
+}
+
 export function enqueueCreate(
   state: OfflineAccountState,
   entry: OfflineEntry,
@@ -57,6 +71,7 @@ export function enqueueUpdate(
   now: string,
 ) {
   const { entry, mutation } = entryAndMutation(state, entryId);
+  assertNoConflict(state, entryId, mutation);
   entry.amount = String(amount);
   entry.entryDate = entryDate;
   entry.updatedAt = now;
@@ -89,6 +104,7 @@ export function enqueueDelete(
   now: string,
 ) {
   const { entry, mutation } = entryAndMutation(state, entryId);
+  assertNoConflict(state, entryId, mutation);
   if (mutation?.operation === "create") {
     state.queue.splice(state.queue.indexOf(mutation), 1);
     state.entries.splice(state.entries.indexOf(entry), 1);
