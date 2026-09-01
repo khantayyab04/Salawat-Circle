@@ -6,8 +6,8 @@ const mockPush = jest.fn();
 const mockReplace = jest.fn();
 const mockRequestOtp = jest.fn<() => Promise<void>>();
 const mockVerifyOtp = jest.fn<() => Promise<string>>();
-const mockGrantConsent = jest.fn<() => Promise<string | null>>();
-const mockConsumePendingInvite = jest.fn<() => Promise<string | null>>();
+const mockGrantConsent = jest.fn<() => Promise<void>>();
+const mockPeekPendingInvite = jest.fn<() => Promise<string | null>>();
 const mockClearError = jest.fn();
 let mockStatus:
   | "loading"
@@ -63,7 +63,7 @@ jest.mock("@/lib/auth", () => ({
     grantConsent: mockGrantConsent,
     signOut: jest.fn(),
     rememberInvite: jest.fn(),
-    consumePendingInvite: mockConsumePendingInvite,
+    peekPendingInvite: mockPeekPendingInvite,
     clearError: mockClearError,
   }),
 }));
@@ -102,8 +102,8 @@ beforeEach(() => {
   mockPendingEmail = "person@example.com";
   mockRequestOtp.mockResolvedValue(undefined);
   mockVerifyOtp.mockResolvedValue("consent_required");
-  mockGrantConsent.mockResolvedValue(null);
-  mockConsumePendingInvite.mockResolvedValue(null);
+  mockGrantConsent.mockResolvedValue(undefined);
+  mockPeekPendingInvite.mockResolvedValue(null);
 });
 
 describe("MVP03 auth screens", () => {
@@ -156,10 +156,31 @@ describe("MVP03 auth screens", () => {
     expect(mockReplace).toHaveBeenCalledWith("/today");
   });
 
-  it("routes OTP-ready users back to the invite preview when a pending token exists", async () => {
+  it("routes consent completion with a non-destructive pending-invite peek", async () => {
+    mockPeekPendingInvite.mockResolvedValue(
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    );
+
+    const view = await render(<ConsentScreen />);
+    await act(async () => {
+      fireEvent.press(view.getByRole("checkbox", { name: "Ich willige ein." }));
+    });
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Weiter" }));
+    });
+
+    await waitFor(() => expect(mockGrantConsent).toHaveBeenCalledWith("de"));
+    await waitFor(() => expect(mockPeekPendingInvite).toHaveBeenCalledTimes(1));
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: "/join/[token]",
+      params: { token: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
+    });
+  });
+
+  it("routes OTP-ready users with a non-destructive pending-invite peek", async () => {
     mockStatus = "ready";
     mockVerifyOtp.mockResolvedValue("ready");
-    mockConsumePendingInvite.mockResolvedValue(
+    mockPeekPendingInvite.mockResolvedValue(
       "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     );
 
@@ -176,7 +197,7 @@ describe("MVP03 auth screens", () => {
     });
 
     await waitFor(() => expect(mockVerifyOtp).toHaveBeenCalledWith("123456"));
-    await waitFor(() => expect(mockConsumePendingInvite).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockPeekPendingInvite).toHaveBeenCalledTimes(1));
     expect(mockReplace).toHaveBeenCalledWith({
       pathname: "/join/[token]",
       params: { token: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
@@ -187,7 +208,7 @@ describe("MVP03 auth screens", () => {
     "profile_required",
     "consent_required",
   ] as const)(
-    "does not consume pending invites when verifyOtp returns %s",
+    "does not read pending invites before %s onboarding completes",
     async (nextStatus) => {
       mockStatus = nextStatus;
       mockVerifyOtp.mockResolvedValue(nextStatus);
@@ -206,7 +227,7 @@ describe("MVP03 auth screens", () => {
       });
 
       await waitFor(() => expect(mockVerifyOtp).toHaveBeenCalledWith("123456"));
-      expect(mockConsumePendingInvite).not.toHaveBeenCalled();
+      expect(mockPeekPendingInvite).not.toHaveBeenCalled();
       expect(mockReplace).toHaveBeenCalledWith("/");
     },
   );

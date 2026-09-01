@@ -37,10 +37,11 @@ type AuthContextValue = {
     timeZone: string,
     locale: "de" | "en",
   ): Promise<void>;
-  grantConsent(locale: "de" | "en"): Promise<string | null>;
+  grantConsent(locale: "de" | "en"): Promise<void>;
   signOut(): Promise<void>;
   rememberInvite(token: string): Promise<void>;
-  consumePendingInvite(): Promise<string | null>;
+  peekPendingInvite(): Promise<string | null>;
+  clearPendingInvite(): Promise<void>;
   clearError(): void;
 };
 
@@ -200,13 +201,11 @@ export function AuthProvider({
           "PROFILE_SAVE_FAILED",
         ),
       grantConsent: (locale) =>
-        run(async () => {
-          await coordinator.grantConsent(locale);
-          return inviteStore.consume();
-        }, "CONSENT_SAVE_FAILED"),
+        run(() => coordinator.grantConsent(locale), "CONSENT_SAVE_FAILED"),
       signOut: () => run(() => coordinator.signOut(), "SIGN_OUT_FAILED"),
       rememberInvite: (token) => inviteStore.save(token),
-      consumePendingInvite: () => inviteStore.consume(),
+      peekPendingInvite: () => inviteStore.peek(),
+      clearPendingInvite: () => inviteStore.clear(),
       clearError: () => setErrorCode(null),
     };
   }, [busy, coordinator, errorCode, inviteStore, revision, run]);

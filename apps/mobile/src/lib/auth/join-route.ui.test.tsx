@@ -65,12 +65,16 @@ describe("MVP08 join route", () => {
     expect(view.getByText("/")).toBeTruthy();
   });
 
-  it("keeps the join preview reachable for ready users", async () => {
+  it("persists a ready user's token before keeping the join preview reachable", async () => {
     mockStatus = "ready";
     const view = await render(<JoinRoute />);
 
+    await waitFor(() =>
+      expect(mockRememberInvite).toHaveBeenCalledWith(
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      ),
+    );
     expect(view.getByText("join-preview")).toBeTruthy();
-    expect(mockRememberInvite).not.toHaveBeenCalled();
   });
 
   it("waits for session restoration before deciding to persist an invite", async () => {
@@ -81,15 +85,20 @@ describe("MVP08 join route", () => {
     expect(mockRememberInvite).not.toHaveBeenCalled();
   });
 
-  it("does not discard an invite when secure storage is unavailable", async () => {
-    mockRememberInvite.mockRejectedValueOnce(new Error("keychain unavailable"));
-    const view = await render(<JoinRoute />);
+  it.each(["signed_out", "ready"])(
+    "does not discard an invite when secure storage is unavailable for %s users",
+    async (status) => {
+      mockStatus = status;
+      mockRememberInvite.mockRejectedValueOnce(new Error("keychain unavailable"));
+      const view = await render(<JoinRoute />);
 
-    await waitFor(() =>
-      expect(view.getByText("invite-storage-error")).toBeTruthy(),
-    );
-    expect(view.queryByText("/")).toBeNull();
-  });
+      await waitFor(() =>
+        expect(view.getByText("invite-storage-error")).toBeTruthy(),
+      );
+      expect(view.queryByText("/")).toBeNull();
+      expect(view.queryByText("join-preview")).toBeNull();
+    },
+  );
 
   it("ignores invalid or ambiguous token params without persisting secrets", async () => {
     mockTokenParam = [

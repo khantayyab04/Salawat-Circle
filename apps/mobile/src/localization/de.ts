@@ -262,6 +262,11 @@ export const de = {
     "Du bist offline. Verbinde dich mit dem Internet und versuche es erneut.",
   joinErrorMessage: "Die Einladung konnte nicht geladen werden. Bitte versuche es erneut.",
   joinRefresh: "Erneut prüfen",
+  joinAbandonAction: "Einladung verwerfen",
+  joinAbandonTitle: "Einladung verwerfen?",
+  joinAbandonBody:
+    "Der gespeicherte Einladungslink wird von diesem Gerät entfernt. Du kannst ihn später nur über den ursprünglichen Link erneut öffnen.",
+  joinExitAction: "Zur Übersicht",
   settingsLanguage: "Sprache",
   settingsLanguageHint: "Sprache dieser App",
   settingsLanguageSystem: "Systemstandard",

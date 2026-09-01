@@ -18,7 +18,7 @@ import { formatAppNumber, type TranslationKey, useTranslation } from "@/localiza
 import { spacing } from "@/theme";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { View, type TextStyle, type ViewStyle } from "react-native";
+import { Alert, View, type TextStyle, type ViewStyle } from "react-native";
 
 const retryButtonStyle: ViewStyle = { alignSelf: "flex-start" };
 const tabularNumberStyle: TextStyle = { fontVariant: ["tabular-nums"] };
@@ -88,7 +88,7 @@ export function JoinScreen({
 }) {
   const { replace } = useRouter();
   const { locale, localeTag, t } = useTranslation();
-  const { consumePendingInvite } = useAuth();
+  const { clearPendingInvite, peekPendingInvite } = useAuth();
   const { invitePreview, mutation, previewInvite, acceptInvite } = useGroups();
   const [manualCode, setManualCode] = useState("");
   const [manualSecret, setManualSecret] = useState<InviteSecret | null>(null);
@@ -103,6 +103,9 @@ export function JoinScreen({
   const activeSecretKind = activeSecret?.kind ?? null;
   const activeSecretValue = activeSecret?.secret ?? null;
   const activeSecretKey = activeSecret ? createSecretKey(activeSecret) : null;
+  const persistedTokenValue =
+    initialSecret?.kind === "token" ? initialSecret.secret : null;
+  const hasPersistedToken = persistedTokenValue !== null;
 
   useEffect(() => {
     if (!activeSecretKind || !activeSecretValue || !activeSecretKey) return;
@@ -162,7 +165,12 @@ export function JoinScreen({
         activeSecretValue,
         locale,
       );
-      await consumePendingInvite().catch(() => null);
+      if (hasPersistedToken) {
+        const pendingToken = await peekPendingInvite().catch(() => null);
+        if (pendingToken === activeSecretValue) {
+          await clearPendingInvite().catch(() => undefined);
+        }
+      }
       replace({ pathname: "/groups/[id]", params: { id: response.group.id } });
     } catch (error) {
       setErrorCode(toGroupsError(error).code);
@@ -171,10 +179,39 @@ export function JoinScreen({
     acceptInvite,
     activeSecretKind,
     activeSecretValue,
-    consumePendingInvite,
+    clearPendingInvite,
+    hasPersistedToken,
     locale,
+    peekPendingInvite,
     replace,
   ]);
+
+  const abandonPersistedInvite = useCallback(async () => {
+    setErrorCode(null);
+    try {
+      const pendingToken = await peekPendingInvite();
+      if (pendingToken === persistedTokenValue) {
+        await clearPendingInvite();
+      }
+      replace("/today");
+    } catch {
+      setErrorCode("INTERNAL");
+    }
+  }, [clearPendingInvite, peekPendingInvite, persistedTokenValue, replace]);
+
+  const requestAbandon = useCallback(() => {
+    Alert.alert(t("joinAbandonTitle"), t("joinAbandonBody"), [
+      {
+        text: t("commonCancel"),
+        style: "cancel",
+      },
+      {
+        text: t("joinAbandonAction"),
+        style: "destructive",
+        onPress: abandonPersistedInvite,
+      },
+    ]);
+  }, [abandonPersistedInvite, t]);
 
   const memberCountLabel = previewData
     ? formatNumeric(previewData.group.memberCount, localeTag)
@@ -234,6 +271,13 @@ export function JoinScreen({
                   setPreviewRevision((current) => current + 1);
                 }}
               />
+            ) : invalidRouteSecret ? (
+              <AppButton
+                label={t("joinExitAction")}
+                variant="secondary"
+                style={retryButtonStyle}
+                onPress={() => replace("/today")}
+              />
             ) : undefined
           }
         />
@@ -273,6 +317,14 @@ export function JoinScreen({
             }}
           />
         </>
+      ) : null}
+
+      {hasPersistedToken ? (
+        <AppButton
+          label={t("joinAbandonAction")}
+          variant="destructive"
+          onPress={requestAbandon}
+        />
       ) : null}
     </AppScreen>
   );

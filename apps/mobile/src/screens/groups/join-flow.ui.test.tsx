@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
+import { Alert } from "react-native";
 import JoinTokenRoute from "@/app/join/[token]";
 
 type AcceptInviteResponse = {
@@ -27,7 +28,8 @@ const mockAcceptInvite = jest.fn<
 >();
 const mockUseGroups = jest.fn();
 const mockRememberInvite = jest.fn<(token: string) => Promise<void>>();
-const mockConsumePendingInvite = jest.fn<() => Promise<string | null>>();
+const mockPeekPendingInvite = jest.fn<() => Promise<string | null>>();
+const mockClearPendingInvite = jest.fn<() => Promise<void>>();
 const mockReplace = jest.fn();
 const mockPush = jest.fn();
 
@@ -52,7 +54,8 @@ jest.mock("@/lib/auth", () => ({
   useAuth: () => ({
     status: mockAuthStatus,
     rememberInvite: mockRememberInvite,
-    consumePendingInvite: mockConsumePendingInvite,
+    peekPendingInvite: mockPeekPendingInvite,
+    clearPendingInvite: mockClearPendingInvite,
   }),
 }));
 
@@ -81,6 +84,12 @@ const copy: Record<string, string> = {
     "Zu viele Versuche. Bitte warte kurz und versuche es erneut.",
   joinOfflineMessage:
     "Du bist offline. Verbinde dich mit dem Internet und versuche es erneut.",
+  joinAbandonAction: "Einladung verwerfen",
+  joinAbandonTitle: "Einladung verwerfen?",
+  joinAbandonBody:
+    "Du kannst diesen Einladungslink danach nur erneut über den ursprünglichen Link öffnen.",
+  joinExitAction: "Zur Übersicht",
+  commonCancel: "Abbrechen",
 };
 
 jest.mock("@/localization", () => ({
@@ -152,12 +161,15 @@ function createGroupsState(overrides: Record<string, unknown> = {}) {
 }
 
 describe("Task 15 join flows", () => {
+  const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockAuthStatus = "ready";
     mockTokenParam = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
     mockRememberInvite.mockResolvedValue(undefined);
-    mockConsumePendingInvite.mockResolvedValue(null);
+    mockPeekPendingInvite.mockResolvedValue(null);
+    mockClearPendingInvite.mockResolvedValue(undefined);
     mockPreviewInvite.mockResolvedValue(undefined);
     mockAcceptInvite.mockResolvedValue({
       group: {
@@ -179,7 +191,10 @@ describe("Task 15 join flows", () => {
     mockUseGroups.mockReturnValue(createGroupsState());
   });
 
-  it("previews token invites and confirms join with secure token cleanup", async () => {
+  it("clears a persisted token only after its invite acceptance succeeds", async () => {
+    mockPeekPendingInvite.mockResolvedValue(
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    );
     const view = await render(<JoinTokenRoute />);
 
     await waitFor(() =>
@@ -204,11 +219,134 @@ describe("Task 15 join flows", () => {
         "de",
       ),
     );
-    await waitFor(() => expect(mockConsumePendingInvite).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockClearPendingInvite).toHaveBeenCalledTimes(1));
     expect(mockReplace).toHaveBeenCalledWith({
       pathname: "/groups/[id]",
       params: { id: "group-1" },
     });
+  });
+
+  it("does not clear an unrelated pending invite after a direct token acceptance", async () => {
+    const view = await render(<JoinTokenRoute />);
+    await waitFor(() =>
+      expect(mockPreviewInvite).toHaveBeenCalledWith(
+        "token",
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      ),
+    );
+
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Einladung annehmen" }));
+    });
+
+    await waitFor(() => expect(mockAcceptInvite).toHaveBeenCalledTimes(1));
+    expect(mockPeekPendingInvite).toHaveBeenCalledTimes(1);
+    expect(mockClearPendingInvite).not.toHaveBeenCalled();
+  });
+
+  it("keeps a persisted token when invite acceptance fails", async () => {
+    mockAcceptInvite.mockRejectedValue(new Error("OFFLINE"));
+    const view = await render(<JoinTokenRoute />);
+    await waitFor(() =>
+      expect(mockPreviewInvite).toHaveBeenCalledWith(
+        "token",
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      ),
+    );
+
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Einladung annehmen" }));
+    });
+
+    await waitFor(() =>
+      expect(view.getByText(copy.joinOfflineMessage)).toBeTruthy(),
+    );
+    expect(mockClearPendingInvite).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it("confirms explicit invite abandonment while cancel keeps the token", async () => {
+    mockPeekPendingInvite.mockResolvedValue(
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    );
+    const view = await render(<JoinTokenRoute />);
+    await waitFor(() =>
+      expect(mockPreviewInvite).toHaveBeenCalledWith(
+        "token",
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      ),
+    );
+
+    await act(async () => {
+      fireEvent.press(
+        view.getByRole("button", { name: copy.joinAbandonAction }),
+      );
+    });
+    expect(alertSpy).toHaveBeenCalledWith(
+      copy.joinAbandonTitle,
+      copy.joinAbandonBody,
+      expect.any(Array),
+    );
+
+    const cancelButtons = alertSpy.mock.calls.at(-1)?.[2];
+    cancelButtons?.[0]?.onPress?.();
+    expect(mockClearPendingInvite).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.press(
+        view.getByRole("button", { name: copy.joinAbandonAction }),
+      );
+    });
+    const abandonButtons = alertSpy.mock.calls.at(-1)?.[2];
+    await act(async () => {
+      await (
+        abandonButtons?.[1]?.onPress as (() => Promise<void>) | undefined
+      )?.();
+    });
+
+    await waitFor(() => expect(mockClearPendingInvite).toHaveBeenCalledTimes(1));
+    expect(mockReplace).toHaveBeenCalledWith("/today");
+    expect(mockAcceptInvite).not.toHaveBeenCalled();
+  });
+
+  it("leaves a missing token route safely without clearing persisted storage", async () => {
+    mockTokenParam = undefined;
+    const view = await render(<JoinTokenRoute />);
+
+    expect(view.getByText(copy.joinInvalidInviteMessage)).toBeTruthy();
+    fireEvent.press(view.getByRole("button", { name: copy.joinExitAction }));
+
+    expect(mockClearPendingInvite).not.toHaveBeenCalled();
+    expect(mockReplace).toHaveBeenCalledWith("/today");
+  });
+
+  it("keeps a token through preview failure and a join-screen restart", async () => {
+    mockPreviewInvite.mockRejectedValue(new Error("OFFLINE"));
+    mockUseGroups.mockReturnValue(
+      createGroupsState({
+        invitePreview: {
+          status: "error",
+          errorCode: "OFFLINE",
+          data: null,
+        },
+      }),
+    );
+
+    const first = await render(<JoinTokenRoute />);
+    await waitFor(() => expect(first.getByText(copy.joinOfflineMessage)).toBeTruthy());
+    expect(mockPreviewInvite).toHaveBeenCalledTimes(1);
+    expect(mockClearPendingInvite).not.toHaveBeenCalled();
+    await act(async () => {
+      first.unmount();
+    });
+
+    const restarted = await render(<JoinTokenRoute />);
+    await waitFor(() =>
+      expect(restarted.getByText(copy.joinOfflineMessage)).toBeTruthy(),
+    );
+    await waitFor(() => expect(mockPreviewInvite).toHaveBeenCalledTimes(2));
+    expect(mockClearPendingInvite).not.toHaveBeenCalled();
   });
 
   it("shows an already-active hint in invite preview when returned by gateway", async () => {
@@ -258,6 +396,38 @@ describe("Task 15 join flows", () => {
     await waitFor(() =>
       expect(mockPreviewInvite).toHaveBeenCalledWith("code", "ABCD2345EF"),
     );
+  });
+
+  it("accepts a manual code without touching persisted invite storage", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const JoinManualRoute = require("@/app/join/index").default;
+    const view = await render(<JoinManualRoute />);
+
+    fireEvent.changeText(view.getByLabelText("Einladungscode"), "ABCD2345EF");
+    await waitFor(() =>
+      expect(
+        view.getByRole("button", { name: "Einladung prüfen" }).props.accessibilityState
+          .disabled,
+      ).toBe(false),
+    );
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Einladung prüfen" }));
+    });
+    await waitFor(() =>
+      expect(mockPreviewInvite).toHaveBeenCalledWith("code", "ABCD2345EF"),
+    );
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Einladung annehmen" }));
+    });
+
+    await waitFor(() =>
+      expect(mockAcceptInvite).toHaveBeenCalledWith("code", "ABCD2345EF", "de"),
+    );
+    expect(mockClearPendingInvite).not.toHaveBeenCalled();
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: "/groups/[id]",
+      params: { id: "group-1" },
+    });
   });
 
   it("clears stale preview data before requesting a preview for a new manual code", async () => {

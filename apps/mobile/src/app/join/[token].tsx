@@ -20,12 +20,12 @@ export default function JoinRoute() {
   const { status, rememberInvite } = useAuth();
   const { token: tokenParam } = useLocalSearchParams<{ token?: string | string[] }>();
   const token = readValidatedTokenParam(tokenParam);
-  const [stored, setStored] = useState(status === "ready" || !token);
+  const [stored, setStored] = useState(!token);
   const [storeFailed, setStoreFailed] = useState(false);
 
   useEffect(() => {
     let active = true;
-    if (status === "loading" || status === "ready" || !token) {
+    if (status === "loading" || !token) {
       return () => {
         active = false;
       };
@@ -43,14 +43,15 @@ export default function JoinRoute() {
   }, [rememberInvite, status, token]);
 
   if (status === "loading") return null;
+  if (storeFailed) {
+    return (
+      <AppScreen contentContainerStyle={{ justifyContent: "center" }}>
+        <StateFeedback state="error" />
+      </AppScreen>
+    );
+  }
+  if (!stored && token) return null;
   if (status !== "ready") {
-    if (storeFailed) {
-      return (
-        <AppScreen contentContainerStyle={{ justifyContent: "center" }}>
-          <StateFeedback state="error" />
-        </AppScreen>
-      );
-    }
     return stored || !token ? <Redirect href="/" /> : null;
   }
 

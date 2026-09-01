@@ -123,7 +123,7 @@ export function CodeScreen() {
     try {
       const nextStatus = await auth.verifyOtp(code);
       if (nextStatus === "ready") {
-        const inviteToken = await auth.consumePendingInvite().catch(() => null);
+        const inviteToken = await auth.peekPendingInvite().catch(() => null);
         router.replace(
           inviteToken
             ? { pathname: "/join/[token]", params: { token: inviteToken } }
@@ -252,7 +252,8 @@ export function ConsentScreen() {
   if (auth.status !== "consent_required") return <Redirect href="/" />;
   const handleConsent = async () => {
     try {
-      const inviteToken = await auth.grantConsent(locale);
+      await auth.grantConsent(locale);
+      const inviteToken = await auth.peekPendingInvite().catch(() => null);
       router.replace(
         inviteToken
           ? { pathname: "/join/[token]", params: { token: inviteToken } }

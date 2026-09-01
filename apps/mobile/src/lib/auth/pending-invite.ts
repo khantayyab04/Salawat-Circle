@@ -11,13 +11,7 @@ export function createPendingInviteStore(backend: SecureStorageBackend) {
       }
       await backend.setItemAsync(PENDING_INVITE_KEY, normalized);
     },
-    consume: async () => {
-      const token = await backend.getItemAsync(PENDING_INVITE_KEY);
-      if (token !== null) {
-        await backend.deleteItemAsync(PENDING_INVITE_KEY);
-      }
-      return token;
-    },
+    peek: () => backend.getItemAsync(PENDING_INVITE_KEY),
     clear: () => backend.deleteItemAsync(PENDING_INVITE_KEY),
   };
 }
