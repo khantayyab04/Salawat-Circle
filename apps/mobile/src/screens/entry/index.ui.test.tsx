@@ -34,6 +34,14 @@ jest.mock("@/localization", () => ({
         entryConflictLocal: "Meine Änderung",
         entryConflictKeepServer: "Serverstand behalten",
         entryConflictReapply: "Meine Änderung erneut anwenden",
+        offlineRecoveryTitle: "Lokale Daten konnten nicht gelesen werden",
+        offlineRecoveryBody:
+          "Setze den lokalen Speicher zurück und lade deine synchronisierten Daten neu.",
+        offlineRecoveryAction: "Lokalen Speicher zurücksetzen",
+        offlineLoadRetryTitle: "Lokale Daten sind gerade nicht verfügbar",
+        offlineLoadRetryBody:
+          "Der lokale Speicher konnte nicht geladen werden. Versuche es erneut.",
+        offlineLoadRetryAction: "Erneut laden",
       })[key] ?? key,
   }),
 }));
@@ -60,6 +68,7 @@ describe("EntryEditScreen", () => {
       timeZone: "Europe/Berlin",
       busy: false,
       conflictEntryId: null,
+      conflicts: [],
       update: mockUpdate,
     });
     const view = await render(<EntryEditScreen />);
@@ -83,6 +92,7 @@ describe("EntryEditScreen", () => {
       timeZone: "",
       busy: false,
       conflictEntryId: null,
+      conflicts: [],
       update: mockUpdate,
     });
 
@@ -104,20 +114,48 @@ describe("EntryEditScreen", () => {
       ],
       timeZone: "Europe/Berlin",
       busy: false,
-      conflictEntryId: "entry-1",
+      conflictEntryId: "entry-2",
       conflict: {
-        entryId: "entry-1",
+        entryId: "entry-2",
         operation: "update",
-        localAmount: "8",
-        localEntryDate: "2026-08-31",
+        localAmount: "12",
+        localEntryDate: "2026-08-30",
         serverEntry: {
-          id: "entry-1",
-          amount: "7",
-          entryDate: "2026-08-31",
+          id: "entry-2",
+          amount: "10",
+          entryDate: "2026-08-30",
           timezone: "Europe/Berlin",
-          revision: 2,
+          revision: 6,
         },
       },
+      conflicts: [
+        {
+          entryId: "entry-2",
+          operation: "update",
+          localAmount: "12",
+          localEntryDate: "2026-08-30",
+          serverEntry: {
+            id: "entry-2",
+            amount: "10",
+            entryDate: "2026-08-30",
+            timezone: "Europe/Berlin",
+            revision: 6,
+          },
+        },
+        {
+          entryId: "entry-1",
+          operation: "update",
+          localAmount: "8",
+          localEntryDate: "2026-08-31",
+          serverEntry: {
+            id: "entry-1",
+            amount: "7",
+            entryDate: "2026-08-31",
+            timezone: "Europe/Berlin",
+            revision: 2,
+          },
+        },
+      ],
       update: mockUpdate,
       keepServerVersion: mockKeepServerVersion,
       reapplyConflict: mockReapplyConflict,
@@ -137,7 +175,109 @@ describe("EntryEditScreen", () => {
         view.getByRole("button", { name: "Meine Änderung erneut anwenden" }),
       );
     });
-    expect(mockKeepServerVersion).toHaveBeenCalled();
-    expect(mockReapplyConflict).toHaveBeenCalled();
+    expect(mockKeepServerVersion).toHaveBeenCalledWith("entry-1");
+    expect(mockReapplyConflict).toHaveBeenCalledWith("entry-1");
+  });
+
+  it("hides direct edit controls while a conflict awaits resolution", async () => {
+    mockUseEntries.mockReturnValue({
+      entries: [
+        {
+          id: "entry-1",
+          amount: "8",
+          entryDate: "2026-08-31",
+          timezone: "Europe/Berlin",
+          revision: 1,
+        },
+      ],
+      timeZone: "Europe/Berlin",
+      busy: false,
+      conflictEntryId: "entry-1",
+      conflicts: [
+        {
+          entryId: "entry-1",
+          operation: "update",
+          localAmount: "8",
+          localEntryDate: "2026-08-31",
+          serverEntry: {
+            id: "entry-1",
+            amount: "7",
+            entryDate: "2026-08-31",
+            timezone: "Europe/Berlin",
+            revision: 2,
+          },
+        },
+      ],
+      update: mockUpdate,
+      keepServerVersion: mockKeepServerVersion,
+      reapplyConflict: mockReapplyConflict,
+    });
+
+    const view = await render(<EntryEditScreen />);
+
+    expect(view.queryByLabelText("Betrag")).toBeNull();
+    expect(view.queryByLabelText("Datum")).toBeNull();
+    expect(view.queryByRole("button", { name: "Heute" })).toBeNull();
+    expect(view.queryByRole("button", { name: "Gestern" })).toBeNull();
+    expect(
+      view.getByRole("button", { name: "Serverstand behalten" }),
+    ).toBeTruthy();
+  });
+
+  it("replaces edit controls with recovery when local state is invalid", async () => {
+    mockUseEntries.mockReturnValue({
+      entries: [
+        {
+          id: "entry-1",
+          amount: "42",
+          entryDate: "2026-08-31",
+          timezone: "Europe/Berlin",
+          revision: 1,
+        },
+      ],
+      timeZone: "Europe/Berlin",
+      busy: false,
+      errorCode: "INVALID_OFFLINE_STATE",
+      offlineLoadErrorCode: "INVALID_OFFLINE_STATE",
+      conflictEntryId: null,
+      conflicts: [],
+      update: mockUpdate,
+      resetOfflineState: jest.fn(),
+    });
+
+    const view = await render(<EntryEditScreen />);
+
+    expect(
+      view.getByRole("button", { name: "Lokalen Speicher zurücksetzen" }),
+    ).toBeTruthy();
+    expect(
+      view.queryByRole("button", { name: "Speichern" }),
+    ).toBeNull();
+  });
+
+  it("offers retry instead of editing after a transient local cache load failure", async () => {
+    const retryOfflineLoad = jest.fn<() => Promise<void>>().mockResolvedValue(
+      undefined,
+    );
+    mockUseEntries.mockReturnValue({
+      entries: [],
+      timeZone: "",
+      busy: false,
+      errorCode: "INTERNAL",
+      offlineLoadErrorCode: "INTERNAL",
+      conflictEntryId: null,
+      conflicts: [],
+      update: mockUpdate,
+      retryOfflineLoad,
+    });
+
+    const view = await render(<EntryEditScreen />);
+
+    expect(
+      view.getByText("Lokale Daten sind gerade nicht verfügbar"),
+    ).toBeTruthy();
+    expect(view.queryByLabelText("Betrag")).toBeNull();
+    fireEvent.press(view.getByRole("button", { name: "Erneut laden" }));
+    expect(retryOfflineLoad).toHaveBeenCalledTimes(1);
   });
 });

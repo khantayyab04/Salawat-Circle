@@ -2,6 +2,7 @@ import type { EntriesGateway } from "@/lib/entries/entries-gateway";
 import { getEntriesErrorCode } from "@/lib/entries/errors";
 import { classifySyncError, retryAt } from "./retry-policy";
 import type {
+  EntryConflict,
   OfflineAccountState,
   OfflineEntry,
   QueueMutation,
@@ -33,6 +34,38 @@ export class SyncEngine {
     entry.lastAttemptAt = mutation.lastAttemptAt;
     entry.retryCount = mutation.retryCount;
     entry.lastErrorCode = mutation.lastErrorCode;
+  }
+
+  private pendingLocalState(mutation: QueueMutation): OfflineEntry["localState"] {
+    if (mutation.operation === "create") return "pending_create";
+    if (mutation.operation === "delete") return "pending_delete";
+    return "pending_update";
+  }
+
+  private upsertConflict(state: OfflineAccountState, conflict: EntryConflict) {
+    const existing = state.conflicts.findIndex(
+      ({ entryId }) => entryId === conflict.entryId,
+    );
+    if (existing >= 0) state.conflicts[existing] = conflict;
+    else state.conflicts.push(conflict);
+    if (!state.conflict || state.conflict.entryId === conflict.entryId) {
+      state.conflict = conflict;
+    }
+  }
+
+  private clearConflict(state: OfflineAccountState, entryId: string) {
+    state.conflicts = state.conflicts.filter(
+      (conflict) => conflict.entryId !== entryId,
+    );
+    if (
+      state.conflict?.entryId === entryId ||
+      !state.conflict ||
+      !state.conflicts.some(
+        (conflict) => conflict.entryId === state.conflict?.entryId,
+      )
+    ) {
+      state.conflict = state.conflicts[0] ?? null;
+    }
   }
 
   private async execute(mutation: QueueMutation) {
@@ -68,7 +101,10 @@ export class SyncEngine {
     mutation: QueueMutation,
     result: Awaited<ReturnType<SyncEngine["execute"]>>,
   ) {
-    const entry = this.entry(state, mutation.entityId);
+    const entry =
+      mutation.entity === "entry"
+        ? this.entry(state, mutation.entityId)
+        : undefined;
     if ((mutation.operation === "create" || mutation.operation === "update") && result) {
       const replacement: OfflineEntry = {
         ...result,
@@ -87,6 +123,9 @@ export class SyncEngine {
       const entryIndex = state.entries.indexOf(entry);
       if (entryIndex >= 0) state.entries.splice(entryIndex, 1);
     }
+    if (mutation.entity === "entry") {
+      this.clearConflict(state, mutation.entityId);
+    }
     const mutationIndex = state.queue.indexOf(mutation);
     if (mutationIndex >= 0) state.queue.splice(mutationIndex, 1);
   }
@@ -96,7 +135,10 @@ export class SyncEngine {
     mutation: QueueMutation,
     code: ReturnType<typeof getEntriesErrorCode>,
   ): Promise<boolean> {
-    const entry = this.entry(state, mutation.entityId);
+    const entry =
+      mutation.entity === "entry"
+        ? this.entry(state, mutation.entityId)
+        : undefined;
     mutation.lastErrorCode = code;
     mutation.lastAttemptAt = this.now().toISOString();
     mutation.retryCount += 1;
@@ -112,9 +154,6 @@ export class SyncEngine {
       return false;
     }
     if (kind === "conflict" && mutation.entity === "entry") {
-      mutation.status = "conflict";
-      mutation.nextAttemptAt = null;
-      this.updateEntryFailure(entry, mutation, "conflict");
       if (
         entry &&
         (mutation.operation === "update" || mutation.operation === "delete") &&
@@ -123,9 +162,33 @@ export class SyncEngine {
         let serverEntry;
         try {
           serverEntry = await this.gateway.getEntry(mutation.entityId);
-        } catch {
+        } catch (fetchError) {
+          const fetchCode = getEntriesErrorCode(fetchError);
+          mutation.lastErrorCode = fetchCode;
+          if (
+            mutation.operation === "delete" &&
+            fetchCode === "NOT_FOUND"
+          ) {
+            this.applySuccess(state, mutation, null);
+            return true;
+          }
+          const fetchKind = classifySyncError(fetchCode);
+          if (fetchKind === "retry") {
+            mutation.status = "pending";
+            mutation.nextAttemptAt = retryAt(
+              this.now(),
+              mutation.retryCount,
+              this.random,
+            ).toISOString();
+            this.updateEntryFailure(
+              entry,
+              mutation,
+              this.pendingLocalState(mutation),
+            );
+            return false;
+          }
           mutation.status = "failed";
-          mutation.lastErrorCode = "INTERNAL";
+          mutation.nextAttemptAt = null;
           this.updateEntryFailure(entry, mutation, "failed");
           return false;
         }
@@ -135,17 +198,23 @@ export class SyncEngine {
           serverEntry.entryDate === mutation.payload.entryDate
         ) {
           this.applySuccess(state, mutation, serverEntry);
-          state.conflict = null;
           return true;
         }
-        state.conflict = {
+        mutation.status = "conflict";
+        mutation.nextAttemptAt = null;
+        this.updateEntryFailure(entry, mutation, "conflict");
+        this.upsertConflict(state, {
           entryId: mutation.entityId,
           operation: mutation.operation,
           localAmount: entry.amount,
           localEntryDate: entry.entryDate,
           serverEntry,
-        };
+        });
+        return false;
       }
+      mutation.status = "failed";
+      mutation.nextAttemptAt = null;
+      this.updateEntryFailure(entry, mutation, "failed");
       return false;
     }
     mutation.status = "failed";

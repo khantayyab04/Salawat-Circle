@@ -1,6 +1,7 @@
 import type {
   EntriesGateway,
   Entry,
+  EntryCursor,
   EntrySummary,
 } from "@/lib/entries/entries-gateway";
 import {
@@ -12,7 +13,9 @@ import {
 import { SyncEngine } from "./sync-engine";
 import {
   emptyOfflineState,
+  migrateOfflineState,
   type OfflineAccountState,
+  type EntryConflict,
   type OfflineEntry,
 } from "./types";
 
@@ -30,6 +33,12 @@ export class OfflineController {
   state = emptyOfflineState();
   private readonly syncRunner: SyncRunner;
   private transition = Promise.resolve();
+  private loadFailed = false;
+  private loadFailureCode = "INTERNAL";
+
+  private cloneState(state: OfflineAccountState) {
+    return JSON.parse(JSON.stringify(state)) as OfflineAccountState;
+  }
 
   constructor(
     private readonly storage: OfflineStorage,
@@ -39,7 +48,18 @@ export class OfflineController {
     syncRunner?: SyncRunner,
   ) {
     this.syncRunner =
-      syncRunner ?? new SyncEngine(gateway, storage, now, Math.random);
+      syncRunner ??
+      new SyncEngine(
+        gateway,
+        {
+          save: async (state) => {
+            await this.storage.save(state);
+            this.state = this.cloneState(state);
+          },
+        },
+        now,
+        Math.random,
+      );
   }
 
   private runExclusive<T>(action: () => Promise<T>): Promise<T> {
@@ -53,13 +73,38 @@ export class OfflineController {
 
   load() {
     return this.runExclusive(async () => {
-      this.state = (await this.storage.load()) ?? emptyOfflineState();
+      try {
+        this.state = migrateOfflineState(await this.storage.load());
+        this.loadFailed = false;
+        return this.state;
+      } catch (error) {
+        this.loadFailed = true;
+        this.loadFailureCode =
+          error instanceof Error && error.message === "INVALID_OFFLINE_STATE"
+            ? "INVALID_OFFLINE_STATE"
+            : "INTERNAL";
+        throw error;
+      }
+    });
+  }
+
+  reset() {
+    return this.runExclusive(async () => {
+      await this.storage.clear();
+      this.state = emptyOfflineState();
+      this.loadFailed = false;
+      this.loadFailureCode = "INTERNAL";
       return this.state;
     });
   }
 
+  private ensureWritable() {
+    if (this.loadFailed) throw new Error(this.loadFailureCode);
+  }
+
   private mutate(action: (state: OfflineAccountState) => void) {
     return this.runExclusive(async () => {
+      this.ensureWritable();
       const next = JSON.parse(JSON.stringify(this.state)) as OfflineAccountState;
       action(next);
       await this.storage.save(next);
@@ -71,9 +116,11 @@ export class OfflineController {
     entries: Entry[];
     summary: EntrySummary;
     timeZone: string;
+    serverCursor: EntryCursor | null;
     hasMore: boolean;
   }) {
     return this.runExclusive(async () => {
+      this.ensureWritable();
       const next = JSON.parse(JSON.stringify(this.state)) as OfflineAccountState;
       const pendingById = new Map(
         next.entries
@@ -88,30 +135,29 @@ export class OfflineController {
         retryCount: 0,
         lastErrorCode: null,
       }));
-      const retainedSynced = next.entries.filter(
-        (entry) =>
-          entry.localState === "synced" &&
-          input.hasMore &&
-          !serverEntries.some(({ id }) => id === entry.id),
-      );
       next.entries = [
         ...serverEntries.map((entry) => pendingById.get(entry.id) ?? entry),
         ...Array.from(pendingById.values()).filter(
           (entry) => !serverEntries.some(({ id }) => id === entry.id),
         ),
-        ...retainedSynced,
       ];
       if (next.queue.length === 0) next.summary = input.summary;
       next.timeZone = input.timeZone;
-      next.hasMore = input.hasMore;
+      next.serverCursor = input.serverCursor;
+      next.hasMore = input.hasMore && input.serverCursor !== null;
       await this.storage.save(next);
       this.state = next;
       return this.state;
     });
   }
 
-  appendPage(entries: Entry[], hasMore: boolean) {
+  appendPage(
+    entries: Entry[],
+    serverCursor: EntryCursor | null,
+    hasMore: boolean,
+  ) {
     return this.runExclusive(async () => {
+      this.ensureWritable();
       const next = JSON.parse(JSON.stringify(this.state)) as OfflineAccountState;
       const existingIds = new Set(next.entries.map(({ id }) => id));
       next.entries.push(
@@ -128,7 +174,8 @@ export class OfflineController {
             }),
           ),
       );
-      next.hasMore = hasMore;
+      next.serverCursor = serverCursor;
+      next.hasMore = hasMore && serverCursor !== null;
       await this.storage.save(next);
       this.state = next;
       return this.state;
@@ -188,19 +235,24 @@ export class OfflineController {
 
   sync(forcePendingNow = false) {
     return this.runExclusive(async () => {
+      this.ensureWritable();
+      let next = this.cloneState(this.state);
       if (forcePendingNow) {
-        for (const mutation of this.state.queue) {
+        for (const mutation of next.queue) {
           if (mutation.status === "pending") mutation.nextAttemptAt = null;
         }
-        await this.storage.save(this.state);
+        await this.storage.save(next);
+        this.state = this.cloneState(next);
+        next = this.cloneState(next);
       }
-      await this.syncRunner.drain(this.state);
+      await this.syncRunner.drain(next);
       return this.state;
     });
   }
 
   async retryFailed() {
     await this.runExclusive(async () => {
+      this.ensureWritable();
       for (const mutation of this.state.queue) {
         if (mutation.status === "failed") {
           mutation.status = "pending";
@@ -224,14 +276,63 @@ export class OfflineController {
     return this.sync();
   }
 
-  keepServerVersion() {
+  private ensureConflictCollection(state: OfflineAccountState) {
+    if (!Array.isArray(state.conflicts)) state.conflicts = [];
+    if (
+      state.conflict &&
+      !state.conflicts.some(
+        ({ entryId }) => entryId === state.conflict?.entryId,
+      )
+    ) {
+      state.conflicts.unshift(state.conflict);
+    }
+  }
+
+  private selectedConflict(
+    state: OfflineAccountState,
+    entryId?: string,
+  ): EntryConflict | null {
+    this.ensureConflictCollection(state);
+    if (entryId) {
+      const selected =
+        state.conflicts.find((conflict) => conflict.entryId === entryId) ??
+        (state.conflict?.entryId === entryId ? state.conflict : null);
+      if (selected) state.conflict = selected;
+      return selected;
+    }
+    if (state.conflict) return state.conflict;
+    const first = state.conflicts[0] ?? null;
+    state.conflict = first;
+    return first;
+  }
+
+  private removeConflict(state: OfflineAccountState, entryId: string) {
+    state.conflicts = state.conflicts.filter(
+      (conflict) => conflict.entryId !== entryId,
+    );
+    if (
+      state.conflict?.entryId === entryId ||
+      !state.conflict ||
+      !state.conflicts.some(
+        (conflict) => conflict.entryId === state.conflict?.entryId,
+      )
+    ) {
+      state.conflict = state.conflicts[0] ?? null;
+    }
+  }
+
+  keepServerVersion(entryId?: string) {
     return this.runExclusive(async () => {
-      const conflict = this.state.conflict;
+      this.ensureWritable();
+      const next = JSON.parse(JSON.stringify(this.state)) as OfflineAccountState;
+      const conflict = this.selectedConflict(next, entryId);
       if (!conflict) return;
-      this.state.queue = this.state.queue.filter(
-        (mutation) => mutation.entityId !== conflict.entryId,
+      next.queue = next.queue.filter(
+        (mutation) =>
+          mutation.entity !== "entry" ||
+          mutation.entityId !== conflict.entryId,
       );
-      const current = this.state.entries.find(
+      const current = next.entries.find(
         (entry) => entry.id === conflict.entryId,
       );
       const replacement: OfflineEntry = {
@@ -243,16 +344,22 @@ export class OfflineController {
         lastErrorCode: null,
       };
       if (current) {
-        this.state.entries[this.state.entries.indexOf(current)] = replacement;
+        next.entries[next.entries.indexOf(current)] = replacement;
       } else {
-        this.state.entries.push(replacement);
+        next.entries.push(replacement);
       }
-      this.state.conflict = null;
-      await this.storage.save(this.state);
-      if (this.state.timeZone) {
+      this.removeConflict(next, conflict.entryId);
+      await this.storage.save(next);
+      this.state = next;
+      if (next.timeZone) {
         try {
-          this.state.summary = await this.gateway.getSummary(this.state.timeZone);
-          await this.storage.save(this.state);
+          const summary = await this.gateway.getSummary(next.timeZone);
+          const withSummary = JSON.parse(
+            JSON.stringify(this.state),
+          ) as OfflineAccountState;
+          withSummary.summary = summary;
+          await this.storage.save(withSummary);
+          this.state = withSummary;
         } catch {
           // The selected server entry is authoritative even if summary refresh fails.
         }
@@ -260,14 +367,18 @@ export class OfflineController {
     });
   }
 
-  async reapplyConflict() {
+  async reapplyConflict(entryId?: string) {
     await this.runExclusive(async () => {
-      const conflict = this.state.conflict;
+      this.ensureWritable();
+      const next = JSON.parse(JSON.stringify(this.state)) as OfflineAccountState;
+      const conflict = this.selectedConflict(next, entryId);
       if (!conflict) return;
-      const mutation = this.state.queue.find(
-        (candidate) => candidate.entityId === conflict.entryId,
+      const mutation = next.queue.find(
+        (candidate) =>
+          candidate.entity === "entry" &&
+          candidate.entityId === conflict.entryId,
       );
-      const entry = this.state.entries.find(
+      const entry = next.entries.find(
         (candidate) => candidate.id === conflict.entryId,
       );
       if (!mutation || !entry) throw new Error("NOT_FOUND");
@@ -281,8 +392,9 @@ export class OfflineController {
       entry.serverRevision = conflict.serverEntry.revision;
       entry.retryCount = 0;
       entry.lastErrorCode = null;
-      this.state.conflict = null;
-      await this.storage.save(this.state);
+      this.removeConflict(next, conflict.entryId);
+      await this.storage.save(next);
+      this.state = next;
     });
     await this.sync();
   }

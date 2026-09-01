@@ -35,8 +35,13 @@ export class EntriesStore {
     pendingCount: 0,
     failedCount: 0,
     errorCode: null as EntriesErrorCode | null,
+    offlineLoadErrorCode: null as
+      | "INVALID_OFFLINE_STATE"
+      | "INTERNAL"
+      | null,
     conflictEntryId: null as string | null,
     conflict: null as EntryConflict | null,
+    conflicts: [] as EntryConflict[],
   };
 
   private readonly listeners = new Set<() => void>();
@@ -89,15 +94,16 @@ export class EntriesStore {
     this.snapshot.summary = state.summary;
     this.snapshot.timeZone = state.timeZone || this.fallbackTimeZone;
     this.snapshot.hasMore = state.hasMore;
-    this.snapshot.conflict = state.conflict;
-    this.snapshot.conflictEntryId = state.conflict?.entryId ?? null;
+    this.snapshot.conflicts = state.conflicts;
+    this.snapshot.conflict = state.conflict ?? state.conflicts[0] ?? null;
+    this.snapshot.conflictEntryId = this.snapshot.conflict?.entryId ?? null;
     this.snapshot.pendingCount = state.queue.filter(
       ({ status }) => status === "pending",
     ).length;
     this.snapshot.failedCount = state.queue.filter(
       ({ status }) => status === "failed",
     ).length;
-    this.snapshot.syncState = state.conflict
+    this.snapshot.syncState = state.conflicts.length > 0
       ? "conflict"
       : this.snapshot.failedCount > 0
         ? "error"
@@ -115,7 +121,20 @@ export class EntriesStore {
   async load() {
     let hasCachedState = false;
     if (this.offline) {
-      const cached = await this.offline.load();
+      let cached;
+      try {
+        cached = await this.offline.load();
+        this.snapshot.offlineLoadErrorCode = null;
+      } catch (error) {
+        this.snapshot.offlineLoadErrorCode =
+          getEntriesErrorCode(error) === "INVALID_OFFLINE_STATE"
+            ? "INVALID_OFFLINE_STATE"
+            : "INTERNAL";
+        this.snapshot.errorCode = this.snapshot.offlineLoadErrorCode;
+        this.snapshot.viewState = "error";
+        this.notify();
+        return;
+      }
       hasCachedState =
         cached.entries.length > 0 ||
         cached.queue.length > 0 ||
@@ -141,6 +160,7 @@ export class EntriesStore {
           entries: page.items,
           summary,
           timeZone: this.snapshot.timeZone,
+          serverCursor: page.nextCursor,
           hasMore: page.hasMore,
         });
         this.applyOfflineState();
@@ -293,21 +313,24 @@ export class EntriesStore {
     ) {
       return;
     }
-    const last = this.snapshot.entries.at(-1)!;
+    if (this.offline && !this.offline.state.serverCursor) return;
+    const cursor = this.offline
+      ? this.offline.state.serverCursor
+      : (() => {
+          const last = this.snapshot.entries.at(-1)!;
+          return {
+            entryDate: last.entryDate,
+            createdAt: last.createdAt,
+            id: last.id,
+          };
+        })();
     this.snapshot.loadingMore = true;
     this.snapshot.paginationError = false;
     this.notify();
     try {
-      const page = await this.gateway.list(
-        {
-          entryDate: last.entryDate,
-          createdAt: last.createdAt,
-          id: last.id,
-        },
-        30,
-      );
+      const page = await this.gateway.list(cursor, 30);
       if (this.offline) {
-        await this.offline.appendPage(page.items, page.hasMore);
+        await this.offline.appendPage(page.items, page.nextCursor, page.hasMore);
         this.applyOfflineState();
         return;
       }
@@ -572,10 +595,52 @@ export class EntriesStore {
     this.notify();
   }
 
-  async keepServerVersion() {
+  async resetOfflineState() {
+    if (
+      !this.offline ||
+      this.snapshot.offlineLoadErrorCode !== "INVALID_OFFLINE_STATE" ||
+      this.snapshot.busy
+    ) {
+      return;
+    }
+    this.snapshot.busy = true;
+    this.notify();
+    try {
+      await this.offline.reset();
+      this.applyOfflineState();
+      await this.load();
+    } catch {
+      this.snapshot.offlineLoadErrorCode = "INVALID_OFFLINE_STATE";
+      this.snapshot.errorCode = "INVALID_OFFLINE_STATE";
+      this.snapshot.viewState = "error";
+    } finally {
+      this.snapshot.busy = false;
+      this.notify();
+    }
+  }
+
+  async retryOfflineLoad() {
+    if (
+      !this.offline ||
+      this.snapshot.offlineLoadErrorCode !== "INTERNAL" ||
+      this.snapshot.busy
+    ) {
+      return;
+    }
+    this.snapshot.busy = true;
+    this.notify();
+    try {
+      await this.load();
+    } finally {
+      this.snapshot.busy = false;
+      this.notify();
+    }
+  }
+
+  async keepServerVersion(entryId?: string) {
     if (!this.offline) return;
     try {
-      await this.offline.keepServerVersion();
+      await this.offline.keepServerVersion(entryId);
       this.applyOfflineState();
     } catch (error) {
       this.setError(error);
@@ -584,10 +649,10 @@ export class EntriesStore {
     this.notify();
   }
 
-  async reapplyConflict() {
+  async reapplyConflict(entryId?: string) {
     if (!this.offline) return;
     try {
-      await this.offline.reapplyConflict();
+      await this.offline.reapplyConflict(entryId);
       this.applyOfflineState();
     } catch (error) {
       this.setError(error);
