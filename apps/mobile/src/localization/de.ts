@@ -305,6 +305,14 @@ export const de = {
   syncConflictTitle: "Änderungskonflikt",
   syncConflictBody: "Prüfe den betroffenen Eintrag, bevor du fortfährst.",
   syncRetry: "Erneut versuchen",
+  offlineRecoveryTitle: "Lokale Daten konnten nicht gelesen werden",
+  offlineRecoveryBody:
+    "Setze den lokalen Speicher zurück und lade deine synchronisierten Daten neu.",
+  offlineRecoveryAction: "Lokalen Speicher zurücksetzen",
+  offlineRecoveryConfirmTitle: "Lokale Daten zurücksetzen?",
+  offlineRecoveryConfirmBody:
+    "Nicht synchronisierte Einträge und Zieländerungen auf diesem Gerät gehen verloren. Bereits synchronisierte Daten werden anschließend erneut vom Server geladen.",
+  offlineRecoveryConfirmAction: "Zurücksetzen",
   statePartialErrorTitle: "Nicht alles konnte geladen werden",
   statePartialErrorBody: "Die vorhandenen Inhalte bleiben sichtbar.",
   stateErrorTitle: "Verbindung nicht möglich",

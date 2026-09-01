@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { EntriesGateway, Entry } from "@/lib/entries/entries-gateway";
 import { SyncEngine } from "./sync-engine";
-import { emptyOfflineState, type OfflineAccountState } from "./types";
+import {
+  emptyOfflineState,
+  migrateOfflineState,
+  type OfflineAccountState,
+} from "./types";
 
 const now = "2026-08-31T10:00:00.000Z";
 const entry: Entry = {
@@ -428,6 +432,93 @@ describe("SyncEngine", () => {
       retryCount: 1,
       lastErrorCode: "INVALID_INPUT",
     });
+  });
+
+  it("persists a valid failed state when conflict details cannot be loaded", async () => {
+    const state = pendingCreate();
+    state.entries[0] = {
+      ...state.entries[0],
+      amount: "50",
+      revision: 3,
+      serverRevision: 3,
+      localState: "pending_update",
+    };
+    state.queue[0] = {
+      id: "mutation-1",
+      entity: "entry",
+      operation: "update",
+      entityId: entry.id,
+      payload: { amount: 50, entryDate: entry.entryDate },
+      expectedRevision: 3,
+      createdAt: now,
+      status: "pending",
+      lastAttemptAt: null,
+      retryCount: 0,
+      lastErrorCode: null,
+      nextAttemptAt: null,
+    };
+
+    await new SyncEngine(
+      gateway({
+        update: vi
+          .fn()
+          .mockRejectedValue(new Error("ENTRY_VERSION_CONFLICT")),
+        getEntry: undefined,
+      }),
+      { save: vi.fn().mockResolvedValue(undefined) },
+      () => new Date(now),
+    ).drain(state);
+
+    expect(state.queue[0]).toMatchObject({
+      status: "failed",
+      lastErrorCode: "ENTRY_VERSION_CONFLICT",
+      nextAttemptAt: null,
+    });
+    expect(state.entries[0]).toMatchObject({
+      localState: "failed",
+      lastErrorCode: "ENTRY_VERSION_CONFLICT",
+    });
+    expect(state.conflicts).toEqual([]);
+    expect(() => migrateOfflineState(structuredClone(state))).not.toThrow();
+  });
+
+  it("reconciles a conflicted delete when the server entry is already gone", async () => {
+    const state = pendingCreate();
+    state.entries[0] = {
+      ...state.entries[0],
+      revision: 3,
+      serverRevision: 3,
+      localState: "pending_delete",
+    };
+    state.queue[0] = {
+      id: "mutation-1",
+      entity: "entry",
+      operation: "delete",
+      entityId: entry.id,
+      payload: null,
+      expectedRevision: 3,
+      createdAt: now,
+      status: "pending",
+      lastAttemptAt: null,
+      retryCount: 0,
+      lastErrorCode: null,
+      nextAttemptAt: null,
+    };
+
+    await new SyncEngine(
+      gateway({
+        delete: vi
+          .fn()
+          .mockRejectedValue(new Error("ENTRY_VERSION_CONFLICT")),
+        getEntry: vi.fn().mockRejectedValue(new Error("NOT_FOUND")),
+      }),
+      { save: vi.fn().mockResolvedValue(undefined) },
+      () => new Date(now),
+    ).drain(state);
+
+    expect(state.queue).toEqual([]);
+    expect(state.entries).toEqual([]);
+    expect(() => migrateOfflineState(structuredClone(state))).not.toThrow();
   });
 
   it("refreshes an expired session exactly once before retrying", async () => {

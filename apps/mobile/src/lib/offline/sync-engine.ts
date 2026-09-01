@@ -159,6 +159,13 @@ export class SyncEngine {
         } catch (fetchError) {
           const fetchCode = getEntriesErrorCode(fetchError);
           mutation.lastErrorCode = fetchCode;
+          if (
+            mutation.operation === "delete" &&
+            fetchCode === "NOT_FOUND"
+          ) {
+            this.applySuccess(state, mutation, null);
+            return true;
+          }
           const fetchKind = classifySyncError(fetchCode);
           if (fetchKind === "retry") {
             mutation.status = "pending";
@@ -199,9 +206,9 @@ export class SyncEngine {
         });
         return false;
       }
-      mutation.status = "conflict";
+      mutation.status = "failed";
       mutation.nextAttemptAt = null;
-      this.updateEntryFailure(entry, mutation, "conflict");
+      this.updateEntryFailure(entry, mutation, "failed");
       return false;
     }
     mutation.status = "failed";

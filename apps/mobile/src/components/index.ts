@@ -5,5 +5,6 @@ export { AppText } from "./app-text";
 export { FormField } from "./form-field";
 export { EntryRow } from "./entry-row";
 export { GoalSection } from "./goal-section";
+export { OfflineRecoveryCard } from "./offline-recovery-card";
 export { StateFeedback, type ViewState } from "./state-feedback";
 export { StatusBanner } from "./status-banner";

@@ -34,6 +34,10 @@ jest.mock("@/localization", () => ({
         entryConflictLocal: "Meine Änderung",
         entryConflictKeepServer: "Serverstand behalten",
         entryConflictReapply: "Meine Änderung erneut anwenden",
+        offlineRecoveryTitle: "Lokale Daten konnten nicht gelesen werden",
+        offlineRecoveryBody:
+          "Setze den lokalen Speicher zurück und lade deine synchronisierten Daten neu.",
+        offlineRecoveryAction: "Lokalen Speicher zurücksetzen",
       })[key] ?? key,
   }),
 }));
@@ -169,5 +173,35 @@ describe("EntryEditScreen", () => {
     });
     expect(mockKeepServerVersion).toHaveBeenCalledWith("entry-1");
     expect(mockReapplyConflict).toHaveBeenCalledWith("entry-1");
+  });
+
+  it("replaces edit controls with recovery when local state is invalid", async () => {
+    mockUseEntries.mockReturnValue({
+      entries: [
+        {
+          id: "entry-1",
+          amount: "42",
+          entryDate: "2026-08-31",
+          timezone: "Europe/Berlin",
+          revision: 1,
+        },
+      ],
+      timeZone: "Europe/Berlin",
+      busy: false,
+      errorCode: "INVALID_OFFLINE_STATE",
+      conflictEntryId: null,
+      conflicts: [],
+      update: mockUpdate,
+      resetOfflineState: jest.fn(),
+    });
+
+    const view = await render(<EntryEditScreen />);
+
+    expect(
+      view.getByRole("button", { name: "Lokalen Speicher zurücksetzen" }),
+    ).toBeTruthy();
+    expect(
+      view.queryByRole("button", { name: "Speichern" }),
+    ).toBeNull();
   });
 });

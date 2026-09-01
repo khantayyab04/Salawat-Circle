@@ -1,5 +1,6 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import { act, fireEvent, render } from "@testing-library/react-native";
+import { Alert } from "react-native";
 import { TodayScreen } from "./index";
 
 const mockCreate = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
@@ -51,6 +52,15 @@ jest.mock("@/localization", () => ({
         syncFailedTitle: "Synchronisierung fehlgeschlagen",
         syncFailedBody: "Einige Änderungen brauchen deine Aufmerksamkeit.",
         syncRetry: "Erneut versuchen",
+        offlineRecoveryTitle: "Lokale Daten konnten nicht gelesen werden",
+        offlineRecoveryBody:
+          "Setze den lokalen Speicher zurück und lade deine synchronisierten Daten neu.",
+        offlineRecoveryAction: "Lokalen Speicher zurücksetzen",
+        offlineRecoveryConfirmTitle: "Lokale Daten zurücksetzen?",
+        offlineRecoveryConfirmBody:
+          "Nicht synchronisierte Änderungen auf diesem Gerät gehen verloren.",
+        offlineRecoveryConfirmAction: "Zurücksetzen",
+        commonCancel: "Abbrechen",
       })[key] ?? key,
   }),
 }));
@@ -83,6 +93,7 @@ function entries(overrides = {}) {
     clearGoal: jest.fn(),
     loadMore: jest.fn(),
     retrySync: jest.fn(),
+    resetOfflineState: jest.fn(),
     ...overrides,
   };
 }
@@ -157,5 +168,65 @@ describe("TodayScreen", () => {
     expect(view.getByText("Synchronisierung fehlgeschlagen")).toBeTruthy();
     fireEvent.press(view.getByRole("button", { name: "Erneut versuchen" }));
     expect(retrySync).toHaveBeenCalled();
+  });
+
+  it("replaces mutation controls with an explicit invalid-state recovery action", async () => {
+    mockEntries.mockReturnValue(
+      entries({
+        viewState: "error",
+        errorCode: "INVALID_OFFLINE_STATE",
+      }),
+    );
+
+    const view = await render(<TodayScreen />);
+
+    expect(
+      view.getByText("Lokale Daten konnten nicht gelesen werden"),
+    ).toBeTruthy();
+    expect(
+      view.getByText(
+        "Setze den lokalen Speicher zurück und lade deine synchronisierten Daten neu.",
+      ),
+    ).toBeTruthy();
+    expect(
+      view.getByRole("button", { name: "Lokalen Speicher zurücksetzen" }),
+    ).toBeTruthy();
+    expect(
+      view.queryByRole("button", { name: "Eintragen" }),
+    ).toBeNull();
+  });
+
+  it("requires confirmation before resetting an invalid local cache", async () => {
+    const resetOfflineState = jest.fn<() => Promise<void>>().mockResolvedValue(
+      undefined,
+    );
+    const alert = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
+    mockEntries.mockReturnValue(
+      entries({
+        viewState: "error",
+        errorCode: "INVALID_OFFLINE_STATE",
+        resetOfflineState,
+      }),
+    );
+    const view = await render(<TodayScreen />);
+
+    fireEvent.press(
+      view.getByRole("button", { name: "Lokalen Speicher zurücksetzen" }),
+    );
+
+    expect(resetOfflineState).not.toHaveBeenCalled();
+    expect(alert).toHaveBeenCalledWith(
+      "Lokale Daten zurücksetzen?",
+      "Nicht synchronisierte Änderungen auf diesem Gerät gehen verloren.",
+      expect.any(Array),
+    );
+    const buttons = alert.mock.calls[0]?.[2] ?? [];
+    const cancel = buttons.find(({ style }) => style === "cancel");
+    const confirm = buttons.find(({ style }) => style === "destructive");
+    cancel?.onPress?.();
+    expect(resetOfflineState).not.toHaveBeenCalled();
+    confirm?.onPress?.();
+    expect(resetOfflineState).toHaveBeenCalledTimes(1);
+    alert.mockRestore();
   });
 });

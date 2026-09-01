@@ -5,6 +5,8 @@ import {
   GoalSection,
   AppText,
   FormField,
+  OfflineRecoveryCard,
+  AppScreen,
   StateFeedback,
   StatusBanner,
 } from "@/components";
@@ -37,6 +39,18 @@ export function TodayScreen() {
   const [amount, setAmount] = useState("");
   const [inputError, setInputError] = useState<string | undefined>();
   const stacked = width < 360 || fontScale >= 1.3;
+
+  if (entries.errorCode === "INVALID_OFFLINE_STATE") {
+    return (
+      <AppScreen>
+        <OfflineRecoveryCard
+          busy={entries.busy}
+          onReset={entries.resetOfflineState}
+        />
+      </AppScreen>
+    );
+  }
+
   const goalProgress = describeGoalProgress(
     entries.summary.achievedDays,
     entries.summary.eligibleGoalDays,

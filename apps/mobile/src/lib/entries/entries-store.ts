@@ -305,21 +305,21 @@ export class EntriesStore {
       return;
     }
     if (this.offline && !this.offline.state.serverCursor) return;
-    const last = this.snapshot.entries.at(-1)!;
+    const cursor = this.offline
+      ? this.offline.state.serverCursor
+      : (() => {
+          const last = this.snapshot.entries.at(-1)!;
+          return {
+            entryDate: last.entryDate,
+            createdAt: last.createdAt,
+            id: last.id,
+          };
+        })();
     this.snapshot.loadingMore = true;
     this.snapshot.paginationError = false;
     this.notify();
     try {
-      const page = await this.gateway.list(
-        this.offline
-          ? this.offline.state.serverCursor
-          : {
-              entryDate: last.entryDate,
-              createdAt: last.createdAt,
-              id: last.id,
-            },
-        30,
-      );
+      const page = await this.gateway.list(cursor, 30);
       if (this.offline) {
         await this.offline.appendPage(page.items, page.nextCursor, page.hasMore);
         this.applyOfflineState();
@@ -584,6 +584,29 @@ export class EntriesStore {
       this.snapshot.syncState = "error";
     }
     this.notify();
+  }
+
+  async resetOfflineState() {
+    if (
+      !this.offline ||
+      this.snapshot.errorCode !== "INVALID_OFFLINE_STATE" ||
+      this.snapshot.busy
+    ) {
+      return;
+    }
+    this.snapshot.busy = true;
+    this.notify();
+    try {
+      await this.offline.reset();
+      this.applyOfflineState();
+      await this.load();
+    } catch {
+      this.snapshot.errorCode = "INVALID_OFFLINE_STATE";
+      this.snapshot.viewState = "error";
+    } finally {
+      this.snapshot.busy = false;
+      this.notify();
+    }
   }
 
   async keepServerVersion(entryId?: string) {

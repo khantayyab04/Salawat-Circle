@@ -298,6 +298,14 @@ export const en = {
   syncConflictTitle: "Change conflict",
   syncConflictBody: "Review the affected entry before continuing.",
   syncRetry: "Try again",
+  offlineRecoveryTitle: "Local data could not be read",
+  offlineRecoveryBody:
+    "Reset local storage and reload your synchronized data.",
+  offlineRecoveryAction: "Reset local storage",
+  offlineRecoveryConfirmTitle: "Reset local data?",
+  offlineRecoveryConfirmBody:
+    "Unsynchronized entries and goal changes on this device will be discarded. Synchronized data will then be loaded again from the server.",
+  offlineRecoveryConfirmAction: "Reset",
   statePartialErrorTitle: "Some content could not load",
   statePartialErrorBody: "Available content remains visible.",
   stateErrorTitle: "Unable to connect",

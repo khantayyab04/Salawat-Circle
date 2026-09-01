@@ -819,10 +819,106 @@ describe("EntriesStore", () => {
     await expect(store.load()).resolves.toBeUndefined();
 
     expect(store.snapshot.viewState).toBe("error");
-    expect(store.snapshot.errorCode).toBe("INTERNAL");
+    expect(store.snapshot.errorCode).toBe("INVALID_OFFLINE_STATE");
     expect(list).not.toHaveBeenCalled();
     expect(persistence.save).not.toHaveBeenCalled();
     expect((await persistence.load()).queue).toHaveLength(1);
+  });
+
+  it("clears invalid local state and reloads canonical server data on explicit recovery", async () => {
+    const malformed = emptyOfflineState();
+    malformed.summary = {
+      todayTotal: 5,
+    } as unknown as OfflineAccountState["summary"];
+    let persisted: OfflineAccountState | null = malformed;
+    const events: string[] = [];
+    const persistence = {
+      load: vi.fn(async () => structuredClone(persisted)),
+      save: vi.fn(async (state: OfflineAccountState) => {
+        events.push("save");
+        persisted = structuredClone(state);
+      }),
+      clear: vi.fn(async () => {
+        events.push("clear");
+        persisted = null;
+      }),
+    };
+    const list = vi.fn(async () => {
+      events.push("list");
+      return {
+        items: [existingEntry],
+        nextCursor: null,
+        hasMore: false,
+      };
+    });
+    const entriesGateway = gateway({ list });
+    const store = new EntriesStore(
+      entriesGateway,
+      "UTC",
+      () => new Date("2026-08-31T10:00:00.000Z"),
+      () => "unused",
+      new OfflineController(
+        persistence,
+        entriesGateway,
+        () => new Date("2026-08-31T10:00:00.000Z"),
+        () => "mutation-generated",
+      ),
+    );
+    await store.load();
+
+    await store.resetOfflineState();
+
+    expect(persistence.clear).toHaveBeenCalledTimes(1);
+    expect(events.indexOf("clear")).toBeLessThan(events.indexOf("list"));
+    expect(store.snapshot).toMatchObject({
+      viewState: "content",
+      errorCode: null,
+      entries: [
+        expect.objectContaining({
+          id: existingEntry.id,
+          localState: "synced",
+        }),
+      ],
+      summary: {
+        todayTotal: "5",
+        weekTotal: "5",
+        allTimeTotal: "5",
+      },
+    });
+  });
+
+  it("keeps recovery required when clearing invalid local state fails", async () => {
+    const malformed = emptyOfflineState();
+    malformed.summary = {
+      todayTotal: 5,
+    } as unknown as OfflineAccountState["summary"];
+    const persistence = {
+      load: vi.fn(async () => structuredClone(malformed)),
+      save: vi.fn(),
+      clear: vi.fn().mockRejectedValue(new Error("INTERNAL")),
+    };
+    const entriesGateway = gateway();
+    const store = new EntriesStore(
+      entriesGateway,
+      "UTC",
+      () => new Date("2026-08-31T10:00:00.000Z"),
+      () => "unused",
+      new OfflineController(
+        persistence,
+        entriesGateway,
+        () => new Date("2026-08-31T10:00:00.000Z"),
+        () => "mutation-generated",
+      ),
+    );
+    await store.load();
+
+    await store.resetOfflineState();
+
+    expect(store.snapshot).toMatchObject({
+      viewState: "error",
+      errorCode: "INVALID_OFFLINE_STATE",
+    });
+    expect(persistence.save).not.toHaveBeenCalled();
   });
 
   it("keeps conflict sync state and counts after resolving one selected entry", async () => {

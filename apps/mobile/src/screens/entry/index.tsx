@@ -4,6 +4,7 @@ import {
   AppScreen,
   AppText,
   FormField,
+  OfflineRecoveryCard,
   StateFeedback,
 } from "@/components";
 import {
@@ -27,6 +28,18 @@ function previousDate(value: string) {
 export function EntryEditScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const entries = useEntries();
+
+  if (entries.errorCode === "INVALID_OFFLINE_STATE") {
+    return (
+      <AppScreen>
+        <OfflineRecoveryCard
+          busy={entries.busy}
+          onReset={entries.resetOfflineState}
+        />
+      </AppScreen>
+    );
+  }
+
   const entry = entries.entries.find((candidate) => candidate.id === id);
 
   if (!entry) {
