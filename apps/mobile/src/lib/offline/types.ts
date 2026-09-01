@@ -297,9 +297,36 @@ export function migrateOfflineState(
       legacyConflict
     : rawConflicts[0] ?? null;
   const conflictIds = new Set(rawConflicts.map(({ entryId }) => entryId));
+  const repairedConflictErrors = new Map<string, string>();
+  const queue: QueueMutation[] = state.queue.map((mutation) => {
+    if (
+      persistedConflicts === undefined &&
+      mutation.status === "conflict" &&
+      mutation.entity === "entry" &&
+      (mutation.operation === "update" || mutation.operation === "delete") &&
+      !conflictIds.has(mutation.entityId)
+    ) {
+      const errorCode =
+        mutation.lastErrorCode ?? "ENTRY_VERSION_CONFLICT";
+      repairedConflictErrors.set(mutation.entityId, errorCode);
+      return {
+        ...mutation,
+        status: "failed",
+        lastErrorCode: errorCode,
+        nextAttemptAt: null,
+      };
+    }
+    return mutation;
+  });
+  const entries: OfflineEntry[] = state.entries.map((entry) => {
+    const errorCode = repairedConflictErrors.get(entry.id);
+    return errorCode
+      ? { ...entry, localState: "failed", lastErrorCode: errorCode }
+      : entry;
+  });
   if (
     conflictIds.size !== rawConflicts.length ||
-    state.queue.some(
+    queue.some(
       (mutation) =>
         mutation.status === "conflict" &&
         (mutation.entity !== "entry" ||
@@ -309,7 +336,7 @@ export function migrateOfflineState(
     ) ||
     rawConflicts.some(
       ({ entryId }) =>
-        !state.queue.some(
+        !queue.some(
           (mutation) =>
             mutation.entity === "entry" &&
             mutation.entityId === entryId &&
@@ -322,8 +349,8 @@ export function migrateOfflineState(
   return {
     ...emptyOfflineState(),
     ...state,
-    entries: state.entries,
-    queue: state.queue,
+    entries,
+    queue,
     conflicts: rawConflicts,
     conflict,
     serverCursor,
