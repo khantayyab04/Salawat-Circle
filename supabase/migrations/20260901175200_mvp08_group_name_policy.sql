@@ -75,10 +75,11 @@ begin
 
   v_folded := pg_catalog.lower(v_name);
   if v_folded ~ '(^|[^[:alnum:]])[[:alpha:]][[:alnum:]+.-]{1,31}://[^[:space:]]'
-     or v_folded ~ '(^|[^[:alnum:]])(mailto|sms|smsto|tel):[^[:space:]]'
+     or v_folded ~ '(^|[^[:alnum:]])(data|javascript|mailto|sms|smsto|tel|whatsapp):[^[:space:]]'
      or v_folded ~ '(^|[^[:alnum:]])www\.[[:alnum:]]'
      or v_folded ~ '[[:alnum:]_%+.-]+@[[:alnum:]][[:alnum:].-]*'
-     or v_folded ~ '(^|[^[:alnum:]_])([[:alnum:]][[:alnum:]-]*\.)+(academy|ai|app|at|biz|ch|cloud|club|co|com|community|de|dev|digital|edu|email|eu|gov|group|info|io|link|live|me|mobi|net|online|org|shop|site|space|store|tech|uk|website|world|xyz)($|[^[:alnum:]_-])' then
+     or v_folded ~ '(^|[^[:alnum:]_])([[:alnum:]][[:alnum:]-]*\.)+[[:alpha:]]{2,24}/[^[:space:]]'
+     or v_folded ~ '(^|[^[:alnum:]_])([[:alnum:]][[:alnum:]-]*\.)+(academy|ai|app|at|biz|ca|cc|ch|cloud|club|co|com|community|de|dev|digital|edu|email|eu|fr|gd|gl|gov|group|info|io|link|live|ly|me|mobi|name|net|online|org|pro|shop|site|space|store|tech|uk|website|world|xyz)($|[^[:alnum:]_-])' then
     raise exception using errcode = 'P0001', message = 'NAME_REJECTED';
   end if;
   if v_folded ~ '(^|[^[:alnum:]])(cunt|faggot|fotze|hurensohn|nigger)($|[^[:alnum:]])' then

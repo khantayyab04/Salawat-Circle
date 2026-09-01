@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(20);
+select plan(23);
 
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at
@@ -361,6 +361,102 @@ select results_eq(
       ('www-domain', 'NAME_REJECTED')
   $$,
   'group names reject schemes, URLs, www, domains and email-like patterns'
+);
+
+reset role;
+delete from private.rate_limit_buckets
+where actor_key = '73000000-0000-4000-8000-000000000001'
+  and action_key = 'create_group';
+set local role authenticated;
+set local "request.jwt.claim.sub" = '73000000-0000-4000-8000-000000000001';
+set local "request.jwt.claim.role" = 'authenticated';
+
+select results_eq(
+  $$
+    select case_name, pg_temp.create_group_error(group_id, candidate)
+    from (
+      values
+        ('country-domain-path', '73000000-0000-4000-8000-000000000221'::uuid, 'kreis.fr/gruppe'),
+        ('generic-domain-path', '73000000-0000-4000-8000-000000000222'::uuid, 'circle.museum/join'),
+        ('shortener-bitly', '73000000-0000-4000-8000-000000000223'::uuid, 'bit.ly/x9k'),
+        ('shortener-cuttly', '73000000-0000-4000-8000-000000000224'::uuid, 'cutt.ly/ab'),
+        ('shortener-googl', '73000000-0000-4000-8000-000000000225'::uuid, 'goo.gl/abc'),
+        ('shortener-isgd', '73000000-0000-4000-8000-000000000226'::uuid, 'is.gd/x'),
+        ('shortener-owly', '73000000-0000-4000-8000-000000000227'::uuid, 'ow.ly/abc'),
+        ('shortener-tinycc', '73000000-0000-4000-8000-000000000228'::uuid, 'tiny.cc/s')
+    ) as cases(case_name, group_id, candidate)
+    order by case_name
+  $$,
+  $$
+    values
+      ('country-domain-path', 'NAME_REJECTED'),
+      ('generic-domain-path', 'NAME_REJECTED'),
+      ('shortener-bitly', 'NAME_REJECTED'),
+      ('shortener-cuttly', 'NAME_REJECTED'),
+      ('shortener-googl', 'NAME_REJECTED'),
+      ('shortener-isgd', 'NAME_REJECTED'),
+      ('shortener-owly', 'NAME_REJECTED'),
+      ('shortener-tinycc', 'NAME_REJECTED')
+  $$,
+  'group names reject path-qualified shorteners and real country or generic domains'
+);
+
+select results_eq(
+  $$
+    select case_name, pg_temp.create_group_error(group_id, candidate)
+    from (
+      values
+        ('country-ca', '73000000-0000-4000-8000-000000000231'::uuid, 'circle.ca'),
+        ('country-fr', '73000000-0000-4000-8000-000000000232'::uuid, 'kreis.fr'),
+        ('generic-name', '73000000-0000-4000-8000-000000000233'::uuid, 'circle.name'),
+        ('generic-pro', '73000000-0000-4000-8000-000000000234'::uuid, 'circle.pro'),
+        ('shortener-bitly-bare', '73000000-0000-4000-8000-000000000235'::uuid, 'bit.ly'),
+        ('shortener-googl-bare', '73000000-0000-4000-8000-000000000236'::uuid, 'goo.gl'),
+        ('shortener-isgd-bare', '73000000-0000-4000-8000-000000000237'::uuid, 'is.gd'),
+        ('shortener-tinycc-bare', '73000000-0000-4000-8000-000000000238'::uuid, 'tiny.cc')
+    ) as cases(case_name, group_id, candidate)
+    order by case_name
+  $$,
+  $$
+    values
+      ('country-ca', 'NAME_REJECTED'),
+      ('country-fr', 'NAME_REJECTED'),
+      ('generic-name', 'NAME_REJECTED'),
+      ('generic-pro', 'NAME_REJECTED'),
+      ('shortener-bitly-bare', 'NAME_REJECTED'),
+      ('shortener-googl-bare', 'NAME_REJECTED'),
+      ('shortener-isgd-bare', 'NAME_REJECTED'),
+      ('shortener-tinycc-bare', 'NAME_REJECTED')
+  $$,
+  'group names reject conservative additional country and generic bare domains'
+);
+
+select results_eq(
+  $$
+    select case_name, pg_temp.create_group_error(group_id, candidate)
+    from (
+      values
+        ('data-scheme', '73000000-0000-4000-8000-000000000241'::uuid, 'data:text/html,test'),
+        ('email-advertising', '73000000-0000-4000-8000-000000000242'::uuid, 'Kontakt: person@example.com'),
+        ('email-like-advertising', '73000000-0000-4000-8000-000000000243'::uuid, 'Kontakt person@example'),
+        ('javascript-scheme', '73000000-0000-4000-8000-000000000244'::uuid, 'javascript:alert(1)'),
+        ('mailto-scheme-advertising', '73000000-0000-4000-8000-000000000245'::uuid, 'mailto:person@example.com'),
+        ('tel-scheme', '73000000-0000-4000-8000-000000000246'::uuid, 'tel:+4912345678'),
+        ('whatsapp-scheme', '73000000-0000-4000-8000-000000000247'::uuid, 'whatsapp:+4912345678')
+    ) as cases(case_name, group_id, candidate)
+    order by case_name
+  $$,
+  $$
+    values
+      ('data-scheme', 'NAME_REJECTED'),
+      ('email-advertising', 'NAME_REJECTED'),
+      ('email-like-advertising', 'NAME_REJECTED'),
+      ('javascript-scheme', 'NAME_REJECTED'),
+      ('mailto-scheme-advertising', 'NAME_REJECTED'),
+      ('tel-scheme', 'NAME_REJECTED'),
+      ('whatsapp-scheme', 'NAME_REJECTED')
+  $$,
+  'group names reject dangerous schemes and email or contact advertising'
 );
 
 select results_eq(
