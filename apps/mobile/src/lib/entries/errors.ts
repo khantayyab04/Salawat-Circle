@@ -1,6 +1,7 @@
 const ERROR_CODES = new Set([
   "AUTH_REQUIRED",
   "CONSENT_REQUIRED",
+  "FORBIDDEN",
   "NOT_FOUND",
   "INVALID_INPUT",
   "INVALID_AMOUNT",
@@ -21,5 +22,17 @@ export function getEntriesErrorCode(error: unknown): EntriesErrorCode {
     typeof error.message === "string"
       ? error.message
       : "";
-  return ERROR_CODES.has(message) ? (message as EntriesErrorCode) : "INTERNAL";
+  if (ERROR_CODES.has(message)) return message as EntriesErrorCode;
+  const status =
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    typeof error.status === "number"
+      ? error.status
+      : null;
+  if (status === 401) return "AUTH_REQUIRED";
+  if (status === 429) return "RATE_LIMITED";
+  if (status === 403) return "FORBIDDEN";
+  if (status === 400 || status === 422) return "INVALID_INPUT";
+  return "INTERNAL";
 }

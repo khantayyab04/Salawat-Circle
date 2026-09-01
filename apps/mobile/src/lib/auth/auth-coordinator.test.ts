@@ -15,6 +15,9 @@ function createGateway(overrides: Partial<AuthGateway> = {}): AuthGateway {
     upsertProfile: vi.fn().mockResolvedValue(undefined),
     grantConsent: vi.fn().mockResolvedValue(undefined),
     signOut: vi.fn().mockResolvedValue(undefined),
+    getCachedReadyUserId: vi.fn().mockResolvedValue(null),
+    cacheReadyUserId: vi.fn().mockResolvedValue(undefined),
+    clearCachedReadyUserId: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -39,6 +42,7 @@ describe("AuthCoordinator", () => {
     await coordinator.requestOtp("person@example.com");
     await coordinator.verifyOtp("123456");
     expect(coordinator.snapshot.status).toBe("profile_required");
+    expect(coordinator.snapshot.userId).toBe("user-1");
 
     await coordinator.saveProfile(" Jules   Example ", "Europe/Berlin", "de");
     expect(coordinator.snapshot.status).toBe("consent_required");
@@ -48,6 +52,7 @@ describe("AuthCoordinator", () => {
 
     await coordinator.signOut();
     expect(coordinator.snapshot.status).toBe("signed_out");
+    expect(coordinator.snapshot.userId).toBeNull();
     expect(clearLocalData).toHaveBeenCalledOnce();
   });
 
@@ -91,6 +96,25 @@ describe("AuthCoordinator", () => {
     await coordinator.bootstrap();
 
     expect(coordinator.snapshot.status).toBe("ready");
+    expect(coordinator.snapshot.userId).toBe("user-1");
+  });
+
+  it("restores a previously ready local session when onboarding is unreachable", async () => {
+    const gateway = createGateway({
+      getCurrentUser: vi.fn().mockResolvedValue({ id: "user-1" }),
+      getOnboardingState: vi
+        .fn()
+        .mockRejectedValue(new Error("SUPABASE_REQUEST_FAILED")),
+      getCachedReadyUserId: vi.fn().mockResolvedValue("user-1"),
+    });
+    const coordinator = new AuthCoordinator(gateway, async () => undefined);
+
+    await coordinator.bootstrap();
+
+    expect(coordinator.snapshot).toMatchObject({
+      status: "ready",
+      userId: "user-1",
+    });
   });
 
   it("clears transient state even when secure cleanup reports a failure", async () => {
@@ -103,6 +127,7 @@ describe("AuthCoordinator", () => {
     await expect(coordinator.signOut()).rejects.toThrow("keychain unavailable");
     expect(coordinator.snapshot).toEqual({
       status: "signed_out",
+      userId: null,
       pendingEmail: null,
       nextOtpRequestAt: null,
     });

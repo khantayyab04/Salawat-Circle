@@ -25,6 +25,7 @@ import {
 
 type AuthContextValue = {
   status: AuthStatus;
+  userId: string | null;
   pendingEmail: string | null;
   nextOtpRequestAt: number | null;
   busy: boolean;
@@ -62,7 +63,7 @@ function createUnavailableGateway(): AuthGateway {
 
 function createDefaultGateway() {
   try {
-    return createSupabaseAuthGateway(getSupabaseClient());
+    return createSupabaseAuthGateway(getSupabaseClient(), SecureStore);
   } catch {
     return createUnavailableGateway();
   }
@@ -91,7 +92,12 @@ export function AuthProvider({
     () =>
       providedClearLocalData ??
       (async () => {
-        await Promise.all([clearSecureAuthSession(), inviteStore.clear()]);
+        const { clearAllOfflineData } = await import("@/lib/offline");
+        await Promise.all([
+          clearSecureAuthSession(),
+          inviteStore.clear(),
+          clearAllOfflineData(),
+        ]);
       }),
     [inviteStore, providedClearLocalData],
   );
@@ -179,6 +185,7 @@ export function AuthProvider({
     void revision;
     return {
       status: coordinator.snapshot.status,
+      userId: coordinator.snapshot.userId,
       pendingEmail: coordinator.snapshot.pendingEmail,
       nextOtpRequestAt: coordinator.snapshot.nextOtpRequestAt,
       busy,

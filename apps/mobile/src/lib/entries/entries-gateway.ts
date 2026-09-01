@@ -11,6 +11,17 @@ export type Entry = {
   createdAt: string;
   updatedAt: string;
   revision: number;
+  localState?:
+    | "synced"
+    | "pending_create"
+    | "pending_update"
+    | "pending_delete"
+    | "conflict"
+    | "failed";
+  serverRevision?: number | null;
+  lastAttemptAt?: string | null;
+  retryCount?: number;
+  lastErrorCode?: string | null;
 };
 
 export type EntryCursor = {
@@ -44,6 +55,7 @@ export type EntriesGateway = {
     nextCursor: EntryCursor | null;
     hasMore: boolean;
   }>;
+  getEntry?(id: string): Promise<Entry>;
   create(input: CreateEntryInput): Promise<Entry>;
   update(input: {
     id: string;
@@ -53,6 +65,7 @@ export type EntriesGateway = {
   }): Promise<Entry>;
   delete(input: { id: string; expectedRevision: number }): Promise<void>;
   setGoal(amount: number | null, effectiveFrom: string): Promise<void>;
+  refreshSession?(): Promise<void>;
 };
 
 type RawEntry = {
@@ -79,8 +92,17 @@ function entryFromRaw(entry: RawEntry): Entry {
   };
 }
 
-function ensureSuccess(error: { message?: string } | null) {
-  if (error) throw new Error(getEntriesErrorCode(error));
+function ensureSuccess(
+  error: { message?: string } | null,
+  status?: number,
+) {
+  if (error) {
+    throw new Error(
+      getEntriesErrorCode(
+        status === undefined ? error : { ...error, status },
+      ),
+    );
+  }
 }
 
 export function createSupabaseEntriesGateway(
@@ -97,10 +119,10 @@ export function createSupabaseEntriesGateway(
     },
 
     async getSummary(timezone) {
-      const { data, error } = await client.rpc("get_home_summary", {
+      const { data, error, status } = await client.rpc("get_home_summary", {
         p_timezone: timezone,
       });
-      ensureSuccess(error);
+      ensureSuccess(error, status);
       const summary = data as {
         today_total?: string;
         week_total?: string;
@@ -136,11 +158,11 @@ export function createSupabaseEntriesGateway(
             p_cursor_id: cursor.id,
           }
         : {};
-      const { data, error } = await client.rpc("list_entries", {
+      const { data, error, status } = await client.rpc("list_entries", {
         ...cursorArgs,
         p_limit: limit,
       });
-      ensureSuccess(error);
+      ensureSuccess(error, status);
       const page = data as {
         items?: RawEntry[];
         next_cursor?: {
@@ -167,45 +189,58 @@ export function createSupabaseEntriesGateway(
     },
 
     async create(input) {
-      const { data, error } = await client.rpc("create_entry", {
+      const { data, error, status } = await client.rpc("create_entry", {
         p_id: input.id,
         p_amount: input.amount,
         p_entry_date: input.entryDate,
         p_timezone: input.timezone,
         p_recorded_at_client: input.recordedAtClient,
       });
-      ensureSuccess(error);
+      ensureSuccess(error, status);
+      const rawEntry = (data as { entry?: RawEntry } | null)?.entry;
+      if (!rawEntry) throw new Error("INTERNAL");
+      return entryFromRaw(rawEntry);
+    },
+
+    async getEntry(id) {
+      const { data, error, status } = await client.rpc("get_entry", { p_id: id });
+      ensureSuccess(error, status);
       const rawEntry = (data as { entry?: RawEntry } | null)?.entry;
       if (!rawEntry) throw new Error("INTERNAL");
       return entryFromRaw(rawEntry);
     },
 
     async update(input) {
-      const { data, error } = await client.rpc("update_entry", {
+      const { data, error, status } = await client.rpc("update_entry", {
         p_id: input.id,
         p_amount: input.amount,
         p_entry_date: input.entryDate,
         p_expected_revision: input.expectedRevision,
       });
-      ensureSuccess(error);
+      ensureSuccess(error, status);
       const rawEntry = (data as { entry?: RawEntry } | null)?.entry;
       if (!rawEntry) throw new Error("INTERNAL");
       return entryFromRaw(rawEntry);
     },
 
     async delete(input) {
-      const { error } = await client.rpc("delete_entry", {
+      const { error, status } = await client.rpc("delete_entry", {
         p_id: input.id,
         p_expected_revision: input.expectedRevision,
       });
-      ensureSuccess(error);
+      ensureSuccess(error, status);
     },
 
     async setGoal(amount, effectiveFrom) {
-      const { error } = await client.rpc("set_daily_goal", {
+      const { error, status } = await client.rpc("set_daily_goal", {
         p_amount: amount as number,
         p_effective_from: effectiveFrom,
       });
+      ensureSuccess(error, status);
+    },
+
+    async refreshSession() {
+      const { error } = await client.auth.refreshSession();
       ensureSuccess(error);
     },
   };

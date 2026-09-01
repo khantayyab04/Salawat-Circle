@@ -22,9 +22,9 @@ nicht verfügbar ist, wird automatisch die Gerätezeitzone verwendet.
 
 `src/lib/entries` kapselt Betrags- und Kalenderlogik, exakte BigInt-Summen,
 den Supabase-Gateway, den optimistischen Store und dessen React-Provider.
-`src/screens/today` und `src/screens/entry` enthalten die jeweiligen
-Oberflächen. Persistente Offline-Queues gehören nicht zu MVP05, sondern MVP07;
-Tagesziel und Zielerfolg folgen in MVP06.
+`src/lib/offline` ergänzt verschlüsselte SQLite-Persistenz, Mutation-Queue,
+Backoff und Konfliktauflösung. `src/screens/today` und `src/screens/entry`
+enthalten die jeweiligen Oberflächen.
 
 ## Tagesziel und Dashboard
 
@@ -41,8 +41,25 @@ Der E2E-Vertrag für Setzen, tagesgleiches Ändern und Deaktivieren läuft mit:
 pnpm test:goals-integration
 ```
 
-Die Offline-Persistenz der Zielmutationen ist bewusst noch nicht enthalten und
-folgt mit MVP07.
+Zielmutationen werden seit MVP07 wie Eintragsmutationen zuerst lokal gespeichert
+und bei verfügbarer Verbindung synchronisiert.
+
+## Offlinebetrieb
+
+Die App schreibt gültige Eintrags- und Zielmutationen vor der UI-Bestätigung in
+den verschlüsselten lokalen Kontozustand. Die UI kennzeichnet ausstehende,
+fehlgeschlagene und konfliktbehaftete Einträge; dauerhafte Fehler können manuell
+erneut versucht werden. Netzrückkehr, App-Foreground und ein Backoff-Timer stoßen
+die Queue erneut an.
+
+Lokale Nutzdaten werden mit AES-256-GCM verschlüsselt. Ein zufälliger Schlüssel
+pro Konto und Installation liegt in SecureStore, niemals in SQLite. Die Queue
+enthält keine Sitzungstoken. Abmeldung und Kontowechsel löschen sowohl den
+verschlüsselten Zustand als auch den zugehörigen Schlüssel.
+
+Konflikte überschreiben keine neuere Serverrevision. Der Bearbeiten-Screen zeigt
+Serverstand und lokale Absicht und bietet ausschließlich die expliziten Aktionen
+**Serverstand behalten** oder **Meine Änderung erneut anwenden**.
 
 ## Theme
 
@@ -73,6 +90,7 @@ pnpm --filter @salawat-circle/mobile lint
 pnpm --filter @salawat-circle/mobile typecheck
 pnpm verify
 pnpm test:entries-integration
+pnpm test:offline-integration
 pnpm exec expo install --check
 pnpm exec expo-doctor
 ```

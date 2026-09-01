@@ -44,6 +44,13 @@ jest.mock("@/localization", () => ({
         todayHistoryEmpty: "Noch keine Einträge vorhanden.",
         historyLoadMore: "Weitere Einträge laden",
         historyLoadFailed: "Weitere Einträge konnten nicht geladen werden.",
+        syncOfflineTitle: "Offline",
+        syncOfflineBody: "Änderungen bleiben sicher auf diesem Gerät.",
+        syncPendingTitle: "Wird synchronisiert",
+        syncPendingBody: "Deine Änderungen sind lokal gespeichert.",
+        syncFailedTitle: "Synchronisierung fehlgeschlagen",
+        syncFailedBody: "Einige Änderungen brauchen deine Aufmerksamkeit.",
+        syncRetry: "Erneut versuchen",
       })[key] ?? key,
   }),
 }));
@@ -66,11 +73,16 @@ function entries(overrides = {}) {
     busy: false,
     errorCode: null,
     conflictEntryId: null,
+    conflict: null,
+    syncState: "idle",
+    pendingCount: 0,
+    failedCount: 0,
     create: mockCreate,
     delete: jest.fn(),
     setGoal: jest.fn(),
     clearGoal: jest.fn(),
     loadMore: jest.fn(),
+    retrySync: jest.fn(),
     ...overrides,
   };
 }
@@ -132,5 +144,18 @@ describe("TodayScreen", () => {
     expect(view.getAllByText("100")).not.toHaveLength(0);
     expect(view.getByText("2/4")).toBeTruthy();
     expect(view.getByText("goal:100")).toBeTruthy();
+  });
+
+  it("keeps failed offline changes visible and retryable", async () => {
+    const retrySync = jest.fn();
+    mockEntries.mockReturnValue(
+      entries({ syncState: "error", failedCount: 1, retrySync }),
+    );
+
+    const view = await render(<TodayScreen />);
+
+    expect(view.getByText("Synchronisierung fehlgeschlagen")).toBeTruthy();
+    fireEvent.press(view.getByRole("button", { name: "Erneut versuchen" }));
+    expect(retrySync).toHaveBeenCalled();
   });
 });

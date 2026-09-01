@@ -6,6 +6,7 @@ import {
   AppText,
   FormField,
   StateFeedback,
+  StatusBanner,
 } from "@/components";
 import {
   describeGoalProgress,
@@ -40,6 +41,32 @@ export function TodayScreen() {
     entries.summary.achievedDays,
     entries.summary.eligibleGoalDays,
   );
+  const syncFeedback =
+    entries.syncState === "offline"
+      ? {
+          title: t("syncOfflineTitle"),
+          body: t("syncOfflineBody"),
+          tone: "offline" as const,
+        }
+      : entries.syncState === "pending"
+        ? {
+            title: t("syncPendingTitle"),
+            body: t("syncPendingBody"),
+            tone: "pending" as const,
+          }
+        : entries.syncState === "error"
+          ? {
+              title: t("syncFailedTitle"),
+              body: t("syncFailedBody"),
+              tone: "error" as const,
+            }
+          : entries.syncState === "conflict"
+            ? {
+                title: t("syncConflictTitle"),
+                body: t("syncConflictBody"),
+                tone: "error" as const,
+              }
+            : null;
 
   const submit = async () => {
     let parsedAmount: number;
@@ -60,6 +87,18 @@ export function TodayScreen() {
 
   const header = (
     <View style={{ gap: spacing.lg }}>
+      {syncFeedback ? (
+        <View style={{ gap: spacing.sm }}>
+          <StatusBanner {...syncFeedback} />
+          {entries.syncState === "error" ? (
+            <AppButton
+              label={t("syncRetry")}
+              variant="secondary"
+              onPress={() => void entries.retrySync()}
+            />
+          ) : null}
+        </View>
+      ) : null}
       <AppCard>
         <AppText>{t("todayHeading")}</AppText>
         <AppText

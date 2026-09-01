@@ -28,11 +28,15 @@ export type AuthGateway = {
   ): Promise<void>;
   grantConsent(locale: "de" | "en"): Promise<void>;
   signOut(): Promise<void>;
+  getCachedReadyUserId?(): Promise<string | null>;
+  cacheReadyUserId?(userId: string): Promise<void>;
+  clearCachedReadyUserId?(): Promise<void>;
 };
 
 export class AuthCoordinator {
   readonly snapshot = {
     status: "loading" as AuthStatus,
+    userId: null as string | null,
     pendingEmail: null as string | null,
     nextOtpRequestAt: null as number | null,
   };
@@ -50,15 +54,29 @@ export class AuthCoordinator {
       : !onboarding.consentGranted
         ? "consent_required"
         : "ready";
+    if (this.snapshot.status === "ready" && this.snapshot.userId) {
+      await this.gateway.cacheReadyUserId?.(this.snapshot.userId);
+    }
   }
 
   async bootstrap() {
     const user = await this.gateway.getCurrentUser();
     if (!user) {
+      this.snapshot.userId = null;
       this.snapshot.status = "signed_out";
       return;
     }
-    await this.refreshOnboardingStatus();
+    this.snapshot.userId = user.id;
+    try {
+      await this.refreshOnboardingStatus();
+    } catch (error) {
+      const cachedReadyUserId = await this.gateway.getCachedReadyUserId?.();
+      if (cachedReadyUserId === user.id) {
+        this.snapshot.status = "ready";
+        return;
+      }
+      throw error;
+    }
   }
 
   async requestOtp(email: string) {
@@ -84,7 +102,8 @@ export class AuthCoordinator {
       throw new Error("OTP_EMAIL_REQUIRED");
     }
     try {
-      await this.gateway.verifyOtp(email, parseOtp(token));
+      const user = await this.gateway.verifyOtp(email, parseOtp(token));
+      this.snapshot.userId = user.id;
       await this.refreshOnboardingStatus();
     } catch {
       throw new Error("OTP_INVALID");
@@ -107,6 +126,9 @@ export class AuthCoordinator {
   async grantConsent(locale: "de" | "en") {
     await this.gateway.grantConsent(locale);
     this.snapshot.status = "ready";
+    if (this.snapshot.userId) {
+      await this.gateway.cacheReadyUserId?.(this.snapshot.userId);
+    }
   }
 
   async signOut() {
@@ -114,11 +136,16 @@ export class AuthCoordinator {
       await this.gateway.signOut();
     } finally {
       try {
-        await this.clearLocalData();
+        await this.gateway.clearCachedReadyUserId?.();
       } finally {
-        this.snapshot.pendingEmail = null;
-        this.snapshot.nextOtpRequestAt = null;
-        this.snapshot.status = "signed_out";
+        try {
+          await this.clearLocalData();
+        } finally {
+          this.snapshot.userId = null;
+          this.snapshot.pendingEmail = null;
+          this.snapshot.nextOtpRequestAt = null;
+          this.snapshot.status = "signed_out";
+        }
       }
     }
   }

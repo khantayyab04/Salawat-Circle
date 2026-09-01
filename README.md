@@ -168,6 +168,40 @@ pnpm test:goals-integration
 Die persistente, verschlüsselte Offline-Queue einschließlich Retry und
 Konfliktbehandlung bleibt Bestandteil von MVP07.
 
+### MVP07 – Persistenter Offline-Eintrag und Synchronisation
+
+Eigene Einträge sowie Tageszieländerungen werden zuerst atomar in einer lokalen
+Mutation-Queue gespeichert und optimistisch angezeigt. Der komplette
+kontobezogene Zustand liegt als AES-256-GCM-verschlüsselter Payload in
+`expo-sqlite`; der zufällige 256-Bit-Schlüssel wird getrennt in SecureStore
+gehalten. Bei Abmeldung oder Kontowechsel werden Datenbankzeile und Schlüssel
+entfernt.
+
+Die Queue führt Erstellen, Bearbeiten, Löschen und Zieländerungen nach
+Netzrückkehr in Reihenfolge aus. Mehrere ungesendete Änderungen desselben
+Eintrags werden zusammengeführt; Erstellen mit anschließendem Löschen wird vor
+dem ersten Upload vollständig lokal entfernt. Client-UUIDs machen Create-Retries
+idempotent. Netzwerk-, 5xx- und Rate-Limit-Fehler verwenden exponentiellen
+Backoff, während dauerhafte Validierungsfehler sichtbar und manuell erneut
+versuchbar bleiben.
+
+Bei einer veralteten Revision lädt die App den aktuellen Serverstand über
+`get_entry` und verlangt eine ausdrückliche Auswahl zwischen
+**Serverstand behalten** und **Meine Änderung erneut anwenden**. Ein erfolgreich
+übertragenes Update, dessen Antwort durch einen Abbruch verloren ging, wird
+anhand des identischen Serverstands als synchronisiert erkannt.
+
+Der lokale Backend-Vertrag lässt sich zusätzlich ausführen:
+
+```bash
+pnpm test:offline-integration
+```
+
+SQLCipher, der Ausschluss der Datenbank aus allgemeinen Gerätebackups,
+Sync-Metriken und eine umfangreiche Multi-Device-/Chaos-Testmatrix bleiben
+Production-Arbeit. Die MVP-Lösung schützt alle fachlichen lokalen Nutzdaten
+bereits per authentifizierter Verschlüsselung und bleibt mit Expo Go nutzbar.
+
 ### Qualitätsprüfung
 
 ```bash

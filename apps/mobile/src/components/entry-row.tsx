@@ -18,6 +18,16 @@ export function EntryRow({
   onDelete(id: string): void;
 }) {
   const { t, localeTag } = useTranslation();
+  const syncLabel =
+    entry.localState === "synced"
+      ? t("entrySyncSynced")
+      : entry.localState === "failed"
+      ? t("entrySyncFailed")
+      : entry.localState === "conflict"
+        ? t("entrySyncConflict")
+        : entry.localState?.startsWith("pending_")
+          ? t("entrySyncPending")
+          : null;
   const requestDelete = () =>
     Alert.alert(t("entryDeleteTitle"), t("entryDeleteBody"), [
       { text: t("commonCancel"), style: "cancel" },
@@ -45,6 +55,11 @@ export function EntryRow({
                 )}`
               : ""}
           </AppText>
+          {syncLabel ? (
+            <AppText accessibilityLiveRegion="polite" variant="caption">
+              {syncLabel}
+            </AppText>
+          ) : null}
         </View>
         <View style={{ gap: spacing.sm }}>
           <AppButton

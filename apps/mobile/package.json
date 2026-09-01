@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@expo/ui": "~57.0.14",
+    "@noble/ciphers": "^2.4.0",
     "@salawat-circle/shared-types": "workspace:*",
     "@supabase/supabase-js": "^2.112.4",
     "expo": "~57.0.18",
@@ -22,6 +23,7 @@
     "expo-crypto": "~57.0.2",
     "expo-linking": "~57.0.8",
     "expo-localization": "~57.0.1",
+    "expo-network": "~57.0.1",
     "expo-router": "~57.0.17",
     "expo-secure-store": "~57.0.2",
     "expo-sqlite": "~57.0.2",

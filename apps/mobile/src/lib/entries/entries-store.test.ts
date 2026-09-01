@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { EntriesGateway, Entry } from "./entries-gateway";
 import { EntriesStore } from "./entries-store";
+import { OfflineController } from "@/lib/offline/controller";
+import {
+  emptyOfflineState,
+  type OfflineAccountState,
+} from "@/lib/offline/types";
 
 const existingEntry: Entry = {
   id: "00000000-0000-4000-8000-000000000001",
@@ -44,6 +49,61 @@ const emptyGoalSummary = {
 };
 
 describe("EntriesStore", () => {
+  it("restores a pending offline entry after an app restart", async () => {
+    let persisted: OfflineAccountState | null = emptyOfflineState();
+    persisted.timeZone = "Europe/Berlin";
+    const persistence = {
+      load: vi.fn(async () => structuredClone(persisted)),
+      save: vi.fn(async (state: OfflineAccountState) => {
+        persisted = structuredClone(state);
+      }),
+      clear: vi.fn(),
+    };
+    const offlineGateway = gateway({
+      getSummary: vi.fn().mockRejectedValue(new Error("INTERNAL")),
+      list: vi.fn().mockRejectedValue(new Error("INTERNAL")),
+      create: vi.fn().mockRejectedValue(new Error("INTERNAL")),
+    });
+    const firstOffline = new OfflineController(
+      persistence,
+      offlineGateway,
+      () => new Date("2026-08-31T10:00:00.000Z"),
+      () => "mutation-1",
+    );
+    const first = new EntriesStore(
+      offlineGateway,
+      "UTC",
+      () => new Date("2026-08-31T10:00:00.000Z"),
+      () => "00000000-0000-4000-8000-000000000002",
+      firstOffline,
+    );
+    await first.load();
+    await first.create(42);
+
+    const secondOffline = new OfflineController(
+      persistence,
+      offlineGateway,
+      () => new Date("2026-08-31T10:01:00.000Z"),
+      () => "mutation-2",
+    );
+    const restarted = new EntriesStore(
+      offlineGateway,
+      "UTC",
+      () => new Date("2026-08-31T10:01:00.000Z"),
+      () => "unused",
+      secondOffline,
+    );
+    await restarted.load();
+
+    expect(restarted.snapshot.entries).toHaveLength(1);
+    expect(restarted.snapshot.entries[0]).toMatchObject({
+      amount: "42",
+      localState: "pending_create",
+    });
+    expect(restarted.snapshot.pendingCount).toBe(1);
+    expect(restarted.snapshot.viewState).toBe("content");
+  });
+
   it("shows an optimistic entry once while creation is pending", async () => {
     let resolveCreate: (entry: Entry) => void = () => undefined;
     const create = vi.fn(
