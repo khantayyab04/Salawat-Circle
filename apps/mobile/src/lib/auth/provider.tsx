@@ -31,7 +31,7 @@ type AuthContextValue = {
   busy: boolean;
   errorCode: string | null;
   requestOtp(email: string): Promise<void>;
-  verifyOtp(token: string): Promise<void>;
+  verifyOtp(token: string): Promise<AuthStatus>;
   saveProfile(
     displayName: string,
     timeZone: string,

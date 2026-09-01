@@ -1,4 +1,5 @@
 begin;
+set local time zone 'Europe/Berlin';
 
 create extension if not exists pgtap with schema extensions;
 select plan(33);
@@ -120,7 +121,7 @@ select throws_ok(
 );
 
 select lives_ok(
-  $$ select public.create_group('dddddddd-dddd-4ddd-8ddd-dddddddddddd', '  Morning   Circle  ', 'Europe/Berlin') $$,
+  $$ select public.create_group('dddddddd-dddd-4ddd-8ddd-dddddddddddd', '  Morning   Circle  ', 'Europe/Berlin', false, true) $$,
   'a group and owner membership are created atomically'
 );
 select results_eq(
@@ -134,7 +135,7 @@ select results_eq(
   'group creation stores one active owner membership'
 );
 select lives_ok(
-  $$ select public.create_group('dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'Morning Circle', 'Europe/Berlin') $$,
+  $$ select public.create_group('dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'Morning Circle', 'Europe/Berlin', false, true) $$,
   'a repeated same group request is idempotent'
 );
 select results_eq(
@@ -153,7 +154,7 @@ select throws_ok(
   'a stale group revision is rejected'
 );
 select throws_ok(
-  $$ select public.create_group('17171717-1717-4171-8171-171717171717', 'Invalid Timezone', 'UTC+2') $$,
+  $$ select public.create_group('17171717-1717-4171-8171-171717171717', 'Invalid Timezone', 'UTC+2', false, true) $$,
   'P0001',
   'INVALID_INPUT',
   'group creation validates an IANA timezone server-side'

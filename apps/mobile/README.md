@@ -61,6 +61,37 @@ Konflikte überschreiben keine neuere Serverrevision. Der Bearbeiten-Screen zeig
 Serverstand und lokale Absicht und bietet ausschließlich die expliziten Aktionen
 **Serverstand behalten** oder **Meine Änderung erneut anwenden**.
 
+## Private Gruppen, Einladungen und Beitritt (MVP08)
+
+Der Tab `/groups` ermöglicht das Erstellen und Verwalten von privaten Gruppen,
+das Abrufen aggregierter Gruppenranglisten sowie das Erstellen und Widerrufen
+von Einladungen.
+
+- **Online-Only:** Sämtliche Gruppenfunktionen (Erstellen, Rangliste laden,
+  Einladungen verwalten, Beitrittsvorschau/Beitritt und Anonymitätseinstellung)
+  erfordern eine aktive Verbindung zum Server. Sie werden nicht lokal gepuffert
+  oder in die Offline-Queue geschrieben.
+- **Einladungslinks & Deep-Links:** Einladungslinks verwenden optional die
+  Umgebungsvariable `EXPO_PUBLIC_JOIN_BASE_URL` (z. B. `https://salawat.app/join/`,
+  öffentliche HTTPS-URL ohne Geheimwerte) oder fallen auf das App-Schema
+  `salawat-circle://join/<token>` zurück.
+- **Ausstehende Einladungen (Pending Invite Tokens):** Wird ein Einladungslink vor
+  vollständiger Anmeldung oder Profilerstellung geöffnet, speichert die App das
+  Token verschlüsselt in SecureStore (`salawat-circle.pending-invite`) und führt den
+  Beitrittsprozess nach Abschluss der Registrierung automatisch fort.
+- **Clipboard-Unterstützung:** Links und 10-stellige Einladungscodes können über
+  das aktiv genutzte Paket `expo-clipboard` in die Zwischenablage kopiert werden.
+
+Der Integrationstest für Gruppen und Einladungen läuft mit:
+
+```sh
+pnpm test:groups-integration
+```
+
+**Verbleibende Production-Arbeit:** Öffentliche Universal-/App-Link-Webseite und
+Domain-Konfiguration, automatische Bereinigung veralteter Rate-Limit-Buckets,
+erweiterte Missbrauchserkennung sowie manuelle iOS/Android- und Accessibility-Tests.
+
 ## Theme
 
 Farben, Abstände, Radien, Bewegung und Typografie liegen unter `src/theme`.

@@ -92,20 +92,176 @@ export const de = {
   entryDeleteConfirm: "Löschen",
   commonCancel: "Abbrechen",
   groupsCreate: "Gruppe erstellen",
+  groupsJoinManualCode: "Einladungscode eingeben",
   groupsEmptyTitle: "Noch keine Gruppe",
   groupsEmptyBody:
     "Du bist noch in keiner Gruppe. Erstelle eine private Gruppe oder tritt über einen Einladungslink bei.",
   groupCreateTitle: "Gruppe erstellen",
   groupNameLabel: "Gruppenname",
+  groupNameHint: "2 bis 50 sichtbare Zeichen.",
+  groupNameInvalid: "Der Gruppenname muss 2 bis 50 Zeichen lang sein.",
+  groupTimezoneLabel: "Zeitzone",
+  groupTimezoneHint: "IANA-Zeitzone, zum Beispiel Europe/Berlin.",
+  groupTimezoneInvalid: "Bitte gib eine gültige IANA-Zeitzone ein.",
+  groupCreateAnonymousLabel: "Rangliste anonym anzeigen",
+  groupCreateAnonymousHint:
+    "Andere Mitglieder sehen dann stabile Aliasnamen statt Anzeigenamen.",
+  groupCreateAnonymousCaveat:
+    "Hinweis: Wenn jemand die Rangliste vorher mit Anzeigenamen gesehen hat, wirkt die Anonymisierung nicht rückwirkend.",
+  groupCreateRulesLabel:
+    "Ich akzeptiere die Nutzungsbedingungen und Gruppenregeln.",
+  groupCreateRulesHint:
+    "Mein Anzeigename und aggregierte Salawat-Werte werden mit aktiven Gruppenmitgliedern geteilt.",
+  groupCreateLegalAction: "Nutzungsbedingungen und Regeln öffnen",
+  groupCreateLegalActionHint:
+    "Öffnet die rechtlichen Hinweise und Nutzungsbedingungen.",
+  groupCreateErrorOffline:
+    "Du bist offline. Verbinde dich und versuche es erneut.",
+  groupCreateErrorNameRejected:
+    "Dieser Gruppenname ist nicht zulässig. Bitte wähle einen anderen Namen.",
+  groupCreateErrorGroupLimitReached:
+    "Du hast das Gruppenlimit erreicht. Verlasse eine bestehende Gruppe oder versuche es später erneut.",
+  groupCreateErrorConsentRequired:
+    "Bitte bestätige die Gruppenregeln, um fortzufahren.",
+  groupCreateErrorRateLimited:
+    "Zu viele Versuche. Bitte warte kurz und versuche es erneut.",
+  groupCreateErrorInvalidInput:
+    "Diese Zeitzone wurde nicht akzeptiert. Prüfe das Format, zum Beispiel Europe/Berlin.",
+  groupCreateErrorGeneral:
+    "Die Gruppe konnte nicht erstellt werden. Bitte versuche es erneut.",
+  groupsListLoadingTitle: "Gruppen werden geladen",
+  groupsListLoadingBody: "Wir holen den aktuellen Serverstand.",
+  groupsListErrorTitle: "Gruppen konnten nicht geladen werden",
+  groupsListErrorBody: "Bitte versuche es erneut.",
+  groupsListOfflineTitle: "Offline",
+  groupsListOfflineBody:
+    "Verbinde dich mit dem Internet, um Gruppen zu laden.",
+  groupsListRefresh: "Aktualisieren",
+  groupsListWeekTotalLabel: "Diese Woche",
+  groupsListRankLabel: "Rang",
+  groupsListRankUnranked: "ohne Rang",
+  groupsListMembersLabel: "aktive Mitglieder",
+  groupsListCalculatedLabel: "Berechnet",
+  groupsListUpdatedLabel: "Aktualisiert",
+  groupsListAnonymousOn: "Anonyme Rangliste aktiv",
+  groupsListAnonymousOff: "Rangliste mit Anzeigenamen",
   groupTitle: "Private Gruppe",
+  groupDetailTitle: "Gruppendetail",
   groupRanking: "Rangliste",
   groupMembers: "Mitglieder verwalten",
   groupInvites: "Einladungen verwalten",
+  groupDetailWeek: "Woche",
+  groupDetailAllTime: "Gesamt",
+  groupDetailMembersLabel: "aktive Mitglieder",
+  groupDetailCalculatedLabel: "Zuletzt berechnet",
+  groupDetailCalculatedUnknown: "Noch nicht berechnet",
+  groupDetailLoadMore: "Mehr laden",
+  groupDetailEnd: "Alle Plätze geladen.",
+  groupDetailEmptyTitle: "Noch keine Rangliste",
+  groupDetailEmptyBody: "Sobald Werte vorhanden sind, erscheinen sie hier.",
+  groupDetailLoadingTitle: "Rangliste wird geladen",
+  groupDetailLoadingBody: "Wir holen den aktuellen Gruppenstand.",
+  groupDetailOfflineTitle: "Offline",
+  groupDetailOfflineBody:
+    "Du bist offline. Verbinde dich und aktualisiere die Rangliste.",
+  groupDetailRateLimitedTitle: "Bitte kurz warten",
+  groupDetailRateLimitedBody:
+    "Zu viele Anfragen. Versuche es in einem Moment erneut.",
+  groupDetailNotFoundTitle: "Gruppe nicht gefunden",
+  groupDetailNotFoundBody:
+    "Diese Gruppe ist nicht mehr verfügbar oder du hast keinen Zugriff.",
+  groupDetailConflictTitle: "Änderungskonflikt",
+  groupDetailConflictBody:
+    "Inzwischen gibt es einen neueren Stand. Bitte aktualisiere die Rangliste.",
+  groupDetailErrorTitle: "Rangliste konnte nicht geladen werden",
+  groupDetailErrorBody: "Bitte versuche es erneut.",
+  groupDetailRefresh: "Aktualisieren",
+  groupDetailSelfLabel: "Du",
+  groupDetailAnonymityOwnerLabel: "Rangliste anonym anzeigen",
+  groupDetailAnonymityOwnerHint:
+    "Wenn aktiviert, siehst du deinen echten Anzeigenamen, andere sehen deinen stabilen Gruppenalias.",
+  groupDetailAnonymityAliasPrefix: "Dein Alias in dieser Gruppe",
+  groupDetailAnonymityCaveat:
+    "Hinweis: Bereits gesehene Anzeigenamen lassen sich nicht rückwirkend verbergen.",
+  groupDetailAnonymityMemberStatusOn: "Anonyme Rangliste ist aktiv.",
+  groupDetailAnonymityMemberStatusOff: "Rangliste zeigt Anzeigenamen.",
+  groupDetailAnonymityConflict:
+    "Zwischenzeitlich wurde eine neuere Änderung gespeichert. Wir laden den aktuellen Stand neu.",
+  groupDetailAnonymityRevisionMissing:
+    "Die Einstellung konnte nicht gespeichert werden. Bitte aktualisiere die Gruppe und versuche es erneut.",
+  groupDetailInviteAction: "Einladungen verwalten",
   groupMembersTitle: "Mitglieder",
   groupInvitesTitle: "Einladungen",
+  groupInvitesCreateAction: "Neue Einladung erstellen",
+  groupInvitesLoadingTitle: "Einladungen werden geladen",
+  groupInvitesLoadingBody: "Wir holen den aktuellen Gruppenstand.",
+  groupInvitesEmptyTitle: "Noch keine Einladung",
+  groupInvitesEmptyBody:
+    "Erstelle eine Einladung und teile sie mit deiner Gruppe.",
+  groupInvitesRefresh: "Aktualisieren",
+  groupInvitesOfflineTitle: "Offline",
+  groupInvitesOfflineBody:
+    "Verbinde dich mit dem Internet, um Einladungen zu verwalten.",
+  groupInvitesRateLimitedTitle: "Bitte kurz warten",
+  groupInvitesRateLimitedBody:
+    "Zu viele Aktionen in kurzer Zeit. Versuche es gleich erneut.",
+  groupInvitesErrorTitle: "Einladungen konnten nicht geladen werden",
+  groupInvitesErrorBody: "Bitte versuche es erneut.",
+  groupInvitesNotFoundTitle: "Einladung nicht gefunden",
+  groupInvitesNotFoundBody:
+    "Diese Einladung ist nicht mehr verfügbar. Aktualisiere die Liste.",
+  groupInvitesActionErrorTitle: "Aktion fehlgeschlagen",
+  groupInvitesActionErrorBody:
+    "Die Aktion konnte nicht abgeschlossen werden. Bitte versuche es erneut.",
+  groupInvitesStatusActive: "Aktiv",
+  groupInvitesStatusExpired: "Abgelaufen",
+  groupInvitesStatusExhausted: "Verbraucht",
+  groupInvitesStatusRevoked: "Widerrufen",
+  groupInvitesUseLabel: "Nutzungen",
+  groupInvitesExpiryLabel: "Ablauf",
+  groupInvitesSecretTitle: "Neue Einladung",
+  groupInvitesSecretBody:
+    "Teile Link und Code nur mit Personen, die der privaten Gruppe beitreten sollen.",
+  groupInvitesSecretLinkLabel: "Einladungslink",
+  groupInvitesSecretCodeLabel: "Einladungscode",
+  groupInvitesShareAction: "Teilen",
+  groupInvitesCopyLinkAction: "Link kopieren",
+  groupInvitesCopyCodeAction: "Code kopieren",
+  groupInvitesDismissSecretAction: "Schließen",
+  groupInvitesRevokeAction: "Widerrufen",
+  groupInvitesRevokeConfirmTitle: "Einladung widerrufen?",
+  groupInvitesRevokeConfirmBody:
+    "Diese Einladung kann danach nicht mehr verwendet werden.",
+  groupInvitesShareMessage:
+    "Tritt unserer privaten Gruppe bei.\nLink: %{link}\nCode: %{code}",
   joinTitle: "Einladung prüfen",
   joinBody: "Prüfe die Gruppeninformationen, bevor du freiwillig beitrittst.",
   joinAction: "Einladung annehmen",
+  joinManualCodeTitle: "Einladungscode eingeben",
+  joinManualCodeLabel: "Einladungscode",
+  joinManualCodeHint: "10 Zeichen, Buchstaben und Zahlen ohne 0, O, 1, I, L.",
+  joinManualCodeSubmit: "Einladung prüfen",
+  joinPreviewHeading: "Gruppenvorschau",
+  joinMembersLabel: "aktive Mitglieder",
+  joinSharingExplanation:
+    "Mit dem Beitritt werden dein Anzeigename und aggregierte Salawat-Werte für aktive Mitglieder sichtbar.",
+  joinAnonymityOn:
+    "Aktuell sehen andere Mitglieder deinen Alias, während du selbst deinen Anzeigenamen siehst. Der Gruppeninhaber kann diese Einstellung später ändern.",
+  joinAnonymityOff:
+    "Aktuell sehen aktive Mitglieder deinen Anzeigenamen und aggregierte Salawat-Werte.",
+  joinNoShareBeforeConfirm: "Vor deiner Bestätigung werden keine Werte geteilt.",
+  joinAlreadyActiveHint:
+    "Du bist bereits aktives Mitglied. Mit Bestätigen kommst du direkt zur Gruppe.",
+  joinLoadingTitle: "Einladung wird geprüft",
+  joinLoadingBody: "Wir laden die aktuellen Gruppendaten.",
+  joinErrorTitle: "Einladung nicht verfügbar",
+  joinInvalidInviteMessage: "Diese Einladung ist nicht mehr gültig.",
+  joinRateLimitedMessage:
+    "Zu viele Versuche. Bitte warte kurz und versuche es erneut.",
+  joinOfflineMessage:
+    "Du bist offline. Verbinde dich mit dem Internet und versuche es erneut.",
+  joinErrorMessage: "Die Einladung konnte nicht geladen werden. Bitte versuche es erneut.",
+  joinRefresh: "Erneut prüfen",
   settingsLanguage: "Sprache",
   settingsLanguageHint: "Sprache dieser App",
   settingsLanguageSystem: "Systemstandard",

@@ -48,6 +48,7 @@ describe("MVP02 route inventory", () => {
       "groups/:id",
       "groups/:id/members",
       "groups/:id/invites",
+      "join",
       "join/:token",
       "settings",
       "settings/profile",

@@ -202,6 +202,44 @@ Sync-Metriken und eine umfangreiche Multi-Device-/Chaos-Testmatrix bleiben
 Production-Arbeit. Die MVP-Lösung schützt alle fachlichen lokalen Nutzdaten
 bereits per authentifizierter Verschlüsselung und bleibt mit Expo Go nutzbar.
 
+### MVP08 – Private Gruppen, Einladungen und Ranglisten
+
+MVP08 erweitert die App um private Gruppen, einladungsbasierten Beitritt und
+aggregierte Gruppenranglisten. Mitglieder können eigene Gruppen erstellen,
+die Rangliste im Wochen- und Gesamtzeitraum einsehen und über 10-stellige
+Einladungscodes oder Deep-Links neue Mitglieder einladen.
+
+Wichtigste Eigenschaften und Sicherheitsgrenzen:
+- **RPC-only Boundary:** Sämtliche Gruppenfunktionen (Erstellung, Rangliste,
+  Einladungserstellung, Widerruf, Vorschau und Beitritt) sind ausschließlich
+  über geschützte Supabase RPCs erreichbar. Direkte Gruppenlesezugriffe sind per RLS
+  auf eigene aktive Mitgliedschaften beschränkt; direkte Schreibzugriffe sind entzogen
+  und Mutationen ausschließlich per RPC möglich.
+- **Private Hash-Speicherung:** Einladungstokens (10-stellige Codes) werden
+  serverseitig ausschließlich als `sha256(token)` bzw. `sha256(code)` in
+  `private.group_invites` (`token_hash` / `code_hash`) gespeichert. Roh-Tokens werden
+  im Backend weder im Klartext abgelegt noch geloggt.
+- **Beitrittszeitpunkt (`joined_at`):** Die Summenberechnung berücksichtigt
+  persönliche Salawat-Einträge erst ab dem individuellen `joined_at`-Zeitstempel
+  der Mitgliedschaft. Frühere Einträge fließen nicht rückwirkend ein.
+- **Online-Only:** Gruppenaktionen erfordern eine aktive Internetverbindung.
+  Sie werden nicht in der lokalen SQLite Offline-Queue gespeichert.
+- **Deep-Links & Clipboard:** Einladungslinks nutzen optional die öffentliche
+  Basis-URL aus `EXPO_PUBLIC_JOIN_BASE_URL` (z. B. `https://salawat.app/join/`,
+  ohne Geheimwerte) mit Fallback auf das App-Schema `salawat-circle://join/<token>`.
+  Das Paket `expo-clipboard` wird aktiv für das Kopieren von Links und Codes verwendet.
+
+Der lokale Backend-Vertrag für Gruppen und Einladungen lässt sich ausführen:
+
+```bash
+pnpm test:groups-integration
+```
+
+**Verbleibende Production-Arbeit:** Öffentliche Universal-/App-Link-Webseite und
+Domain-Konfiguration (AASA / `assetlinks.json`), automatisierte Bereinigung veralteter
+Rate-Limit-Buckets, erweiterte Missbrauchserkennung/Moderation sowie manuelle
+iOS/Android- und Accessibility-Geräteabnahmen.
+
 ### Qualitätsprüfung
 
 ```bash

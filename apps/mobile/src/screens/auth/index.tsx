@@ -121,7 +121,16 @@ export function CodeScreen() {
   })();
   const handleVerify = async () => {
     try {
-      await auth.verifyOtp(code);
+      const nextStatus = await auth.verifyOtp(code);
+      if (nextStatus === "ready") {
+        const inviteToken = await auth.consumePendingInvite().catch(() => null);
+        router.replace(
+          inviteToken
+            ? { pathname: "/join/[token]", params: { token: inviteToken } }
+            : "/",
+        );
+        return;
+      }
       router.replace("/");
     } catch {
       // The same visible error is used for invalid, expired and reused codes.

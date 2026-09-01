@@ -1,17 +1,26 @@
 import { AppScreen, StateFeedback } from "@/components";
 import { useAuth } from "@/lib/auth";
+import { normalizeTokenInvite } from "@/lib/groups";
 import { useTranslation } from "@/localization";
-import { JoinScreen } from "@/screens/main";
+import { JoinScreen } from "@/screens/groups";
 import { Redirect, useLocalSearchParams } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { useEffect, useState } from "react";
+
+function readValidatedTokenParam(value: string | string[] | undefined) {
+  if (typeof value === "string") return normalizeTokenInvite(value);
+  if (Array.isArray(value) && value.length === 1 && typeof value[0] === "string") {
+    return normalizeTokenInvite(value[0]);
+  }
+  return null;
+}
 
 export default function JoinRoute() {
   const { t } = useTranslation();
   const { status, rememberInvite } = useAuth();
   const { token: tokenParam } = useLocalSearchParams<{ token?: string | string[] }>();
-  const token = Array.isArray(tokenParam) ? tokenParam[0] : tokenParam;
-  const [stored, setStored] = useState(status === "ready");
+  const token = readValidatedTokenParam(tokenParam);
+  const [stored, setStored] = useState(status === "ready" || !token);
   const [storeFailed, setStoreFailed] = useState(false);
 
   useEffect(() => {
@@ -44,10 +53,14 @@ export default function JoinRoute() {
     }
     return stored || !token ? <Redirect href="/" /> : null;
   }
+
   return (
     <>
       <Stack.Screen options={{ title: t("joinTitle") }} />
-      <JoinScreen />
+      <JoinScreen
+        initialSecret={token ? { kind: "token", secret: token } : null}
+        invalidRouteSecret={!token}
+      />
     </>
   );
 }

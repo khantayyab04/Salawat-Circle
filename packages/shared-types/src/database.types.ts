@@ -38,6 +38,9 @@ export type Database = {
       }
       group_memberships: {
         Row: {
+          alias_key: string | null
+          alias_name: string | null
+          alias_normalized: string | null
           created_at: string
           group_id: string
           id: string
@@ -48,6 +51,9 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          alias_key?: string | null
+          alias_name?: string | null
+          alias_normalized?: string | null
           created_at?: string
           group_id: string
           id?: string
@@ -58,6 +64,9 @@ export type Database = {
           user_id: string
         }
         Update: {
+          alias_key?: string | null
+          alias_name?: string | null
+          alias_normalized?: string | null
           created_at?: string
           group_id?: string
           id?: string
@@ -79,8 +88,10 @@ export type Database = {
       }
       groups: {
         Row: {
+          alias_epoch: string
           created_at: string
           id: string
+          leaderboard_anonymous: boolean
           name: string
           normalized_name: string
           owner_user_id: string
@@ -90,8 +101,10 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          alias_epoch?: string
           created_at?: string
           id: string
+          leaderboard_anonymous?: boolean
           name: string
           normalized_name: string
           owner_user_id: string
@@ -101,8 +114,10 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          alias_epoch?: string
           created_at?: string
           id?: string
+          leaderboard_anonymous?: boolean
           name?: string
           normalized_name?: string
           owner_user_id?: string
@@ -216,6 +231,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_group_invite: {
+        Args: { p_kind: string; p_locale: string; p_secret: string }
+        Returns: Json
+      }
       create_entry: {
         Args: {
           p_amount: number
@@ -227,7 +246,21 @@ export type Database = {
         Returns: Json
       }
       create_group: {
-        Args: { p_client_group_id: string; p_name: string; p_timezone: string }
+        Args: {
+          p_client_group_id: string
+          p_leaderboard_anonymous: boolean
+          p_name: string
+          p_rules_accepted: boolean
+          p_timezone: string
+        }
+        Returns: Json
+      }
+      create_group_invite: {
+        Args: {
+          p_expires_in_days?: number
+          p_group_id: string
+          p_max_uses?: number
+        }
         Returns: Json
       }
       delete_entry: {
@@ -258,9 +291,26 @@ export type Database = {
         }
         Returns: Json
       }
+      list_group_invites: { Args: { p_group_id: string }; Returns: Json }
       list_my_groups: { Args: never; Returns: Json }
+      preview_group_invite: {
+        Args: { p_kind: string; p_secret: string }
+        Returns: Json
+      }
+      revoke_group_invite: {
+        Args: { p_group_id: string; p_invite_id: string }
+        Returns: Json
+      }
       set_daily_goal: {
         Args: { p_amount: number; p_effective_from: string }
+        Returns: Json
+      }
+      set_group_leaderboard_anonymity: {
+        Args: {
+          p_anonymous: boolean
+          p_expected_revision: number
+          p_group_id: string
+        }
         Returns: Json
       }
       update_entry: {

@@ -86,3 +86,87 @@ werden zusammengeführt; Create gefolgt von Delete erzeugt keinen Serveraufruf.
 PostgreSQL bleibt die kanonische Quelle. Lokale Daten autorisieren keine
 Operation und werden nie für fremde Einträge, Gruppenmitgliedschaft oder
 Ranglisten verwendet.
+
+## Gruppen, Einladungen und Ranglisten (MVP08)
+
+### RPC-Only Architektur- und Sicherheitsgrenze
+
+Sämtliche Gruppen- und Einladungsfunktionen sind strikt über geschützte Supabase
+RPCs gekapselt (`list_my_groups`, `create_group`, `get_group_leaderboard`,
+`public.set_group_leaderboard_anonymity`, `create_group_invite`, `list_group_invites`,
+`revoke_group_invite`, `preview_group_invite`, `public.accept_group_invite`). Direkte
+Lesezugriffe auf Gruppentabellen (`groups`, `group_memberships`) sind per RLS auf eigene
+aktive Mitgliedschaften beschränkt. Sämtliche Schreibzugriffe sind entzogen; Mutationen
+sowie Zugriffe auf private Einladungstabellen (`private.group_invites`) sind ausschließlich
+serverseitig per RPC möglich.
+
+### Einladungs-Hashspeicherung
+
+Roh-Einladungstokens (10-stellige alphanumerische Codes) und Einladungscodes werden serverseitig
+ausschließlich als SHA-256-Hashes (`token_hash` / `code_hash`) in `private.group_invites`
+gespeichert (`sha256(token)` / `sha256(code)`). Das Klartext-Token wird dem Ersteller bei der Erzeugung genau
+einmal zurückgegeben und im Backend weder in Tabellen noch in Serverlogs abgelegt.
+
+### Mitgliedschafts-Zeitstempel (`joined_at`) und keine rückwirkenden Summen
+
+Jede Gruppenmitgliedschaft speichert den exakten Beitrittszeitstempel `joined_at`.
+Die Berechnung der Gruppenrangliste (`get_group_leaderboard`) aggregiert persönliche
+Salawat-Einträge eines Mitglieds ausschließlich ab dessen individuellem `joined_at`.
+Salawat, die vor dem Beitritt zur Gruppe erfasst wurden, fließen **nicht** rückwirkend
+in die Gruppenrangliste ein.
+
+### Online-Only Gruppen-Zustandsverwaltung
+
+`GroupsStore` und `GroupsProvider` agieren als reiner Online-Zustandsverwalter.
+Gruppenfunktionen (Erstellen, Rangliste abrufen, Einladungen verwalten, Beitritt
+und Anonymitätswechsel) werden direkt gegen die Supabase-RPCs ausgeführt und nicht
+in der lokalen SQLite-Datenbank oder Mutation-Queue zwischengespeichert. Bei fehlender
+Netzwerkverbindung zeigt die UI den entsprechenden Offline-Status.
+
+### Lebenszyklus ausstehender Einladungstokens (Pending Invite Tokens)
+
+Wird ein Einladungslink geöffnet, während die App unangemeldet ist oder das Profil/die
+Einwilligung noch fehlt, wird das Token temporär in SecureStore unter dem Schlüssel
+`salawat-circle.pending-invite` hinterlegt. Nach Abschluss der Registrierung und Profilerstellung
+wird das ausstehende Token gelesen, die Beitrittsvorschau automatisch geöffnet und der
+Schlüssel nach Verwendung oder Abbruch umgehend aus SecureStore gelöscht.
+
+### Anonymitätsmodell (`alias_epoch` / `alias_key`)
+
+Der Gruppeninhaber kann die Anonymisierung der Rangliste aktivieren. Wenn aktiv,
+berechnet das Backend stabile servergenerierte Gruppenaliase aus Adjektiv und Nomen
+(z. B. `Ruhiger Garten`, optional mit numerischem Suffix wie `Ruhiger Garten 2` bei Kollisionen,
+aktuell sprachunabhängig vom Server vorgegeben) unter Verwendung von `alias_key` und `alias_epoch`.
+Ein Mitglied sieht stets seinen eigenen echten Anzeigenamen, während andere Mitglieder nur den Alias sehen.
+Anonymisierung wirkt **nicht rückwirkend**: Mitglieder, die die Rangliste zuvor mit
+echten Anzeigenamen eingesehen haben, können historische Zuordnungen nicht rückwirkend
+"vergessen".
+
+### Keyset-Pagination (`sort_name` / `row_id`)
+
+Die Gruppenrangliste nutzt Keyset-Pagination zur effizienten und stabilen Anzeige
+großer Ranglisten. Der composite Cursor baut auf `(rank, sort_name, row_id)` auf, um
+bei identischen Summenwerten eine absolut deterministische Sortierung ohne doppelte
+oder übersprungene Einträge über Seitengrenzen hinweg zu garantieren.
+
+### Strukturiertes Rate-Limiting
+
+Aktionen wie Einladungserstellung, Beitrittsvorschau, Beitritt und Gruppenerstellung
+werden serverseitig über die Hilfsfunktion `private.enforce_rate_limit` und die Tabelle
+`private.rate_limit_buckets` geschützt. Bei Überschreiten der Limits liefert die RPC einen
+strukturierten Fehlercode (`RATE_LIMITED` / HTTP 429), der vom Gateway sauber gefangen
+und in eine benutzerfreundliche Warten-Statusansicht übersetzt wird.
+
+### Verbleibende Production-Arbeit (Architecture Follow-ups)
+
+- **Universal Links & App Links Setup:** Öffentliche Web-Domain-Konfiguration
+  (Apple App Site Association `apple-app-site-association` und Android `assetlinks.json`
+  auf der Rechts-/Join-Webseite `apps/legal-site`) zur nahtlosen Betriebssystem-Integration
+  von `https://salawat.app/join/<token>`.
+- **Scheduled Cleanup Task:** Automatisierte PG-Cron- / Scheduled Function-Einrichtung zur
+  regelmäßigen Löschung abgelaufener Einträge in `rate_limit_buckets`.
+- **Erweiterte Moderation & Abuse Detection:** Automatisierte Inhaltsprüfung für Gruppen-
+  und Profilnamen sowie administrative Moderations-Workflows (Admin-App).
+- **Automatisierte Geräte- und Accessibility-Tests:** Systematische E2E- und Screenreader-
+  Testmatrix auf physischen iOS- und Android-Geräten.
+
