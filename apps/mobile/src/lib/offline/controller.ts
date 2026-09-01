@@ -36,6 +36,10 @@ export class OfflineController {
   private loadFailed = false;
   private loadFailureCode = "INTERNAL";
 
+  private cloneState(state: OfflineAccountState) {
+    return JSON.parse(JSON.stringify(state)) as OfflineAccountState;
+  }
+
   constructor(
     private readonly storage: OfflineStorage,
     private readonly gateway: EntriesGateway,
@@ -44,7 +48,18 @@ export class OfflineController {
     syncRunner?: SyncRunner,
   ) {
     this.syncRunner =
-      syncRunner ?? new SyncEngine(gateway, storage, now, Math.random);
+      syncRunner ??
+      new SyncEngine(
+        gateway,
+        {
+          save: async (state) => {
+            await this.storage.save(state);
+            this.state = this.cloneState(state);
+          },
+        },
+        now,
+        Math.random,
+      );
   }
 
   private runExclusive<T>(action: () => Promise<T>): Promise<T> {
@@ -228,13 +243,16 @@ export class OfflineController {
   sync(forcePendingNow = false) {
     return this.runExclusive(async () => {
       this.ensureWritable();
+      let next = this.cloneState(this.state);
       if (forcePendingNow) {
-        for (const mutation of this.state.queue) {
+        for (const mutation of next.queue) {
           if (mutation.status === "pending") mutation.nextAttemptAt = null;
         }
-        await this.storage.save(this.state);
+        await this.storage.save(next);
+        this.state = this.cloneState(next);
+        next = this.cloneState(next);
       }
-      await this.syncRunner.drain(this.state);
+      await this.syncRunner.drain(next);
       return this.state;
     });
   }

@@ -101,7 +101,10 @@ export class SyncEngine {
     mutation: QueueMutation,
     result: Awaited<ReturnType<SyncEngine["execute"]>>,
   ) {
-    const entry = this.entry(state, mutation.entityId);
+    const entry =
+      mutation.entity === "entry"
+        ? this.entry(state, mutation.entityId)
+        : undefined;
     if ((mutation.operation === "create" || mutation.operation === "update") && result) {
       const replacement: OfflineEntry = {
         ...result,
@@ -132,7 +135,10 @@ export class SyncEngine {
     mutation: QueueMutation,
     code: ReturnType<typeof getEntriesErrorCode>,
   ): Promise<boolean> {
-    const entry = this.entry(state, mutation.entityId);
+    const entry =
+      mutation.entity === "entry"
+        ? this.entry(state, mutation.entityId)
+        : undefined;
     mutation.lastErrorCode = code;
     mutation.lastAttemptAt = this.now().toISOString();
     mutation.retryCount += 1;

@@ -4,6 +4,7 @@ import { EntriesStore } from "./entries-store";
 import { OfflineController } from "@/lib/offline/controller";
 import {
   emptyOfflineState,
+  migrateOfflineState,
   type OfflineAccountState,
 } from "@/lib/offline/types";
 
@@ -860,6 +861,103 @@ describe("EntriesStore", () => {
     expect(store.snapshot.viewState).toBe("content");
     expect(persistence.load).toHaveBeenCalledTimes(3);
     expect(persistence.clear).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a mid-drain writer failure without publishing unpersisted sync state", async () => {
+    const initial = emptyOfflineState();
+    initial.timeZone = "Europe/Berlin";
+    const secondEntry = {
+      ...existingEntry,
+      id: "00000000-0000-4000-8000-000000000002",
+      amount: "8",
+    };
+    initial.entries = [existingEntry, secondEntry].map((entry) => ({
+      ...entry,
+      revision: 0,
+      localState: "pending_create" as const,
+      serverRevision: null,
+      lastAttemptAt: null,
+      retryCount: 0,
+      lastErrorCode: null,
+    }));
+    initial.queue = initial.entries.map((entry, index) => ({
+      id: `mutation-${index + 1}`,
+      entity: "entry" as const,
+      operation: "create" as const,
+      entityId: entry.id,
+      payload: {
+        amount: Number(entry.amount),
+        entryDate: entry.entryDate,
+        timezone: entry.timezone,
+        recordedAtClient: entry.recordedAtClient,
+      },
+      expectedRevision: null,
+      createdAt: entry.createdAt,
+      status: "pending" as const,
+      lastAttemptAt: null,
+      retryCount: 0,
+      lastErrorCode: null,
+      nextAttemptAt: null,
+    }));
+    let persisted = structuredClone(initial);
+    let saveCount = 0;
+    const persistence = {
+      load: vi.fn(async () => structuredClone(persisted)),
+      save: vi.fn(async (state: OfflineAccountState) => {
+        saveCount += 1;
+        if (saveCount === 2) throw new Error("INVALID_OFFLINE_STATE");
+        persisted = structuredClone(state);
+      }),
+      clear: vi.fn(),
+    };
+    const entriesGateway = gateway({
+      create: vi.fn(async (input) => ({
+        ...existingEntry,
+        id: input.id,
+        amount: String(input.amount),
+        entryDate: input.entryDate,
+        timezone: input.timezone,
+        recordedAtClient: input.recordedAtClient,
+      })),
+    });
+    const offline = new OfflineController(
+      persistence,
+      entriesGateway,
+      () => new Date("2026-08-31T10:00:00.000Z"),
+      () => "unused",
+    );
+    await offline.load();
+    const store = new EntriesStore(
+      entriesGateway,
+      "UTC",
+      () => new Date("2026-08-31T10:00:00.000Z"),
+      () => "unused",
+      offline,
+    );
+
+    await store.syncPending();
+
+    expect(store.snapshot).toMatchObject({
+      syncState: "error",
+      errorCode: "INVALID_OFFLINE_STATE",
+    });
+    expect(offline.state).toEqual(persisted);
+    expect(offline.state.entries).toEqual([
+      expect.objectContaining({
+        id: existingEntry.id,
+        localState: "synced",
+      }),
+      expect.objectContaining({
+        id: secondEntry.id,
+        localState: "pending_create",
+      }),
+    ]);
+    expect(offline.state.queue.map(({ entityId }) => entityId)).toEqual([
+      secondEntry.id,
+    ]);
+    expect(() =>
+      migrateOfflineState(structuredClone(offline.state)),
+    ).not.toThrow();
   });
 
   it("clears invalid local state and reloads canonical server data on explicit recovery", async () => {

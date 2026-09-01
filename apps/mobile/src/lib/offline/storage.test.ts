@@ -123,6 +123,33 @@ describe("EncryptedAccountStorage", () => {
     expect(await storage.load()).toEqual(valid);
   });
 
+  it("persists the normalized migration result for legacy state", async () => {
+    const rows = backend();
+    const storage = new EncryptedAccountStorage(
+      "account-a",
+      new Uint8Array(32).fill(7),
+      rows.value,
+      () => new Uint8Array(12).fill(1),
+    );
+    const legacy = {
+      entries: [],
+      summary: emptyOfflineState().summary,
+      timeZone: "",
+      queue: [],
+      conflict: null,
+      hasMore: true,
+    } as unknown as OfflineAccountState;
+
+    await storage.save(legacy);
+
+    expect(await storage.load()).toMatchObject({
+      conflicts: [],
+      conflict: null,
+      serverCursor: null,
+      hasMore: false,
+    });
+  });
+
   it("maps unreadable encrypted data to recovery without deleting it", async () => {
     const rows = backend();
     const storage = new EncryptedAccountStorage(

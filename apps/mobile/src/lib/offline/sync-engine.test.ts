@@ -540,6 +540,64 @@ describe("SyncEngine", () => {
     expect(state.queue).toEqual([]);
   });
 
+  it("leaves an unrelated entry unchanged when a failed goal shares its id", async () => {
+    const state = emptyOfflineState();
+    const collidingId = "2026-08-31";
+    state.entries = [
+      {
+        ...entry,
+        id: collidingId,
+        localState: "synced",
+        serverRevision: entry.revision,
+        lastAttemptAt: null,
+        retryCount: 0,
+        lastErrorCode: null,
+      },
+    ];
+    state.queue = [
+      {
+        id: "mutation-goal",
+        entity: "goal",
+        operation: "set_goal",
+        entityId: collidingId,
+        payload: { amount: 100, effectiveFrom: collidingId },
+        expectedRevision: null,
+        createdAt: now,
+        status: "pending",
+        lastAttemptAt: null,
+        retryCount: 0,
+        lastErrorCode: null,
+        nextAttemptAt: null,
+      },
+    ];
+    const save = vi.fn(async (saved: OfflineAccountState) => {
+      migrateOfflineState(structuredClone(saved));
+    });
+
+    await new SyncEngine(
+      gateway({
+        setGoal: vi.fn().mockRejectedValue(new Error("INVALID_AMOUNT")),
+      }),
+      { save },
+      () => new Date(now),
+    ).drain(state);
+
+    expect(state.entries[0]).toMatchObject({
+      id: collidingId,
+      localState: "synced",
+      lastAttemptAt: null,
+      retryCount: 0,
+      lastErrorCode: null,
+    });
+    expect(state.queue[0]).toMatchObject({
+      entity: "goal",
+      status: "failed",
+      retryCount: 1,
+      lastErrorCode: "INVALID_AMOUNT",
+    });
+    expect(() => migrateOfflineState(structuredClone(state))).not.toThrow();
+  });
+
   it("does not remove another mutation when the completed object was coalesced", async () => {
     const state = pendingCreate();
     state.queue.push({

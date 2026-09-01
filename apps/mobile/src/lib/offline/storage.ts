@@ -26,10 +26,10 @@ export class EncryptedAccountStorage {
   }
 
   async save(state: OfflineAccountState): Promise<void> {
-    migrateOfflineState(state);
+    const normalized = migrateOfflineState(state);
     await this.backend.write(
       this.accountId,
-      encryptJson(state, this.key, this.createNonce),
+      encryptJson(normalized, this.key, this.createNonce),
     );
   }
 
