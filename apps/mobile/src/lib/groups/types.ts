@@ -22,6 +22,56 @@ export type GroupMembership = {
   sharingConsentVersion?: string;
 };
 
+export type GroupMemberCursor = {
+  sortName: string;
+  membershipId: string;
+};
+
+export type GroupMember = {
+  membershipId: string;
+  displayName: string;
+  role: GroupRole;
+  joinedAt: string;
+  isSelf: boolean;
+};
+
+export type GroupMembersGroup = {
+  id: string;
+  name: string;
+  timezone: string;
+  leaderboardAnonymous: boolean;
+  revision: number;
+};
+
+export type ListGroupMembersResponse = {
+  group: GroupMembersGroup;
+  items: GroupMember[];
+  nextCursor: GroupMemberCursor | null;
+  hasMore: boolean;
+};
+
+export type UpdateGroupNameResponse = {
+  group: GroupSnapshot;
+};
+
+export type RemoveGroupMemberResponse = {
+  group: GroupSnapshot;
+  membershipId: string;
+};
+
+export type LeaveGroupResponse = {
+  groupId: string;
+  membershipId: string;
+};
+
+export type TransferGroupOwnershipResponse = {
+  group: GroupSnapshot;
+};
+
+export type DeleteGroupResponse = {
+  groupId: string;
+};
+
 export type GroupListItem = {
   id: string;
   name: string;

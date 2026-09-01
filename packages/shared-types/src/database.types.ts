@@ -267,6 +267,10 @@ export type Database = {
         Args: { p_expected_revision: number; p_id: string }
         Returns: Json
       }
+      delete_group: {
+        Args: { p_expected_revision: number; p_group_id: string }
+        Returns: Json
+      }
       get_entry: { Args: { p_id: string }; Returns: Json }
       get_group_leaderboard: {
         Args: {
@@ -282,6 +286,7 @@ export type Database = {
       get_home_summary: { Args: { p_timezone: string }; Returns: Json }
       get_onboarding_state: { Args: never; Returns: Json }
       grant_core_consent: { Args: { p_locale: string }; Returns: Json }
+      leave_group: { Args: { p_group_id: string }; Returns: Json }
       list_entries: {
         Args: {
           p_cursor_created_at?: string
@@ -292,9 +297,26 @@ export type Database = {
         Returns: Json
       }
       list_group_invites: { Args: { p_group_id: string }; Returns: Json }
+      list_group_members: {
+        Args: {
+          p_cursor_membership_id?: string
+          p_cursor_sort_name?: string
+          p_group_id: string
+          p_limit?: number
+        }
+        Returns: Json
+      }
       list_my_groups: { Args: never; Returns: Json }
       preview_group_invite: {
         Args: { p_kind: string; p_secret: string }
+        Returns: Json
+      }
+      remove_group_member: {
+        Args: {
+          p_expected_revision: number
+          p_group_id: string
+          p_membership_id: string
+        }
         Returns: Json
       }
       revoke_group_invite: {
@@ -310,6 +332,14 @@ export type Database = {
           p_anonymous: boolean
           p_expected_revision: number
           p_group_id: string
+        }
+        Returns: Json
+      }
+      transfer_group_ownership: {
+        Args: {
+          p_expected_revision: number
+          p_group_id: string
+          p_membership_id: string
         }
         Returns: Json
       }

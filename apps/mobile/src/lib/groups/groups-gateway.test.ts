@@ -489,6 +489,171 @@ describe("Supabase groups gateway", () => {
     });
   });
 
+  it("parses a member page and sends its cursor to the protected RPC", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: {
+        group: {
+          id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+          name: "Alpha Circle",
+          timezone: "Europe/Berlin",
+          leaderboard_anonymous: true,
+          revision: 4,
+        },
+        items: [
+          {
+            membership_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+            display_name: "Ruhiger Garten",
+            role: "owner",
+            joined_at: "2026-08-31T10:00:00.000Z",
+            is_self: true,
+          },
+        ],
+        next_cursor: {
+          sort_name: "ruhiger garten",
+          membership_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+        },
+        has_more: true,
+      },
+      error: null,
+      status: 200,
+    });
+    const gateway = createGateway(rpc as SupabaseClient<Database>["rpc"]);
+
+    await expect(
+      gateway.listGroupMembers(
+        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+        {
+          sortName: "ruhiger garten",
+          membershipId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+        },
+        30,
+      ),
+    ).resolves.toEqual({
+      group: {
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+        name: "Alpha Circle",
+        timezone: "Europe/Berlin",
+        leaderboardAnonymous: true,
+        revision: 4,
+      },
+      items: [
+        {
+          membershipId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+          displayName: "Ruhiger Garten",
+          role: "owner",
+          joinedAt: "2026-08-31T10:00:00.000Z",
+          isSelf: true,
+        },
+      ],
+      nextCursor: {
+        sortName: "ruhiger garten",
+        membershipId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+      },
+      hasMore: true,
+    });
+
+    expect(rpc).toHaveBeenCalledWith("list_group_members", {
+      p_group_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+      p_cursor_sort_name: "ruhiger garten",
+      p_cursor_membership_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+      p_limit: 30,
+    });
+  });
+
+  it("maps group management mutations to protected RPC contracts", async () => {
+    const group = {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+      name: "Renamed Circle",
+      timezone: "Europe/Berlin",
+      status: "active",
+      leaderboard_anonymous: false,
+      created_at: "2026-08-31T10:00:00.000Z",
+      updated_at: "2026-08-31T10:01:00.000Z",
+      revision: 5,
+    };
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({ data: { group }, error: null })
+      .mockResolvedValueOnce({
+        data: {
+          group,
+          membership_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          group_id: group.id,
+          membership_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: { group }, error: null })
+      .mockResolvedValueOnce({ data: { group_id: group.id }, error: null });
+    const gateway = createGateway(rpc as SupabaseClient<Database>["rpc"]);
+    const expectedGroup = {
+      id: group.id,
+      name: group.name,
+      timezone: group.timezone,
+      status: "active",
+      leaderboardAnonymous: false,
+      createdAt: group.created_at,
+      updatedAt: group.updated_at,
+      revision: 5,
+    };
+
+    await expect(
+      gateway.updateGroupName(group.id, group.name, 4),
+    ).resolves.toEqual({ group: expectedGroup });
+    await expect(
+      gateway.removeGroupMember(
+        group.id,
+        "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+        4,
+      ),
+    ).resolves.toEqual({
+      group: expectedGroup,
+      membershipId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+    });
+    await expect(gateway.leaveGroup(group.id)).resolves.toEqual({
+      groupId: group.id,
+      membershipId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+    });
+    await expect(
+      gateway.transferGroupOwnership(
+        group.id,
+        "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+        4,
+      ),
+    ).resolves.toEqual({ group: expectedGroup });
+    await expect(gateway.deleteGroup(group.id, 4)).resolves.toEqual({
+      groupId: group.id,
+    });
+
+    expect(rpc).toHaveBeenNthCalledWith(1, "update_group_name", {
+      p_group_id: group.id,
+      p_name: group.name,
+      p_expected_revision: 4,
+    });
+    expect(rpc).toHaveBeenNthCalledWith(2, "remove_group_member", {
+      p_group_id: group.id,
+      p_membership_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+      p_expected_revision: 4,
+    });
+    expect(rpc).toHaveBeenNthCalledWith(3, "leave_group", {
+      p_group_id: group.id,
+    });
+    expect(rpc).toHaveBeenNthCalledWith(4, "transfer_group_ownership", {
+      p_group_id: group.id,
+      p_membership_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+      p_expected_revision: 4,
+    });
+    expect(rpc).toHaveBeenNthCalledWith(5, "delete_group", {
+      p_group_id: group.id,
+      p_expected_revision: 4,
+    });
+  });
+
   it("throws typed domain errors from successful structured invite envelopes", async () => {
     const rpc = vi
       .fn()

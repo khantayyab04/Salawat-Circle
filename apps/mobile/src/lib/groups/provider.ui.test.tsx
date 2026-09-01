@@ -91,6 +91,12 @@ function gateway(): GroupsGateway {
     revokeInvite: jest.fn<GroupsGateway["revokeInvite"]>(),
     previewInvite: jest.fn<GroupsGateway["previewInvite"]>(),
     acceptInvite: jest.fn<GroupsGateway["acceptInvite"]>(),
+    listGroupMembers: jest.fn<GroupsGateway["listGroupMembers"]>(),
+    updateGroupName: jest.fn<GroupsGateway["updateGroupName"]>(),
+    removeGroupMember: jest.fn<GroupsGateway["removeGroupMember"]>(),
+    leaveGroup: jest.fn<GroupsGateway["leaveGroup"]>(),
+    transferGroupOwnership: jest.fn<GroupsGateway["transferGroupOwnership"]>(),
+    deleteGroup: jest.fn<GroupsGateway["deleteGroup"]>(),
   };
 }
 

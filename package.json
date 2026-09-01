@@ -24,6 +24,7 @@
     "test:goals-integration": "node --test scripts/mvp06-goals.integration.test.mjs",
     "test:offline-integration": "node --test scripts/mvp07-offline.integration.test.mjs",
     "test:groups-integration": "node --test scripts/mvp08-groups.integration.test.mjs",
+    "test:management-integration": "node --test scripts/mvp09-management.integration.test.mjs",
     "verify": "pnpm test && pnpm lint && pnpm typecheck"
   },
   "devDependencies": {

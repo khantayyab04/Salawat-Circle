@@ -121,6 +121,9 @@ const copy: Record<string, string> = {
   groupDetailAnonymityRevisionMissing:
     "Die Einstellung konnte nicht gespeichert werden. Bitte aktualisiere die Gruppe und versuche es erneut.",
   groupDetailInviteAction: "Einladungen verwalten",
+  groupMembers: "Mitglieder verwalten",
+  groupDetailRenameAction: "Gruppe umbenennen",
+  groupDetailRenameLabel: "Neuer Gruppenname",
   statePartialErrorTitle: "Nicht alles konnte geladen werden",
   statePartialErrorBody: "Die vorhandenen Inhalte bleiben sichtbar.",
 };
@@ -259,6 +262,28 @@ const errorCases: ["OFFLINE" | "RATE_LIMITED" | "NOT_FOUND" | "INTERNAL", string
 ];
 
 describe("Task 14 group detail screen", () => {
+  it("links the group detail to member management for an owner", async () => {
+    const view = await render(<GroupDetailRoute />);
+
+    await waitFor(() =>
+      expect(view.getByRole("button", { name: "Mitglieder verwalten" })).toBeTruthy(),
+    );
+    fireEvent.press(view.getByRole("button", { name: "Mitglieder verwalten" }));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: "/groups/[id]/members",
+      params: { id: "group-1" },
+    });
+  });
+
+  it("opens the owner rename form from the detail screen", async () => {
+    const view = await render(<GroupDetailRoute />);
+
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Gruppe umbenennen" }));
+    });
+    await waitFor(() => expect(view.getByDisplayValue("Alpha Circle")).toBeTruthy());
+  });
+
   it("triggers a fresh week reset load on mount even when week data is already cached", async () => {
     const view = await render(<GroupDetailRoute />);
 

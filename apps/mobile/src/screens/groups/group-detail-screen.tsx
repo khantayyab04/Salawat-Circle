@@ -2,6 +2,7 @@ import {
   AppButton,
   AppCard,
   AppText,
+  FormField,
   StatusBanner,
 } from "@/components";
 import {
@@ -292,7 +293,7 @@ export function GroupDetailScreen() {
   const { colors } = useAppTheme();
   const { localeTag, t } = useTranslation();
   const { width } = useWindowDimensions();
-  const { push } = useRouter();
+  const { push, replace } = useRouter();
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
   const {
     groups,
@@ -302,12 +303,20 @@ export function GroupDetailScreen() {
     loadLeaderboard,
     refreshGroups,
     setAnonymity,
+    updateGroupName,
+    leaveGroup,
+    deleteGroup,
   } = useGroups();
 
   const groupId = readGroupId(id);
   const [period, setPeriod] = useState<LeaderboardPeriod>("week");
   const [refreshing, setRefreshing] = useState(false);
   const [switchErrorMessage, setSwitchErrorMessage] = useState<string | null>(null);
+  const [managementMode, setManagementMode] = useState<
+    "rename" | "leave" | "delete" | null
+  >(null);
+  const [nextGroupName, setNextGroupName] = useState("");
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const loadMoreGuardRef = useRef(false);
   const periodRef = useRef<LeaderboardPeriod>(period);
   const appStateRef = useRef(AppState.currentState);
@@ -363,6 +372,11 @@ export function GroupDetailScreen() {
     : null;
 
   const setAnonymityPending = mutation.pending && mutation.kind === "set_anonymity";
+  const managementPending =
+    mutation.pending &&
+    ["update_group_name", "leave_group", "delete_group"].includes(
+      mutation.kind ?? "",
+    );
 
   useEffect(() => {
     loadMoreGuardRef.current = false;
@@ -471,6 +485,53 @@ export function GroupDetailScreen() {
     [groupId, isOwner, loadLeaderboard, period, revision, setAnonymity, t],
   );
 
+  const saveGroupName = useCallback(async () => {
+    if (!groupId || !isOwner || typeof revision !== "number") return;
+    try {
+      await updateGroupName(groupId, nextGroupName, revision);
+      setManagementMode(null);
+      setNextGroupName("");
+    } catch (error) {
+      setSwitchErrorMessage(resolveLeaderboardErrorCopy(readErrorCode(error), t).body);
+    }
+  }, [groupId, isOwner, nextGroupName, revision, t, updateGroupName]);
+
+  const confirmLeave = useCallback(async () => {
+    if (!groupId || isOwner) return;
+    try {
+      await leaveGroup(groupId);
+      replace("/groups");
+    } catch (error) {
+      setSwitchErrorMessage(resolveLeaderboardErrorCopy(readErrorCode(error), t).body);
+    }
+  }, [groupId, isOwner, leaveGroup, replace, t]);
+
+  const confirmDelete = useCallback(async () => {
+    if (
+      !groupId ||
+      !isOwner ||
+      typeof revision !== "number" ||
+      deleteConfirmation !== groupName
+    ) {
+      return;
+    }
+    try {
+      await deleteGroup(groupId, revision);
+      replace("/groups");
+    } catch (error) {
+      setSwitchErrorMessage(resolveLeaderboardErrorCopy(readErrorCode(error), t).body);
+    }
+  }, [
+    deleteConfirmation,
+    deleteGroup,
+    groupId,
+    groupName,
+    isOwner,
+    replace,
+    revision,
+    t,
+  ]);
+
   const listHeader = (
     <View style={{ gap: spacing.lg }}>
       <Stack.Screen options={{ title: groupName }} />
@@ -508,6 +569,118 @@ export function GroupDetailScreen() {
       </AppCard>
 
       <AppCard style={{ gap: spacing.sm }}>
+        <AppButton
+          label={t("groupMembers")}
+          variant="secondary"
+          onPress={() => {
+            if (!groupId) return;
+            push({ pathname: "/groups/[id]/members", params: { id: groupId } });
+          }}
+        />
+        {isOwner ? (
+          <>
+            <AppButton
+              label={t("groupDetailRenameAction")}
+              variant="secondary"
+              disabled={managementPending}
+              onPress={() => {
+                setSwitchErrorMessage(null);
+                setNextGroupName(groupName);
+                setManagementMode("rename");
+              }}
+            />
+            <AppButton
+              label={t("groupDetailDeleteAction")}
+              variant="destructive"
+              disabled={managementPending}
+              onPress={() => {
+                setSwitchErrorMessage(null);
+                setDeleteConfirmation("");
+                setManagementMode("delete");
+              }}
+            />
+          </>
+        ) : (
+          <AppButton
+            label={t("groupDetailLeaveAction")}
+            variant="secondary"
+            disabled={managementPending}
+            onPress={() => {
+              setSwitchErrorMessage(null);
+              setManagementMode("leave");
+            }}
+          />
+        )}
+        {managementMode === "rename" ? (
+          <View style={{ gap: spacing.sm }}>
+            <FormField
+              label={t("groupDetailRenameLabel")}
+              hint={t("groupDetailRenameHint")}
+              maxLength={50}
+              value={nextGroupName}
+              onChangeText={setNextGroupName}
+            />
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
+              <AppButton
+                label={t("commonCancel")}
+                variant="secondary"
+                disabled={managementPending}
+                onPress={() => setManagementMode(null)}
+              />
+              <AppButton
+                label={t("groupDetailRenameSaveAction")}
+                disabled={managementPending || nextGroupName.trim().length < 2}
+                loading={managementPending}
+                onPress={() => void saveGroupName()}
+              />
+            </View>
+          </View>
+        ) : null}
+        {managementMode === "leave" ? (
+          <View style={{ gap: spacing.sm }}>
+            <AppText>{t("groupDetailLeaveConfirmBody")}</AppText>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
+              <AppButton
+                label={t("commonCancel")}
+                variant="secondary"
+                disabled={managementPending}
+                onPress={() => setManagementMode(null)}
+              />
+              <AppButton
+                label={t("groupDetailLeaveConfirmAction")}
+                variant="destructive"
+                loading={managementPending}
+                onPress={() => void confirmLeave()}
+              />
+            </View>
+          </View>
+        ) : null}
+        {managementMode === "delete" ? (
+          <View style={{ gap: spacing.sm }}>
+            <AppText>{t("groupDetailDeleteConfirmBody")}</AppText>
+            <FormField
+              label={t("groupDetailDeleteLabel")}
+              hint={t("groupDetailDeleteHint", { name: groupName })}
+              value={deleteConfirmation}
+              onChangeText={setDeleteConfirmation}
+            />
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
+              <AppButton
+                label={t("commonCancel")}
+                variant="secondary"
+                disabled={managementPending}
+                onPress={() => setManagementMode(null)}
+              />
+              <AppButton
+                label={t("groupDetailDeleteConfirmAction")}
+                variant="destructive"
+                disabled={managementPending || deleteConfirmation !== groupName}
+                loading={managementPending}
+                onPress={() => void confirmDelete()}
+              />
+            </View>
+          </View>
+        ) : null}
         {isOwner ? (
           <>
             <Host matchContents>

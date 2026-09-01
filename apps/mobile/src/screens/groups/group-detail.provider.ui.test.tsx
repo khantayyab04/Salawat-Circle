@@ -248,6 +248,24 @@ function createGateway(overrides: Partial<GroupsGateway> = {}): GroupsGateway {
     acceptInvite: jest
       .fn<GroupsGateway["acceptInvite"]>()
       .mockRejectedValue(new Error("UNEXPECTED_CALL")),
+    listGroupMembers: jest
+      .fn<GroupsGateway["listGroupMembers"]>()
+      .mockRejectedValue(new Error("UNEXPECTED_CALL")),
+    updateGroupName: jest
+      .fn<GroupsGateway["updateGroupName"]>()
+      .mockRejectedValue(new Error("UNEXPECTED_CALL")),
+    removeGroupMember: jest
+      .fn<GroupsGateway["removeGroupMember"]>()
+      .mockRejectedValue(new Error("UNEXPECTED_CALL")),
+    leaveGroup: jest
+      .fn<GroupsGateway["leaveGroup"]>()
+      .mockRejectedValue(new Error("UNEXPECTED_CALL")),
+    transferGroupOwnership: jest
+      .fn<GroupsGateway["transferGroupOwnership"]>()
+      .mockRejectedValue(new Error("UNEXPECTED_CALL")),
+    deleteGroup: jest
+      .fn<GroupsGateway["deleteGroup"]>()
+      .mockRejectedValue(new Error("UNEXPECTED_CALL")),
     ...overrides,
   };
 }
