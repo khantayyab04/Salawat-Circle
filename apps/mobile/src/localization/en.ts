@@ -256,6 +256,12 @@ export const en = {
   joinOfflineMessage: "You are offline. Reconnect and try again.",
   joinErrorMessage: "The invitation could not be loaded. Please try again.",
   joinRefresh: "Check again",
+  joinStorageRetry: "Try again",
+  joinAbandonAction: "Discard invitation",
+  joinAbandonTitle: "Discard invitation?",
+  joinAbandonBody:
+    "The saved invitation link will be removed from this device. You can open it again later only from the original link.",
+  joinExitAction: "Back to overview",
   settingsLanguage: "Language",
   settingsLanguageHint: "Language for this app",
   settingsLanguageSystem: "System default",

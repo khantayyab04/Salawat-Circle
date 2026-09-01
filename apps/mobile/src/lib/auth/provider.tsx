@@ -37,10 +37,11 @@ type AuthContextValue = {
     timeZone: string,
     locale: "de" | "en",
   ): Promise<void>;
-  grantConsent(locale: "de" | "en"): Promise<string | null>;
+  grantConsent(locale: "de" | "en"): Promise<void>;
   signOut(): Promise<void>;
   rememberInvite(token: string): Promise<void>;
-  consumePendingInvite(): Promise<string | null>;
+  peekPendingInvite(): Promise<string | null>;
+  clearPendingInvite(): Promise<void>;
   clearError(): void;
 };
 
@@ -89,16 +90,18 @@ export function AuthProvider({
     [providedGateway],
   );
   const clearLocalData = useMemo(
-    () =>
-      providedClearLocalData ??
-      (async () => {
-        const { clearAllOfflineData } = await import("@/lib/offline");
-        await Promise.all([
-          clearSecureAuthSession(),
-          inviteStore.clear(),
-          clearAllOfflineData(),
-        ]);
-      }),
+    () => async () => {
+      const clearAccountData =
+        providedClearLocalData ??
+        (async () => {
+          const { clearAllOfflineData } = await import("@/lib/offline");
+          await Promise.all([
+            clearSecureAuthSession(),
+            clearAllOfflineData(),
+          ]);
+        });
+      await Promise.all([inviteStore.clear(), clearAccountData()]);
+    },
     [inviteStore, providedClearLocalData],
   );
   const coordinator = useMemo(
@@ -180,6 +183,18 @@ export function AuthProvider({
     },
     [refresh],
   );
+  const rememberInvite = useCallback(
+    (token: string) => inviteStore.save(token),
+    [inviteStore],
+  );
+  const peekPendingInvite = useCallback(
+    () => inviteStore.peek(),
+    [inviteStore],
+  );
+  const clearPendingInvite = useCallback(
+    () => inviteStore.clear(),
+    [inviteStore],
+  );
 
   const value = useMemo<AuthContextValue>(() => {
     void revision;
@@ -200,16 +215,23 @@ export function AuthProvider({
           "PROFILE_SAVE_FAILED",
         ),
       grantConsent: (locale) =>
-        run(async () => {
-          await coordinator.grantConsent(locale);
-          return inviteStore.consume();
-        }, "CONSENT_SAVE_FAILED"),
+        run(() => coordinator.grantConsent(locale), "CONSENT_SAVE_FAILED"),
       signOut: () => run(() => coordinator.signOut(), "SIGN_OUT_FAILED"),
-      rememberInvite: (token) => inviteStore.save(token),
-      consumePendingInvite: () => inviteStore.consume(),
+      rememberInvite,
+      peekPendingInvite,
+      clearPendingInvite,
       clearError: () => setErrorCode(null),
     };
-  }, [busy, coordinator, errorCode, inviteStore, revision, run]);
+  }, [
+    busy,
+    clearPendingInvite,
+    coordinator,
+    errorCode,
+    peekPendingInvite,
+    rememberInvite,
+    revision,
+    run,
+  ]);
 
   return (
     <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

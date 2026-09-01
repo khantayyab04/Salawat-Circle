@@ -22,6 +22,10 @@ let lastStackTitle: string | undefined;
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush, replace: jest.fn() }),
   useLocalSearchParams: () => ({ id: mockRouteGroupId }),
+  useFocusEffect: (callback: () => void | (() => void)) => {
+    const React = jest.requireActual<typeof import("react")>("react");
+    React.useEffect(callback, [callback]);
+  },
   Stack: {
     Screen: ({
       options,

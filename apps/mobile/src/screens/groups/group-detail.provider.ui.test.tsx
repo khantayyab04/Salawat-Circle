@@ -7,6 +7,7 @@ import {
   jest,
 } from "@jest/globals";
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
+import { AppState, type AppStateStatus } from "react-native";
 import type {
   GroupLeaderboardResponse,
   GroupListItem,
@@ -16,11 +17,41 @@ import { GroupsProvider } from "@/lib/groups";
 import { GroupDetailScreen } from "./group-detail-screen";
 
 const mockPush = jest.fn();
-const routeGroupId = "group-1";
+let mockRouteGroupId: string | undefined = "group-1";
+type FocusCallback = () => void | (() => void);
+let mockFocusCallback: FocusCallback | null = null;
+let mockFocusCleanup: (() => void) | null = null;
+
+function mockActivateFocus() {
+  mockFocusCleanup?.();
+  const cleanup = mockFocusCallback?.();
+  mockFocusCleanup = cleanup ?? null;
+}
+
+function mockEmitBlur() {
+  mockFocusCleanup?.();
+  mockFocusCleanup = null;
+}
+
+function mockEmitFocus() {
+  mockActivateFocus();
+}
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush, replace: jest.fn() }),
-  useLocalSearchParams: () => ({ id: routeGroupId }),
+  useLocalSearchParams: () => ({ id: mockRouteGroupId }),
+  useFocusEffect: (callback: FocusCallback) => {
+    const React = jest.requireActual<typeof import("react")>("react");
+    React.useEffect(() => {
+      mockFocusCallback = callback;
+      mockActivateFocus();
+      return () => {
+        mockFocusCleanup?.();
+        mockFocusCleanup = null;
+        if (mockFocusCallback === callback) mockFocusCallback = null;
+      };
+    }, [callback]);
+  },
   Stack: { Screen: () => null },
 }));
 
@@ -223,13 +254,38 @@ function createGateway(overrides: Partial<GroupsGateway> = {}): GroupsGateway {
 
 describe("Group detail with real GroupsProvider", () => {
   let consoleErrorSpy: jest.SpiedFunction<typeof console.error>;
+  let appStateAddEventListenerSpy: jest.SpiedFunction<
+    typeof AppState.addEventListener
+  >;
+  let mockAppStateListener: ((state: AppStateStatus) => void) | null;
+  const mockAppStateRemove = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockRouteGroupId = "group-1";
+    mockFocusCallback = null;
+    mockFocusCleanup = null;
+    mockAppStateListener = null;
+    mockAppStateRemove.mockClear();
+    appStateAddEventListenerSpy = jest
+      .spyOn(AppState, "addEventListener")
+      .mockImplementation((_type, listener) => {
+        const capturedListener = listener;
+        mockAppStateListener = capturedListener;
+        return {
+          remove: () => {
+            mockAppStateRemove();
+            if (mockAppStateListener === capturedListener) {
+              mockAppStateListener = null;
+            }
+          },
+        };
+      });
     consoleErrorSpy = jest.spyOn(console, "error").mockImplementation(() => undefined);
   });
 
   afterEach(() => {
+    appStateAddEventListenerSpy.mockRestore();
     consoleErrorSpy.mockRestore();
   });
 
@@ -265,6 +321,208 @@ describe("Group detail with real GroupsProvider", () => {
       ),
     );
     expect(hasMaximumDepthWarning).toBe(false);
+  });
+
+  it("refreshes the selected period when navigation focus returns", async () => {
+    const getLeaderboard = jest
+      .fn<GroupsGateway["getLeaderboard"]>()
+      .mockImplementation(async (_groupId, period) =>
+        createLeaderboardResponse({
+          period,
+          periodStart: period === "week" ? "2026-08-25" : null,
+          periodEnd: period === "week" ? "2026-08-31" : null,
+        }),
+      );
+    const gateway = createGateway({ getLeaderboard });
+    const view = await render(
+      <GroupsProvider
+        accountId="account-1"
+        enabled
+        gateway={gateway}
+        onlineCheck={async () => true}
+      >
+        <GroupDetailScreen />
+      </GroupsProvider>,
+    );
+    await waitFor(() => expect(getLeaderboard).toHaveBeenCalledTimes(1));
+
+    fireEvent.press(view.getByRole("button", { name: "Gesamt" }));
+    await waitFor(() =>
+      expect(getLeaderboard).toHaveBeenLastCalledWith(
+        "group-1",
+        "all_time",
+        null,
+        expect.any(Number),
+      ),
+    );
+    expect(getLeaderboard).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      mockEmitBlur();
+      mockEmitFocus();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(getLeaderboard).toHaveBeenCalledTimes(3));
+    expect(getLeaderboard).toHaveBeenLastCalledWith(
+      "group-1",
+      "all_time",
+      null,
+      expect.any(Number),
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      view.unmount();
+    });
+  });
+
+  it("refreshes the selected period after an inactive-to-active transition", async () => {
+    const getLeaderboard = jest
+      .fn<GroupsGateway["getLeaderboard"]>()
+      .mockImplementation(async (_groupId, period) =>
+        createLeaderboardResponse({
+          period,
+          periodStart: period === "week" ? "2026-08-25" : null,
+          periodEnd: period === "week" ? "2026-08-31" : null,
+        }),
+      );
+    const gateway = createGateway({ getLeaderboard });
+    const view = await render(
+      <GroupsProvider
+        accountId="account-1"
+        enabled
+        gateway={gateway}
+        onlineCheck={async () => true}
+      >
+        <GroupDetailScreen />
+      </GroupsProvider>,
+    );
+    await waitFor(() => expect(getLeaderboard).toHaveBeenCalledTimes(1));
+
+    fireEvent.press(view.getByRole("button", { name: "Gesamt" }));
+    await waitFor(() => expect(getLeaderboard).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      mockAppStateListener?.("inactive");
+      mockAppStateListener?.("active");
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(getLeaderboard).toHaveBeenCalledTimes(3));
+    expect(getLeaderboard).toHaveBeenLastCalledWith(
+      "group-1",
+      "all_time",
+      null,
+      expect.any(Number),
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      view.unmount();
+    });
+  });
+
+  it("deduplicates simultaneous focus and active refreshes but reloads after settlement", async () => {
+    const lifecycleRefresh = createDeferred<GroupLeaderboardResponse>();
+    const getLeaderboard = jest
+      .fn<GroupsGateway["getLeaderboard"]>()
+      .mockResolvedValueOnce(createLeaderboardResponse())
+      .mockImplementationOnce(() => lifecycleRefresh.promise)
+      .mockResolvedValue(createLeaderboardResponse());
+    const gateway = createGateway({ getLeaderboard });
+    await render(
+      <GroupsProvider
+        accountId="account-1"
+        enabled
+        gateway={gateway}
+        onlineCheck={async () => true}
+      >
+        <GroupDetailScreen />
+      </GroupsProvider>,
+    );
+    await waitFor(() => expect(getLeaderboard).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      mockEmitBlur();
+      mockAppStateListener?.("inactive");
+      mockEmitFocus();
+      mockAppStateListener?.("active");
+      await Promise.resolve();
+    });
+    expect(getLeaderboard).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      lifecycleRefresh.resolve(createLeaderboardResponse());
+      await lifecycleRefresh.promise;
+    });
+
+    await act(async () => {
+      mockEmitBlur();
+      mockEmitFocus();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(getLeaderboard).toHaveBeenCalledTimes(3));
+  });
+
+  it("does not load on mount, focus or active transitions without a group id", async () => {
+    mockRouteGroupId = undefined;
+    const getLeaderboard = jest.fn<GroupsGateway["getLeaderboard"]>();
+    const gateway = createGateway({ getLeaderboard });
+    await render(
+      <GroupsProvider
+        accountId="account-1"
+        enabled
+        gateway={gateway}
+        onlineCheck={async () => true}
+      >
+        <GroupDetailScreen />
+      </GroupsProvider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      mockEmitBlur();
+      mockAppStateListener?.("inactive");
+      mockEmitFocus();
+      mockAppStateListener?.("active");
+    });
+
+    expect(getLeaderboard).not.toHaveBeenCalled();
+  });
+
+  it("removes focus and AppState listeners when the detail screen unmounts", async () => {
+    const getLeaderboard = jest
+      .fn<GroupsGateway["getLeaderboard"]>()
+      .mockResolvedValue(createLeaderboardResponse());
+    const gateway = createGateway({ getLeaderboard });
+    const view = await render(
+      <GroupsProvider
+        accountId="account-1"
+        enabled
+        gateway={gateway}
+        onlineCheck={async () => true}
+      >
+        <GroupDetailScreen />
+      </GroupsProvider>,
+    );
+    await waitFor(() => expect(getLeaderboard).toHaveBeenCalledTimes(1));
+    expect(mockFocusCallback).not.toBeNull();
+    expect(mockAppStateListener).not.toBeNull();
+
+    await act(async () => {
+      view.unmount();
+    });
+
+    expect(mockFocusCallback).toBeNull();
+    expect(mockAppStateRemove).toHaveBeenCalledTimes(1);
+    expect(mockAppStateListener).toBeNull();
+    await act(async () => {
+      mockEmitFocus();
+      mockAppStateListener?.("inactive");
+      mockAppStateListener?.("active");
+      await Promise.resolve();
+    });
+    expect(getLeaderboard).toHaveBeenCalledTimes(1);
   });
 
   it("refreshes state after anonymity conflict and updates owner controls to read-only", async () => {
