@@ -371,6 +371,111 @@ describe("OfflineController", () => {
     expect(controller.state.conflict?.entryId).toBe("entry-2");
   });
 
+  it("resolves only the explicitly selected conflict entry", async () => {
+    const controller = new OfflineController(
+      storage(),
+      gateway(),
+      () => new Date(now),
+      () => "mutation-1",
+      { drain: vi.fn().mockResolvedValue(undefined) },
+    );
+    const firstConflict = {
+      entryId: "entry-1",
+      operation: "update" as const,
+      localAmount: "8",
+      localEntryDate: "2026-08-31",
+      serverEntry: { ...entry, amount: "7", revision: 2 },
+    };
+    const secondConflict = {
+      entryId: "entry-2",
+      operation: "update" as const,
+      localAmount: "12",
+      localEntryDate: "2026-08-30",
+      serverEntry: {
+        ...entry,
+        id: "entry-2",
+        amount: "10",
+        entryDate: "2026-08-30",
+        revision: 6,
+      },
+    };
+    controller.state.entries = [
+      {
+        ...entry,
+        amount: "8",
+        localState: "conflict",
+        serverRevision: 1,
+        lastAttemptAt: now,
+        retryCount: 1,
+        lastErrorCode: "ENTRY_VERSION_CONFLICT",
+      },
+      {
+        ...entry,
+        id: "entry-2",
+        amount: "12",
+        entryDate: "2026-08-30",
+        localState: "conflict",
+        serverRevision: 5,
+        lastAttemptAt: now,
+        retryCount: 1,
+        lastErrorCode: "ENTRY_VERSION_CONFLICT",
+      },
+    ];
+    controller.state.queue = [
+      {
+        id: "mutation-1",
+        entity: "entry",
+        operation: "update",
+        entityId: "entry-1",
+        payload: { amount: 8, entryDate: "2026-08-31" },
+        expectedRevision: 1,
+        createdAt: now,
+        status: "conflict",
+        lastAttemptAt: now,
+        retryCount: 1,
+        lastErrorCode: "ENTRY_VERSION_CONFLICT",
+        nextAttemptAt: null,
+      },
+      {
+        id: "mutation-2",
+        entity: "entry",
+        operation: "update",
+        entityId: "entry-2",
+        payload: { amount: 12, entryDate: "2026-08-30" },
+        expectedRevision: 5,
+        createdAt: now,
+        status: "conflict",
+        lastAttemptAt: now,
+        retryCount: 1,
+        lastErrorCode: "ENTRY_VERSION_CONFLICT",
+        nextAttemptAt: null,
+      },
+    ];
+    controller.state.conflict = firstConflict;
+    controller.state.conflicts = [firstConflict, secondConflict];
+
+    await controller.keepServerVersion("entry-2");
+
+    expect(controller.state.conflicts.map(({ entryId }) => entryId)).toEqual([
+      "entry-1",
+    ]);
+    expect(controller.state.queue.map(({ entityId }) => entityId)).toEqual([
+      "entry-1",
+    ]);
+    expect(controller.state.entries).toEqual([
+      expect.objectContaining({
+        id: "entry-1",
+        amount: "8",
+        localState: "conflict",
+      }),
+      expect.objectContaining({
+        id: "entry-2",
+        amount: "10",
+        localState: "synced",
+      }),
+    ]);
+  });
+
   it("migrates a legacy single conflict field into the per-entry conflict collection", async () => {
     const legacy = emptyOfflineState() as OfflineAccountState & {
       conflicts?: unknown;
@@ -428,6 +533,204 @@ describe("OfflineController", () => {
     expect(controller.state.entries).toHaveLength(1);
     expect(controller.state.queue).toHaveLength(1);
     expect(conflicts?.map(({ entryId }) => entryId)).toEqual([entry.id]);
+  });
+
+  it("rejects a malformed cached mutation instead of silently dropping queued work", async () => {
+    const malformed = emptyOfflineState();
+    malformed.timeZone = "Europe/Berlin";
+    malformed.entries = [
+      {
+        ...entry,
+        amount: "8",
+        localState: "pending_update",
+        serverRevision: 1,
+        lastAttemptAt: null,
+        retryCount: 0,
+        lastErrorCode: null,
+      },
+    ];
+    malformed.queue = [
+      {
+        id: "mutation-1",
+        entity: "entry",
+        operation: "replace",
+        entityId: entry.id,
+        payload: { amount: 8, entryDate: entry.entryDate },
+        expectedRevision: 1,
+        createdAt: now,
+        status: "pending",
+        lastAttemptAt: null,
+        retryCount: 0,
+        lastErrorCode: null,
+        nextAttemptAt: null,
+      },
+    ] as unknown as OfflineAccountState["queue"];
+    const persistence = storage(malformed);
+    const controller = new OfflineController(
+      persistence,
+      gateway(),
+      () => new Date(now),
+      () => "mutation-2",
+    );
+
+    await expect(controller.load()).rejects.toThrow("INVALID_OFFLINE_STATE");
+
+    const persisted = await persistence.load();
+    expect(persisted?.queue).toHaveLength(1);
+    expect(persisted?.entries[0].localState).toBe("pending_update");
+  });
+
+  it("rejects cached entry mutations whose optimistic projection is missing", async () => {
+    const malformed = emptyOfflineState();
+    malformed.queue = [
+      {
+        id: "mutation-1",
+        entity: "entry",
+        operation: "create",
+        entityId: entry.id,
+        payload: {
+          amount: 5,
+          entryDate: entry.entryDate,
+          timezone: entry.timezone,
+          recordedAtClient: entry.recordedAtClient,
+        },
+        expectedRevision: null,
+        createdAt: now,
+        status: "pending",
+        lastAttemptAt: null,
+        retryCount: 0,
+        lastErrorCode: null,
+        nextAttemptAt: null,
+      },
+    ];
+    const controller = new OfflineController(
+      storage(malformed),
+      gateway(),
+      () => new Date(now),
+      () => "mutation-2",
+    );
+
+    await expect(controller.load()).rejects.toThrow("INVALID_OFFLINE_STATE");
+  });
+
+  it("rejects malformed conflict details instead of hiding an unresolved mutation", async () => {
+    const malformed = emptyOfflineState();
+    malformed.timeZone = "Europe/Berlin";
+    malformed.entries = [
+      {
+        ...entry,
+        amount: "8",
+        localState: "conflict",
+        serverRevision: 1,
+        lastAttemptAt: now,
+        retryCount: 1,
+        lastErrorCode: "ENTRY_VERSION_CONFLICT",
+      },
+    ];
+    malformed.queue = [
+      {
+        id: "mutation-1",
+        entity: "entry",
+        operation: "update",
+        entityId: entry.id,
+        payload: { amount: 8, entryDate: entry.entryDate },
+        expectedRevision: 1,
+        createdAt: now,
+        status: "conflict",
+        lastAttemptAt: now,
+        retryCount: 1,
+        lastErrorCode: "ENTRY_VERSION_CONFLICT",
+        nextAttemptAt: null,
+      },
+    ];
+    malformed.conflicts = [
+      {
+        entryId: entry.id,
+        operation: "update",
+        localAmount: "8",
+        localEntryDate: entry.entryDate,
+      },
+    ] as unknown as OfflineAccountState["conflicts"];
+    const controller = new OfflineController(
+      storage(malformed),
+      gateway(),
+      () => new Date(now),
+      () => "mutation-2",
+    );
+
+    await expect(controller.load()).rejects.toThrow("INVALID_OFFLINE_STATE");
+  });
+
+  it("rejects a cached conflict mutation that has no resolvable conflict details", async () => {
+    const malformed = emptyOfflineState();
+    malformed.entries = [
+      {
+        ...entry,
+        amount: "8",
+        localState: "conflict",
+        serverRevision: 1,
+        lastAttemptAt: now,
+        retryCount: 1,
+        lastErrorCode: "ENTRY_VERSION_CONFLICT",
+      },
+    ];
+    malformed.queue = [
+      {
+        id: "mutation-1",
+        entity: "entry",
+        operation: "update",
+        entityId: entry.id,
+        payload: { amount: 8, entryDate: entry.entryDate },
+        expectedRevision: 1,
+        createdAt: now,
+        status: "conflict",
+        lastAttemptAt: now,
+        retryCount: 1,
+        lastErrorCode: "ENTRY_VERSION_CONFLICT",
+        nextAttemptAt: null,
+      },
+    ];
+    const controller = new OfflineController(
+      storage(malformed),
+      gateway(),
+      () => new Date(now),
+      () => "mutation-2",
+    );
+
+    await expect(controller.load()).rejects.toThrow("INVALID_OFFLINE_STATE");
+  });
+
+  it("rejects malformed cached entries before projecting offline content", async () => {
+    const malformed = emptyOfflineState();
+    malformed.entries = [
+      {
+        id: entry.id,
+        localState: "pending_update",
+      },
+    ] as unknown as OfflineAccountState["entries"];
+    const controller = new OfflineController(
+      storage(malformed),
+      gateway(),
+      () => new Date(now),
+      () => "mutation-1",
+    );
+
+    await expect(controller.load()).rejects.toThrow("INVALID_OFFLINE_STATE");
+  });
+
+  it("rejects malformed cached summary metadata before updating totals", async () => {
+    const malformed = emptyOfflineState();
+    malformed.summary = {
+      todayTotal: 42,
+    } as unknown as OfflineAccountState["summary"];
+    const controller = new OfflineController(
+      storage(malformed),
+      gateway(),
+      () => new Date(now),
+      () => "mutation-1",
+    );
+
+    await expect(controller.load()).rejects.toThrow("INVALID_OFFLINE_STATE");
   });
 
   it("serializes a user mutation behind an in-flight sync write", async () => {

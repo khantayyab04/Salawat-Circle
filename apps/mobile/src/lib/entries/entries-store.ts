@@ -117,7 +117,15 @@ export class EntriesStore {
   async load() {
     let hasCachedState = false;
     if (this.offline) {
-      const cached = await this.offline.load();
+      let cached;
+      try {
+        cached = await this.offline.load();
+      } catch (error) {
+        this.setError(error);
+        this.snapshot.viewState = "error";
+        this.notify();
+        return;
+      }
       hasCachedState =
         cached.entries.length > 0 ||
         cached.queue.length > 0 ||

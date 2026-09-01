@@ -25,6 +25,9 @@ function gateway(overrides: Partial<EntriesGateway> = {}): EntriesGateway {
       todayTotal: "5",
       weekTotal: "5",
       allTimeTotal: "5",
+      todayGoal: null,
+      achievedDays: "0",
+      eligibleGoalDays: "0",
     }),
     list: vi.fn().mockResolvedValue({
       items: [existingEntry],
@@ -618,6 +621,82 @@ describe("EntriesStore", () => {
     expect(restartedList).toHaveBeenLastCalledWith(firstPageCursor, 30);
   });
 
+  it("advances and persists the gateway cursor after every offline page", async () => {
+    const firstCursor = {
+      entryDate: "2026-08-30",
+      createdAt: "2026-08-30T10:00:00.000Z",
+      id: "00000000-0000-4000-8000-000000000002",
+    };
+    const secondCursor = {
+      entryDate: "2026-08-29",
+      createdAt: "2026-08-29T10:00:00.000Z",
+      id: "00000000-0000-4000-8000-000000000003",
+    };
+    const list = vi
+      .fn()
+      .mockResolvedValueOnce({
+        items: [existingEntry],
+        nextCursor: firstCursor,
+        hasMore: true,
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            ...existingEntry,
+            id: firstCursor.id,
+            entryDate: firstCursor.entryDate,
+            createdAt: firstCursor.createdAt,
+          },
+        ],
+        nextCursor: secondCursor,
+        hasMore: true,
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            ...existingEntry,
+            id: secondCursor.id,
+            entryDate: secondCursor.entryDate,
+            createdAt: secondCursor.createdAt,
+          },
+        ],
+        nextCursor: null,
+        hasMore: false,
+      });
+    let persisted: OfflineAccountState | null = null;
+    const persistence = {
+      load: vi.fn(async () => structuredClone(persisted)),
+      save: vi.fn(async (state: OfflineAccountState) => {
+        persisted = structuredClone(state);
+      }),
+      clear: vi.fn(),
+    };
+    const offlineGateway = gateway({ list });
+    const store = new EntriesStore(
+      offlineGateway,
+      "UTC",
+      () => new Date("2026-08-31T10:00:00.000Z"),
+      () => "unused",
+      new OfflineController(
+        persistence,
+        offlineGateway,
+        () => new Date("2026-08-31T10:00:00.000Z"),
+        () => "mutation-generated",
+      ),
+    );
+
+    await store.load();
+    await store.loadMore();
+    await store.loadMore();
+
+    expect(list).toHaveBeenNthCalledWith(2, firstCursor, 30);
+    expect(list).toHaveBeenNthCalledWith(3, secondCursor, 30);
+    expect(persisted).toMatchObject({
+      serverCursor: null,
+      hasMore: false,
+    });
+  });
+
   it("migrates legacy cached pagination state without cursor by preserving data and disabling unsafe load-more", async () => {
     const list = vi.fn().mockRejectedValueOnce(new Error("INTERNAL"));
     const legacy = emptyOfflineState() as OfflineAccountState & {
@@ -687,6 +766,184 @@ describe("EntriesStore", () => {
     expect(store.snapshot.pendingCount).toBe(1);
     expect(store.snapshot.hasMore).toBe(false);
     expect(list).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces malformed cached state without overwriting queued data", async () => {
+    const malformed = emptyOfflineState();
+    malformed.entries = [
+      {
+        ...existingEntry,
+        amount: "8",
+        localState: "pending_update",
+        serverRevision: 1,
+        lastAttemptAt: null,
+        retryCount: 0,
+        lastErrorCode: null,
+      },
+    ];
+    malformed.queue = [
+      {
+        id: "mutation-1",
+        entity: "entry",
+        operation: "replace",
+        entityId: existingEntry.id,
+        payload: { amount: 8, entryDate: existingEntry.entryDate },
+        expectedRevision: 1,
+        createdAt: existingEntry.createdAt,
+        status: "pending",
+        lastAttemptAt: null,
+        retryCount: 0,
+        lastErrorCode: null,
+        nextAttemptAt: null,
+      },
+    ] as unknown as OfflineAccountState["queue"];
+    const persistence = {
+      load: vi.fn(async () => malformed),
+      save: vi.fn(),
+      clear: vi.fn(),
+    };
+    const list = vi.fn();
+    const store = new EntriesStore(
+      gateway({ list }),
+      "UTC",
+      () => new Date("2026-08-31T10:00:00.000Z"),
+      () => "unused",
+      new OfflineController(
+        persistence,
+        gateway({ list }),
+        () => new Date("2026-08-31T10:00:00.000Z"),
+        () => "mutation-generated",
+      ),
+    );
+
+    await expect(store.load()).resolves.toBeUndefined();
+
+    expect(store.snapshot.viewState).toBe("error");
+    expect(store.snapshot.errorCode).toBe("INTERNAL");
+    expect(list).not.toHaveBeenCalled();
+    expect(persistence.save).not.toHaveBeenCalled();
+    expect((await persistence.load()).queue).toHaveLength(1);
+  });
+
+  it("keeps conflict sync state and counts after resolving one selected entry", async () => {
+    const secondEntry = {
+      ...existingEntry,
+      id: "00000000-0000-4000-8000-000000000002",
+      amount: "12",
+      entryDate: "2026-08-30",
+      revision: 5,
+    };
+    const firstConflict = {
+      entryId: existingEntry.id,
+      operation: "update" as const,
+      localAmount: "8",
+      localEntryDate: existingEntry.entryDate,
+      serverEntry: { ...existingEntry, amount: "7", revision: 2 },
+    };
+    const secondConflict = {
+      entryId: secondEntry.id,
+      operation: "update" as const,
+      localAmount: "12",
+      localEntryDate: secondEntry.entryDate,
+      serverEntry: { ...secondEntry, amount: "10", revision: 6 },
+    };
+    let persisted: OfflineAccountState | null = emptyOfflineState();
+    persisted.timeZone = "Europe/Berlin";
+    persisted.summary = { ...emptyGoalSummary };
+    persisted.entries = [
+      {
+        ...existingEntry,
+        amount: "8",
+        localState: "conflict",
+        serverRevision: 1,
+        lastAttemptAt: "2026-08-31T10:00:00.000Z",
+        retryCount: 1,
+        lastErrorCode: "ENTRY_VERSION_CONFLICT",
+      },
+      {
+        ...secondEntry,
+        localState: "conflict",
+        serverRevision: 5,
+        lastAttemptAt: "2026-08-31T10:00:00.000Z",
+        retryCount: 1,
+        lastErrorCode: "ENTRY_VERSION_CONFLICT",
+      },
+    ];
+    persisted.queue = [
+      {
+        id: "mutation-1",
+        entity: "entry",
+        operation: "update",
+        entityId: existingEntry.id,
+        payload: { amount: 8, entryDate: existingEntry.entryDate },
+        expectedRevision: 1,
+        createdAt: "2026-08-31T10:00:00.000Z",
+        status: "conflict",
+        lastAttemptAt: "2026-08-31T10:00:00.000Z",
+        retryCount: 1,
+        lastErrorCode: "ENTRY_VERSION_CONFLICT",
+        nextAttemptAt: null,
+      },
+      {
+        id: "mutation-2",
+        entity: "entry",
+        operation: "update",
+        entityId: secondEntry.id,
+        payload: { amount: 12, entryDate: secondEntry.entryDate },
+        expectedRevision: 5,
+        createdAt: "2026-08-31T10:00:00.000Z",
+        status: "conflict",
+        lastAttemptAt: "2026-08-31T10:00:00.000Z",
+        retryCount: 1,
+        lastErrorCode: "ENTRY_VERSION_CONFLICT",
+        nextAttemptAt: null,
+      },
+    ];
+    persisted.conflicts = [firstConflict, secondConflict];
+    persisted.conflict = firstConflict;
+    const persistence = {
+      load: vi.fn(async () => structuredClone(persisted)),
+      save: vi.fn(async (state: OfflineAccountState) => {
+        persisted = structuredClone(state);
+      }),
+      clear: vi.fn(),
+    };
+    const offlineGateway = gateway({
+      list: vi.fn().mockRejectedValue(new Error("INTERNAL")),
+    });
+    const store = new EntriesStore(
+      offlineGateway,
+      "UTC",
+      () => new Date("2026-08-31T10:00:00.000Z"),
+      () => "unused",
+      new OfflineController(
+        persistence,
+        offlineGateway,
+        () => new Date("2026-08-31T10:00:00.000Z"),
+        () => "mutation-generated",
+        { drain: vi.fn().mockResolvedValue(undefined) },
+      ),
+    );
+
+    await store.load();
+    expect(store.snapshot).toMatchObject({
+      syncState: "conflict",
+      pendingCount: 0,
+      failedCount: 0,
+      conflictEntryId: existingEntry.id,
+    });
+
+    await store.keepServerVersion(secondEntry.id);
+
+    expect(store.snapshot).toMatchObject({
+      syncState: "conflict",
+      pendingCount: 0,
+      failedCount: 0,
+      conflictEntryId: existingEntry.id,
+    });
+    expect(store.snapshot.conflicts.map(({ entryId }) => entryId)).toEqual([
+      existingEntry.id,
+    ]);
   });
 
   it("shows a goal optimistically and reconciles the canonical summary", async () => {

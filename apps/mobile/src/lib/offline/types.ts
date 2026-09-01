@@ -109,54 +109,183 @@ export function emptyOfflineState(): OfflineAccountState {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function isEntry(value: unknown): value is Entry {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.amount === "string" &&
+    typeof value.entryDate === "string" &&
+    typeof value.timezone === "string" &&
+    typeof value.recordedAtClient === "string" &&
+    typeof value.createdAt === "string" &&
+    typeof value.updatedAt === "string" &&
+    typeof value.revision === "number"
+  );
+}
+
+function isOfflineEntry(value: unknown): value is OfflineEntry {
+  return (
+    isEntry(value) &&
+    (value.localState === "synced" ||
+      value.localState === "pending_create" ||
+      value.localState === "pending_update" ||
+      value.localState === "pending_delete" ||
+      value.localState === "conflict" ||
+      value.localState === "failed") &&
+    (value.serverRevision === null ||
+      typeof value.serverRevision === "number") &&
+    isNullableString(value.lastAttemptAt) &&
+    typeof value.retryCount === "number" &&
+    isNullableString(value.lastErrorCode)
+  );
+}
+
+function isEntrySummary(value: unknown): value is EntrySummary {
+  return (
+    isRecord(value) &&
+    typeof value.todayTotal === "string" &&
+    typeof value.weekTotal === "string" &&
+    typeof value.allTimeTotal === "string" &&
+    (value.todayGoal === null || typeof value.todayGoal === "string") &&
+    typeof value.achievedDays === "string" &&
+    typeof value.eligibleGoalDays === "string"
+  );
+}
+
 function isEntryCursor(value: unknown): value is EntryCursor {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    "entryDate" in value &&
+    isRecord(value) &&
     typeof value.entryDate === "string" &&
-    "createdAt" in value &&
     typeof value.createdAt === "string" &&
-    "id" in value &&
     typeof value.id === "string"
   );
 }
 
 function isEntryConflict(value: unknown): value is EntryConflict {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    "entryId" in value &&
+    isRecord(value) &&
     typeof value.entryId === "string" &&
-    "operation" in value &&
     (value.operation === "update" || value.operation === "delete") &&
-    "localAmount" in value &&
     typeof value.localAmount === "string" &&
-    "localEntryDate" in value &&
     typeof value.localEntryDate === "string" &&
-    "serverEntry" in value &&
-    typeof value.serverEntry === "object" &&
-    value.serverEntry !== null
+    isEntry(value.serverEntry)
   );
+}
+
+function hasQueueMetadata(value: Record<string, unknown>) {
+  return (
+    typeof value.id === "string" &&
+    typeof value.entityId === "string" &&
+    typeof value.createdAt === "string" &&
+    (value.status === "pending" ||
+      value.status === "failed" ||
+      value.status === "conflict") &&
+    isNullableString(value.lastAttemptAt) &&
+    typeof value.retryCount === "number" &&
+    isNullableString(value.lastErrorCode) &&
+    isNullableString(value.nextAttemptAt)
+  );
+}
+
+function isQueueMutation(value: unknown): value is QueueMutation {
+  if (!isRecord(value) || !hasQueueMetadata(value)) return false;
+  if (value.entity === "entry" && value.operation === "create") {
+    return (
+      value.expectedRevision === null &&
+      isRecord(value.payload) &&
+      typeof value.payload.amount === "number" &&
+      typeof value.payload.entryDate === "string" &&
+      typeof value.payload.timezone === "string" &&
+      typeof value.payload.recordedAtClient === "string"
+    );
+  }
+  if (value.entity === "entry" && value.operation === "update") {
+    return (
+      typeof value.expectedRevision === "number" &&
+      isRecord(value.payload) &&
+      typeof value.payload.amount === "number" &&
+      typeof value.payload.entryDate === "string"
+    );
+  }
+  if (value.entity === "entry" && value.operation === "delete") {
+    return typeof value.expectedRevision === "number" && value.payload === null;
+  }
+  if (value.entity === "goal" && value.operation === "set_goal") {
+    return (
+      value.expectedRevision === null &&
+      isRecord(value.payload) &&
+      (value.payload.amount === null ||
+        typeof value.payload.amount === "number") &&
+      typeof value.payload.effectiveFrom === "string"
+    );
+  }
+  return false;
 }
 
 export function migrateOfflineState(
   state: OfflineAccountState | null,
 ): OfflineAccountState {
-  if (!state) return emptyOfflineState();
+  if (state === null) return emptyOfflineState();
+  if (
+    !isEntrySummary(state.summary) ||
+    typeof state.timeZone !== "string" ||
+    typeof state.hasMore !== "boolean" ||
+    !Array.isArray(state.entries) ||
+    !state.entries.every(isOfflineEntry) ||
+    !Array.isArray(state.queue) ||
+    !state.queue.every(isQueueMutation)
+  ) {
+    throw new Error("INVALID_OFFLINE_STATE");
+  }
+  if (
+    state.queue.some(
+      (mutation) =>
+        mutation.entity === "entry" &&
+        !state.entries.some(({ id }) => id === mutation.entityId),
+    ) ||
+    state.entries.some(
+      (entry) =>
+        entry.localState !== "synced" &&
+        !state.queue.some(
+          (mutation) =>
+            mutation.entity === "entry" && mutation.entityId === entry.id,
+        ),
+    )
+  ) {
+    throw new Error("INVALID_OFFLINE_STATE");
+  }
   const serverCursor = isEntryCursor(
     (state as OfflineAccountState & { serverCursor?: unknown }).serverCursor,
   )
     ? state.serverCursor
     : null;
-  const rawConflicts = Array.isArray(
-    (state as OfflineAccountState & { conflicts?: unknown }).conflicts,
-  )
-    ? state.conflicts.filter(isEntryConflict)
-    : [];
-  const legacyConflict = isEntryConflict(state.conflict)
-    ? state.conflict
-    : null;
+  const persistedConflicts = (
+    state as OfflineAccountState & { conflicts?: unknown }
+  ).conflicts;
+  if (
+    persistedConflicts !== undefined &&
+    (!Array.isArray(persistedConflicts) ||
+      !persistedConflicts.every(isEntryConflict))
+  ) {
+    throw new Error("INVALID_OFFLINE_STATE");
+  }
+  const rawConflicts = persistedConflicts ? [...persistedConflicts] : [];
+  if (
+    state.conflict !== undefined &&
+    state.conflict !== null &&
+    !isEntryConflict(state.conflict)
+  ) {
+    throw new Error("INVALID_OFFLINE_STATE");
+  }
+  const legacyConflict = state.conflict ?? null;
   if (
     legacyConflict &&
     !rawConflicts.some((conflict) => conflict.entryId === legacyConflict.entryId)
@@ -167,14 +296,37 @@ export function migrateOfflineState(
     ? rawConflicts.find(({ entryId }) => entryId === legacyConflict.entryId) ??
       legacyConflict
     : rawConflicts[0] ?? null;
+  const conflictIds = new Set(rawConflicts.map(({ entryId }) => entryId));
+  if (
+    conflictIds.size !== rawConflicts.length ||
+    state.queue.some(
+      (mutation) =>
+        mutation.status === "conflict" &&
+        (mutation.entity !== "entry" ||
+          (mutation.operation !== "update" &&
+            mutation.operation !== "delete") ||
+          !conflictIds.has(mutation.entityId)),
+    ) ||
+    rawConflicts.some(
+      ({ entryId }) =>
+        !state.queue.some(
+          (mutation) =>
+            mutation.entity === "entry" &&
+            mutation.entityId === entryId &&
+            mutation.status === "conflict",
+        ),
+    )
+  ) {
+    throw new Error("INVALID_OFFLINE_STATE");
+  }
   return {
     ...emptyOfflineState(),
     ...state,
-    entries: Array.isArray(state.entries) ? state.entries : [],
-    queue: Array.isArray(state.queue) ? state.queue : [],
+    entries: state.entries,
+    queue: state.queue,
     conflicts: rawConflicts,
     conflict,
     serverCursor,
-    hasMore: Boolean(state.hasMore) && serverCursor !== null,
+    hasMore: state.hasMore && serverCursor !== null,
   };
 }

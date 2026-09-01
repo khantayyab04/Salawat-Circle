@@ -25,7 +25,7 @@ supabase/.temp/
 coverage/
 artifacts/
 *.log
-.superpowers/
+/.superpowers/
 
 # Editors and operating systems
 .DS_Store
