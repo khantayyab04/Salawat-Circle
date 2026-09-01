@@ -177,47 +177,256 @@ describe("SyncEngine", () => {
   });
 
   it("accepts an already-applied update after a crash without a false conflict", async () => {
-      const state = pendingCreate();
-      state.entries[0] = {
-        ...state.entries[0],
-        amount: "50",
-        revision: 3,
-        serverRevision: 3,
-        localState: "pending_update",
+    const state = pendingCreate();
+    state.entries[0] = {
+      ...state.entries[0],
+      amount: "50",
+      revision: 3,
+      serverRevision: 3,
+      localState: "pending_update",
+    };
+    state.queue[0] = {
+      id: "mutation-1",
+      entity: "entry",
+      operation: "update",
+      entityId: entry.id,
+      payload: { amount: 50, entryDate: entry.entryDate },
+      expectedRevision: 3,
+      createdAt: now,
+      status: "pending",
+      lastAttemptAt: null,
+      retryCount: 0,
+      lastErrorCode: null,
+      nextAttemptAt: null,
+    };
+    const alreadyApplied = { ...entry, amount: "50", revision: 4 };
+
+    await new SyncEngine(
+      gateway({
+        update: vi
+          .fn()
+          .mockRejectedValue(new Error("ENTRY_VERSION_CONFLICT")),
+        getEntry: vi.fn().mockResolvedValue(alreadyApplied),
+      }),
+      { save: vi.fn().mockResolvedValue(undefined) },
+      () => new Date(now),
+    ).drain(state);
+
+    expect(state.queue).toEqual([]);
+    expect(state.conflict).toBeNull();
+    expect(state.entries[0]).toMatchObject({
+      amount: "50",
+      revision: 4,
+      localState: "synced",
+    });
+  });
+
+  it("preserves every conflict when two queued updates conflict in the same drain", async () => {
+      const secondEntry = {
+        ...entry,
+        id: "entry-2",
+        amount: "20",
+        revision: 5,
+        createdAt: "2026-08-30T10:00:00.000Z",
+        updatedAt: "2026-08-30T10:00:00.000Z",
+        recordedAtClient: "2026-08-30T10:00:00.000Z",
       };
-      state.queue[0] = {
-        id: "mutation-1",
-        entity: "entry",
-        operation: "update",
-        entityId: entry.id,
-        payload: { amount: 50, entryDate: entry.entryDate },
-        expectedRevision: 3,
-        createdAt: now,
-        status: "pending",
-        lastAttemptAt: null,
-        retryCount: 0,
-        lastErrorCode: null,
-        nextAttemptAt: null,
+      const state = emptyOfflineState() as OfflineAccountState & {
+        conflicts?: {
+          entryId: string;
+          operation: "update" | "delete";
+          localAmount: string;
+          localEntryDate: string;
+          serverEntry: Entry;
+        }[];
       };
-      const alreadyApplied = { ...entry, amount: "50", revision: 4 };
+      state.timeZone = "Europe/Berlin";
+      state.entries = [
+        {
+          ...entry,
+          amount: "50",
+          revision: 3,
+          serverRevision: 3,
+          localState: "pending_update",
+          lastAttemptAt: null,
+          retryCount: 0,
+          lastErrorCode: null,
+        },
+        {
+          ...secondEntry,
+          amount: "60",
+          serverRevision: 5,
+          localState: "pending_update",
+          lastAttemptAt: null,
+          retryCount: 0,
+          lastErrorCode: null,
+        },
+      ];
+      state.queue = [
+        {
+          id: "mutation-1",
+          entity: "entry",
+          operation: "update",
+          entityId: entry.id,
+          payload: { amount: 50, entryDate: entry.entryDate },
+          expectedRevision: 3,
+          createdAt: now,
+          status: "pending",
+          lastAttemptAt: null,
+          retryCount: 0,
+          lastErrorCode: null,
+          nextAttemptAt: null,
+        },
+        {
+          id: "mutation-2",
+          entity: "entry",
+          operation: "update",
+          entityId: secondEntry.id,
+          payload: { amount: 60, entryDate: secondEntry.entryDate },
+          expectedRevision: 5,
+          createdAt: now,
+          status: "pending",
+          lastAttemptAt: null,
+          retryCount: 0,
+          lastErrorCode: null,
+          nextAttemptAt: null,
+        },
+      ];
+      const update = vi
+        .fn()
+        .mockRejectedValue(new Error("ENTRY_VERSION_CONFLICT"));
+      const getEntry = vi
+        .fn()
+        .mockResolvedValueOnce({ ...entry, amount: "45", revision: 4 })
+        .mockResolvedValueOnce({ ...secondEntry, amount: "55", revision: 6 });
 
       await new SyncEngine(
-        gateway({
-          update: vi
-            .fn()
-            .mockRejectedValue(new Error("ENTRY_VERSION_CONFLICT")),
-          getEntry: vi.fn().mockResolvedValue(alreadyApplied),
-        }),
+        gateway({ update, getEntry }),
         { save: vi.fn().mockResolvedValue(undefined) },
         () => new Date(now),
       ).drain(state);
 
-      expect(state.queue).toEqual([]);
-      expect(state.conflict).toBeNull();
-      expect(state.entries[0]).toMatchObject({
-        amount: "50",
-        revision: 4,
-        localState: "synced",
+      expect(state.queue.map(({ status }) => status)).toEqual([
+        "conflict",
+        "conflict",
+      ]);
+      expect(state.conflicts?.map(({ entryId }) => entryId)).toEqual([
+        "entry-1",
+        "entry-2",
+      ]);
+  });
+
+  it("keeps a conflicting mutation pending when server-state lookup fails retryably", async () => {
+    let nowDate = new Date(now);
+    const state = pendingCreate();
+    state.entries[0] = {
+      ...state.entries[0],
+      amount: "50",
+      revision: 3,
+      serverRevision: 3,
+      localState: "pending_update",
+    };
+    state.queue[0] = {
+      id: "mutation-1",
+      entity: "entry",
+      operation: "update",
+      entityId: entry.id,
+      payload: { amount: 50, entryDate: entry.entryDate },
+      expectedRevision: 3,
+      createdAt: now,
+      status: "pending",
+      lastAttemptAt: null,
+      retryCount: 0,
+      lastErrorCode: null,
+      nextAttemptAt: null,
+    };
+    const syncEngine = new SyncEngine(
+      gateway({
+        update: vi
+          .fn()
+          .mockRejectedValue(new Error("ENTRY_VERSION_CONFLICT")),
+        getEntry: vi
+          .fn()
+          .mockRejectedValueOnce({ status: 429, message: "retry later" })
+          .mockResolvedValueOnce({ ...entry, amount: "50", revision: 4 }),
+      }),
+      { save: vi.fn().mockResolvedValue(undefined) },
+      () => nowDate,
+      () => 0,
+    );
+
+    await syncEngine.drain(state);
+
+    expect(state.queue[0]).toMatchObject({
+      status: "pending",
+      retryCount: 1,
+      lastErrorCode: "RATE_LIMITED",
+      nextAttemptAt: "2026-08-31T10:00:01.000Z",
+    });
+    expect(state.entries[0]).toMatchObject({
+      localState: "pending_update",
+      retryCount: 1,
+      lastErrorCode: "RATE_LIMITED",
+    });
+
+    nowDate = new Date("2026-08-31T10:00:02.000Z");
+    await syncEngine.drain(state);
+
+    expect(state.queue).toEqual([]);
+    expect(state.entries[0]).toMatchObject({
+      localState: "synced",
+      revision: 4,
+      amount: "50",
+    });
+  });
+
+  it("keeps permanent lookup failures visible as failed mutations", async () => {
+    const state = pendingCreate();
+    state.entries[0] = {
+      ...state.entries[0],
+      amount: "50",
+      revision: 3,
+      serverRevision: 3,
+      localState: "pending_update",
+    };
+    state.queue[0] = {
+      id: "mutation-1",
+      entity: "entry",
+      operation: "update",
+      entityId: entry.id,
+      payload: { amount: 50, entryDate: entry.entryDate },
+      expectedRevision: 3,
+      createdAt: now,
+      status: "pending",
+      lastAttemptAt: null,
+      retryCount: 0,
+      lastErrorCode: null,
+      nextAttemptAt: null,
+    };
+
+    await new SyncEngine(
+      gateway({
+        update: vi
+          .fn()
+          .mockRejectedValue(new Error("ENTRY_VERSION_CONFLICT")),
+        getEntry: vi
+          .fn()
+          .mockRejectedValue(new Error("INVALID_INPUT")),
+      }),
+      { save: vi.fn().mockResolvedValue(undefined) },
+      () => new Date(now),
+    ).drain(state);
+
+    expect(state.queue[0]).toMatchObject({
+      status: "failed",
+      retryCount: 1,
+      lastErrorCode: "INVALID_INPUT",
+      nextAttemptAt: null,
+    });
+    expect(state.entries[0]).toMatchObject({
+      localState: "failed",
+      retryCount: 1,
+      lastErrorCode: "INVALID_INPUT",
     });
   });
 

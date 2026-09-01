@@ -37,6 +37,7 @@ export class EntriesStore {
     errorCode: null as EntriesErrorCode | null,
     conflictEntryId: null as string | null,
     conflict: null as EntryConflict | null,
+    conflicts: [] as EntryConflict[],
   };
 
   private readonly listeners = new Set<() => void>();
@@ -89,15 +90,16 @@ export class EntriesStore {
     this.snapshot.summary = state.summary;
     this.snapshot.timeZone = state.timeZone || this.fallbackTimeZone;
     this.snapshot.hasMore = state.hasMore;
-    this.snapshot.conflict = state.conflict;
-    this.snapshot.conflictEntryId = state.conflict?.entryId ?? null;
+    this.snapshot.conflicts = state.conflicts;
+    this.snapshot.conflict = state.conflict ?? state.conflicts[0] ?? null;
+    this.snapshot.conflictEntryId = this.snapshot.conflict?.entryId ?? null;
     this.snapshot.pendingCount = state.queue.filter(
       ({ status }) => status === "pending",
     ).length;
     this.snapshot.failedCount = state.queue.filter(
       ({ status }) => status === "failed",
     ).length;
-    this.snapshot.syncState = state.conflict
+    this.snapshot.syncState = state.conflicts.length > 0
       ? "conflict"
       : this.snapshot.failedCount > 0
         ? "error"
@@ -141,6 +143,7 @@ export class EntriesStore {
           entries: page.items,
           summary,
           timeZone: this.snapshot.timeZone,
+          serverCursor: page.nextCursor,
           hasMore: page.hasMore,
         });
         this.applyOfflineState();
@@ -293,21 +296,24 @@ export class EntriesStore {
     ) {
       return;
     }
+    if (this.offline && !this.offline.state.serverCursor) return;
     const last = this.snapshot.entries.at(-1)!;
     this.snapshot.loadingMore = true;
     this.snapshot.paginationError = false;
     this.notify();
     try {
       const page = await this.gateway.list(
-        {
-          entryDate: last.entryDate,
-          createdAt: last.createdAt,
-          id: last.id,
-        },
+        this.offline
+          ? this.offline.state.serverCursor
+          : {
+              entryDate: last.entryDate,
+              createdAt: last.createdAt,
+              id: last.id,
+            },
         30,
       );
       if (this.offline) {
-        await this.offline.appendPage(page.items, page.hasMore);
+        await this.offline.appendPage(page.items, page.nextCursor, page.hasMore);
         this.applyOfflineState();
         return;
       }
@@ -572,10 +578,10 @@ export class EntriesStore {
     this.notify();
   }
 
-  async keepServerVersion() {
+  async keepServerVersion(entryId?: string) {
     if (!this.offline) return;
     try {
-      await this.offline.keepServerVersion();
+      await this.offline.keepServerVersion(entryId);
       this.applyOfflineState();
     } catch (error) {
       this.setError(error);
@@ -584,10 +590,10 @@ export class EntriesStore {
     this.notify();
   }
 
-  async reapplyConflict() {
+  async reapplyConflict(entryId?: string) {
     if (!this.offline) return;
     try {
-      await this.offline.reapplyConflict();
+      await this.offline.reapplyConflict(entryId);
       this.applyOfflineState();
     } catch (error) {
       this.setError(error);

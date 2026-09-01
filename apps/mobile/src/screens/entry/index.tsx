@@ -47,8 +47,9 @@ function EntryEditForm({ entry }: { entry: ReturnType<typeof useEntries>["entrie
   const [amount, setAmount] = useState(entry.amount);
   const [entryDate, setEntryDate] = useState(entry.entryDate);
   const [error, setError] = useState<string | undefined>();
-  const conflict =
-    entries.conflict?.entryId === entry.id ? entries.conflict : null;
+  const conflict = entries.conflicts.find(
+    (candidate) => candidate.entryId === entry.id,
+  ) ?? null;
 
   const today = getPersonalDate(new Date(), entries.timeZone);
 
@@ -126,11 +127,11 @@ function EntryEditForm({ entry }: { entry: ReturnType<typeof useEntries>["entrie
           <AppButton
             label={t("entryConflictKeepServer")}
             variant="secondary"
-            onPress={() => void entries.keepServerVersion()}
+            onPress={() => void entries.keepServerVersion(entry.id)}
           />
           <AppButton
             label={t("entryConflictReapply")}
-            onPress={() => void entries.reapplyConflict()}
+            onPress={() => void entries.reapplyConflict(entry.id)}
           />
         </AppCard>
       ) : (

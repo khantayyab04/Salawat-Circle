@@ -404,6 +404,291 @@ describe("EntriesStore", () => {
     expect(store.snapshot.hasMore).toBe(true);
   });
 
+  it("uses the persisted server cursor instead of the last projected entry during offline pagination", async () => {
+    const list = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("INTERNAL"))
+      .mockResolvedValueOnce({
+        items: [
+          {
+            ...existingEntry,
+            id: "00000000-0000-4000-8000-000000000003",
+            entryDate: "2026-08-30",
+            createdAt: "2026-08-30T10:00:00.000Z",
+          },
+        ],
+        nextCursor: null,
+        hasMore: false,
+      });
+    let persisted: OfflineAccountState | null = emptyOfflineState();
+    persisted.timeZone = "Europe/Berlin";
+    persisted.summary = { ...emptyGoalSummary };
+    persisted.entries = [
+      {
+        ...existingEntry,
+        localState: "synced",
+        serverRevision: 1,
+        lastAttemptAt: null,
+        retryCount: 0,
+        lastErrorCode: null,
+      },
+      {
+        ...existingEntry,
+        id: "entry-local-old",
+        amount: "9",
+        entryDate: "2026-07-01",
+        createdAt: "2026-07-01T10:00:00.000Z",
+        updatedAt: "2026-07-01T10:00:00.000Z",
+        revision: 0,
+        localState: "pending_create",
+        serverRevision: null,
+        lastAttemptAt: null,
+        retryCount: 0,
+        lastErrorCode: null,
+      },
+    ];
+    persisted.queue = [
+      {
+        id: "mutation-local-old",
+        entity: "entry",
+        operation: "create",
+        entityId: "entry-local-old",
+        payload: {
+          amount: 9,
+          entryDate: "2026-07-01",
+          timezone: "Europe/Berlin",
+          recordedAtClient: "2026-07-01T10:00:00.000Z",
+        },
+        expectedRevision: null,
+        createdAt: "2026-07-01T10:00:00.000Z",
+        status: "pending",
+        lastAttemptAt: null,
+        retryCount: 0,
+        lastErrorCode: null,
+        nextAttemptAt: null,
+      },
+    ];
+    persisted.hasMore = true;
+    (
+      persisted as OfflineAccountState & {
+        serverCursor?: { entryDate: string; createdAt: string; id: string };
+      }
+    ).serverCursor = {
+      entryDate: "2026-08-30",
+      createdAt: "2026-08-30T10:00:00.000Z",
+      id: "00000000-0000-4000-8000-000000000999",
+    };
+    const persistence = {
+      load: vi.fn(async () => structuredClone(persisted)),
+      save: vi.fn(async (state: OfflineAccountState) => {
+        persisted = structuredClone(state);
+      }),
+      clear: vi.fn(),
+    };
+    const offline = new OfflineController(
+      persistence,
+      gateway({ list }),
+      () => new Date("2026-08-31T10:00:00.000Z"),
+      () => "mutation-generated",
+      { drain: vi.fn().mockResolvedValue(undefined) },
+    );
+    const store = new EntriesStore(
+      gateway({ list }),
+      "UTC",
+      () => new Date("2026-08-31T10:00:00.000Z"),
+      () => "unused",
+      offline,
+    );
+    await store.load();
+
+    await store.loadMore();
+
+    expect(list).toHaveBeenLastCalledWith(
+      {
+        entryDate: "2026-08-30",
+        createdAt: "2026-08-30T10:00:00.000Z",
+        id: "00000000-0000-4000-8000-000000000999",
+      },
+      30,
+    );
+  });
+
+  it("keeps the server cursor across offline restart so pagination remains safe", async () => {
+    const firstPageCursor = {
+      entryDate: "2026-08-30",
+      createdAt: "2026-08-30T10:00:00.000Z",
+      id: "00000000-0000-4000-8000-000000000999",
+    };
+    const initialList = vi.fn().mockResolvedValue({
+      items: [existingEntry],
+      nextCursor: firstPageCursor,
+      hasMore: true,
+    });
+    let persisted: OfflineAccountState | null = null;
+    const persistence = {
+      load: vi.fn(async () => structuredClone(persisted)),
+      save: vi.fn(async (state: OfflineAccountState) => {
+        persisted = structuredClone(state);
+      }),
+      clear: vi.fn(),
+    };
+    const firstStore = new EntriesStore(
+      gateway({ list: initialList }),
+      "UTC",
+      () => new Date("2026-08-31T10:00:00.000Z"),
+      () => "entry-generated",
+      new OfflineController(
+        persistence,
+        gateway({ list: initialList }),
+        () => new Date("2026-08-31T10:00:00.000Z"),
+        () => "mutation-generated",
+      ),
+    );
+    await firstStore.load();
+    if (!persisted) throw new Error("Expected persisted offline state");
+    const saved = persisted as OfflineAccountState & {
+      serverCursor?: { entryDate: string; createdAt: string; id: string } | null;
+    };
+    saved.entries.push({
+      ...existingEntry,
+      id: "entry-local-old",
+      amount: "11",
+      entryDate: "2026-06-01",
+      createdAt: "2026-06-01T10:00:00.000Z",
+      updatedAt: "2026-06-01T10:00:00.000Z",
+      revision: 0,
+      localState: "pending_create",
+      serverRevision: null,
+      lastAttemptAt: null,
+      retryCount: 0,
+      lastErrorCode: null,
+    });
+    saved.queue.push({
+      id: "mutation-local-old",
+      entity: "entry",
+      operation: "create",
+      entityId: "entry-local-old",
+      payload: {
+        amount: 11,
+        entryDate: "2026-06-01",
+        timezone: "Europe/Berlin",
+        recordedAtClient: "2026-06-01T10:00:00.000Z",
+      },
+      expectedRevision: null,
+      createdAt: "2026-06-01T10:00:00.000Z",
+      status: "pending",
+      lastAttemptAt: null,
+      retryCount: 0,
+      lastErrorCode: null,
+      nextAttemptAt: null,
+    });
+    persisted = structuredClone(saved);
+    const restartedList = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("INTERNAL"))
+      .mockResolvedValueOnce({
+        items: [
+          {
+            ...existingEntry,
+            id: "00000000-0000-4000-8000-000000000003",
+            entryDate: "2026-08-30",
+            createdAt: "2026-08-30T10:00:00.000Z",
+          },
+        ],
+        nextCursor: null,
+        hasMore: false,
+      });
+    const restartedStore = new EntriesStore(
+      gateway({ list: restartedList }),
+      "UTC",
+      () => new Date("2026-08-31T10:01:00.000Z"),
+      () => "unused",
+      new OfflineController(
+        persistence,
+        gateway({ list: restartedList }),
+        () => new Date("2026-08-31T10:01:00.000Z"),
+        () => "mutation-restarted",
+        { drain: vi.fn().mockResolvedValue(undefined) },
+      ),
+    );
+    await restartedStore.load();
+
+    await restartedStore.loadMore();
+
+    expect(restartedList).toHaveBeenLastCalledWith(firstPageCursor, 30);
+  });
+
+  it("migrates legacy cached pagination state without cursor by preserving data and disabling unsafe load-more", async () => {
+    const list = vi.fn().mockRejectedValueOnce(new Error("INTERNAL"));
+    const legacy = emptyOfflineState() as OfflineAccountState & {
+      serverCursor?: unknown;
+    };
+    legacy.timeZone = "Europe/Berlin";
+    legacy.summary = { ...emptyGoalSummary };
+    legacy.entries = [
+      {
+        ...existingEntry,
+        localState: "pending_create",
+        serverRevision: null,
+        lastAttemptAt: null,
+        retryCount: 0,
+        lastErrorCode: null,
+      },
+    ];
+    legacy.queue = [
+      {
+        id: "mutation-legacy",
+        entity: "entry",
+        operation: "create",
+        entityId: existingEntry.id,
+        payload: {
+          amount: 5,
+          entryDate: existingEntry.entryDate,
+          timezone: existingEntry.timezone,
+          recordedAtClient: existingEntry.recordedAtClient,
+        },
+        expectedRevision: null,
+        createdAt: existingEntry.createdAt,
+        status: "pending",
+        lastAttemptAt: null,
+        retryCount: 0,
+        lastErrorCode: null,
+        nextAttemptAt: null,
+      },
+    ];
+    legacy.hasMore = true;
+    (legacy as { serverCursor?: unknown }).serverCursor = undefined;
+    let persisted: OfflineAccountState | null = legacy;
+    const persistence = {
+      load: vi.fn(async () => structuredClone(persisted)),
+      save: vi.fn(async (state: OfflineAccountState) => {
+        persisted = structuredClone(state);
+      }),
+      clear: vi.fn(),
+    };
+    const store = new EntriesStore(
+      gateway({ list }),
+      "UTC",
+      () => new Date("2026-08-31T10:00:00.000Z"),
+      () => "unused",
+      new OfflineController(
+        persistence,
+        gateway({ list }),
+        () => new Date("2026-08-31T10:00:00.000Z"),
+        () => "mutation-generated",
+        { drain: vi.fn().mockResolvedValue(undefined) },
+      ),
+    );
+
+    await store.load();
+    await store.loadMore();
+
+    expect(store.snapshot.entries).toHaveLength(1);
+    expect(store.snapshot.pendingCount).toBe(1);
+    expect(store.snapshot.hasMore).toBe(false);
+    expect(list).toHaveBeenCalledTimes(1);
+  });
+
   it("shows a goal optimistically and reconciles the canonical summary", async () => {
     let resolveGoal: () => void = () => undefined;
     const setGoal = vi.fn(

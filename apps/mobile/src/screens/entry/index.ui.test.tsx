@@ -60,6 +60,7 @@ describe("EntryEditScreen", () => {
       timeZone: "Europe/Berlin",
       busy: false,
       conflictEntryId: null,
+      conflicts: [],
       update: mockUpdate,
     });
     const view = await render(<EntryEditScreen />);
@@ -83,6 +84,7 @@ describe("EntryEditScreen", () => {
       timeZone: "",
       busy: false,
       conflictEntryId: null,
+      conflicts: [],
       update: mockUpdate,
     });
 
@@ -118,6 +120,21 @@ describe("EntryEditScreen", () => {
           revision: 2,
         },
       },
+      conflicts: [
+        {
+          entryId: "entry-1",
+          operation: "update",
+          localAmount: "8",
+          localEntryDate: "2026-08-31",
+          serverEntry: {
+            id: "entry-1",
+            amount: "7",
+            entryDate: "2026-08-31",
+            timezone: "Europe/Berlin",
+            revision: 2,
+          },
+        },
+      ],
       update: mockUpdate,
       keepServerVersion: mockKeepServerVersion,
       reapplyConflict: mockReapplyConflict,
@@ -137,7 +154,7 @@ describe("EntryEditScreen", () => {
         view.getByRole("button", { name: "Meine Änderung erneut anwenden" }),
       );
     });
-    expect(mockKeepServerVersion).toHaveBeenCalled();
-    expect(mockReapplyConflict).toHaveBeenCalled();
+    expect(mockKeepServerVersion).toHaveBeenCalledWith("entry-1");
+    expect(mockReapplyConflict).toHaveBeenCalledWith("entry-1");
   });
 });
