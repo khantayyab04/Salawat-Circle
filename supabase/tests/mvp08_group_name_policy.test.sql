@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(17);
+select plan(20);
 
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at
@@ -33,6 +33,30 @@ as $$
 begin
   perform public.create_group(p_group_id, p_name, 'Europe/Berlin', false, true);
   return null;
+exception
+  when others then
+    return sqlerrm;
+end;
+$$;
+
+create function pg_temp.create_group_name_or_error(
+  p_group_id uuid,
+  p_name text
+)
+returns text
+language plpgsql
+as $$
+declare
+  v_response jsonb;
+begin
+  v_response := public.create_group(
+    p_group_id,
+    p_name,
+    'Europe/Berlin',
+    false,
+    true
+  );
+  return v_response->'group'->>'name';
 exception
   when others then
     return sqlerrm;
@@ -92,6 +116,43 @@ select throws_ok(
   'update_group_name uses the same zero-width policy'
 );
 
+with started as materialized (
+  select pg_catalog.clock_timestamp() as value
+),
+oversized_result as materialized (
+  select
+    pg_temp.create_group_error(
+      '73000000-0000-4000-8000-000000000103',
+      pg_catalog.repeat('A', 15000)
+    ) as error_message,
+    started.value as started_at
+  from started
+),
+definition as materialized (
+  select pg_catalog.pg_get_functiondef(procedure.oid) as source
+  from pg_catalog.pg_proc procedure
+  join pg_catalog.pg_namespace namespace
+    on namespace.oid = procedure.pronamespace
+  where namespace.nspname = 'private'
+    and procedure.proname = 'normalise_group_name'
+    and pg_catalog.pg_get_function_identity_arguments(procedure.oid) = 'p_name text'
+)
+select ok(
+  oversized_result.error_message = 'NAME_REJECTED'
+    and pg_catalog.clock_timestamp() - oversized_result.started_at
+      < interval '3 seconds'
+    and pg_catalog.strpos(
+      definition.source,
+      'pg_catalog.char_length(p_name) > 200'
+    ) < pg_catalog.strpos(definition.source, 'normalize(p_name, NFC)')
+    and definition.source like '%pg_catalog.regexp_split_to_table%'
+    and definition.source not like '%pg_catalog.generate_series%'
+    and definition.source not like '%pg_catalog.substr%',
+  'oversized names are rejected before normalization with one set-based character scan'
+)
+from oversized_result
+cross join definition;
+
 select results_eq(
   $$
     select case_name, pg_temp.create_group_error(group_id, candidate)
@@ -145,6 +206,44 @@ select results_eq(
     select case_name, pg_temp.create_group_error(group_id, candidate)
     from (
       values
+        ('braille-blank-mixed', '73000000-0000-4000-8000-000000000201'::uuid, U&'Safe\2800Name'),
+        ('braille-blank-only', '73000000-0000-4000-8000-000000000202'::uuid, U&'\2800\2800'),
+        ('halfwidth-hangul-filler-mixed', '73000000-0000-4000-8000-000000000203'::uuid, U&'Safe\FFA0Name'),
+        ('halfwidth-hangul-filler-only', '73000000-0000-4000-8000-000000000204'::uuid, U&'\FFA0\FFA0'),
+        ('hangul-choseong-filler-mixed', '73000000-0000-4000-8000-000000000205'::uuid, U&'Safe\115FName'),
+        ('hangul-choseong-filler-only', '73000000-0000-4000-8000-000000000206'::uuid, U&'\115F\115F'),
+        ('hangul-filler-mixed', '73000000-0000-4000-8000-000000000207'::uuid, U&'Safe\3164Name'),
+        ('hangul-filler-only', '73000000-0000-4000-8000-000000000208'::uuid, U&'\3164\3164'),
+        ('hangul-jungseong-filler-mixed', '73000000-0000-4000-8000-000000000209'::uuid, U&'Safe\1160Name'),
+        ('hangul-jungseong-filler-only', '73000000-0000-4000-8000-000000000210'::uuid, U&'\1160\1160'),
+        ('mongolian-vowel-separator-mixed', '73000000-0000-4000-8000-000000000211'::uuid, U&'Safe\180EName'),
+        ('mongolian-vowel-separator-only', '73000000-0000-4000-8000-000000000212'::uuid, U&'\180E\180E')
+    ) as cases(case_name, group_id, candidate)
+    order by case_name
+  $$,
+  $$
+    values
+      ('braille-blank-mixed', 'NAME_REJECTED'),
+      ('braille-blank-only', 'NAME_REJECTED'),
+      ('halfwidth-hangul-filler-mixed', 'NAME_REJECTED'),
+      ('halfwidth-hangul-filler-only', 'NAME_REJECTED'),
+      ('hangul-choseong-filler-mixed', 'NAME_REJECTED'),
+      ('hangul-choseong-filler-only', 'NAME_REJECTED'),
+      ('hangul-filler-mixed', 'NAME_REJECTED'),
+      ('hangul-filler-only', 'NAME_REJECTED'),
+      ('hangul-jungseong-filler-mixed', 'NAME_REJECTED'),
+      ('hangul-jungseong-filler-only', 'NAME_REJECTED'),
+      ('mongolian-vowel-separator-mixed', 'NAME_REJECTED'),
+      ('mongolian-vowel-separator-only', 'NAME_REJECTED')
+  $$,
+  'group names reject invisible filler code points alone and inside visible text'
+);
+
+select results_eq(
+  $$
+    select case_name, pg_temp.create_group_error(group_id, candidate)
+    from (
+      values
         ('arabic-letter-mark', '73000000-0000-4000-8000-000000000131'::uuid, U&'Safe\061CName'),
         ('left-to-right-mark', '73000000-0000-4000-8000-000000000132'::uuid, U&'Safe\200EName'),
         ('right-to-left-mark', '73000000-0000-4000-8000-000000000133'::uuid, U&'Safe\200FName'),
@@ -172,22 +271,48 @@ select results_eq(
 
 select results_eq(
   $$
-    select case_name, pg_temp.create_group_error(group_id, candidate)
+    select case_name, result
     from (
       values
-        ('variation-selector-text', '73000000-0000-4000-8000-000000000141'::uuid, U&'Safe\FE0EName'),
-        ('variation-selector-emoji', '73000000-0000-4000-8000-000000000142'::uuid, U&'Safe\FE0FName'),
-        ('variation-selector-supplement', '73000000-0000-4000-8000-000000000143'::uuid, U&'Safe\+0E0100Name')
-    ) as cases(case_name, group_id, candidate)
+        (
+          'emoji-selector-with-letters',
+          pg_temp.create_group_name_or_error(
+            '73000000-0000-4000-8000-000000000141',
+            U&'Gruppe \2764\FE0F'
+          )
+        ),
+        (
+          'pure-emoji-with-selector',
+          pg_temp.create_group_error(
+            '73000000-0000-4000-8000-000000000142',
+            U&'\2764\FE0F'
+          )
+        ),
+        (
+          'supplementary-selector-with-letters',
+          pg_temp.create_group_name_or_error(
+            '73000000-0000-4000-8000-000000000143',
+            U&'Gruppe\+0E0100 Berlin'
+          )
+        ),
+        (
+          'text-selector-with-letters',
+          pg_temp.create_group_name_or_error(
+            '73000000-0000-4000-8000-000000000144',
+            U&'Gruppe \2764\FE0E'
+          )
+        )
+    ) as cases(case_name, result)
     order by case_name
   $$,
   $$
     values
-      ('variation-selector-emoji', 'NAME_REJECTED'),
-      ('variation-selector-supplement', 'NAME_REJECTED'),
-      ('variation-selector-text', 'NAME_REJECTED')
+      ('emoji-selector-with-letters', U&'Gruppe \2764'),
+      ('pure-emoji-with-selector', 'NAME_REJECTED'),
+      ('supplementary-selector-with-letters', 'Gruppe Berlin'),
+      ('text-selector-with-letters', U&'Gruppe \2764')
   $$,
-  'group names reject standard and supplementary variation selectors'
+  'variation selectors are stripped while letter-bearing names remain valid'
 );
 
 select results_eq(
@@ -262,13 +387,24 @@ select results_eq(
   'group names reject the narrow case-insensitive de/en abuse token list'
 );
 
+reset role;
+delete from private.rate_limit_buckets
+where actor_key = '73000000-0000-4000-8000-000000000001'
+  and action_key = 'create_group';
+set local role authenticated;
+set local "request.jwt.claim.sub" = '73000000-0000-4000-8000-000000000001';
+set local "request.jwt.claim.role" = 'authenticated';
+
 select results_eq(
   $$
     select case_name, pg_temp.create_group_error(group_id, candidate)
     from (
       values
+        ('colon-in-name', '73000000-0000-4000-8000-000000000185'::uuid, 'Gruppe:Freitag'),
+        ('digit-period-name', '73000000-0000-4000-8000-000000000186'::uuid, '3.Gruppe Berlin'),
         ('domain-like-version', '73000000-0000-4000-8000-000000000181'::uuid, 'Version 1.2 Circle'),
         ('period-with-space', '73000000-0000-4000-8000-000000000182'::uuid, 'St. Mary Circle'),
+        ('title-period-name', '73000000-0000-4000-8000-000000000187'::uuid, 'Dr.Ahmad Kreis'),
         ('token-inside-scunthorpe', '73000000-0000-4000-8000-000000000183'::uuid, 'Scunthorpe Circle'),
         ('token-inside-snigger', '73000000-0000-4000-8000-000000000184'::uuid, 'Snigger Club')
     ) as cases(case_name, group_id, candidate)
@@ -276,8 +412,11 @@ select results_eq(
   $$,
   $$
     values
+      ('colon-in-name', null::text),
+      ('digit-period-name', null::text),
       ('domain-like-version', null::text),
       ('period-with-space', null::text),
+      ('title-period-name', null::text),
       ('token-inside-scunthorpe', null::text),
       ('token-inside-snigger', null::text)
   $$,
@@ -368,7 +507,7 @@ select results_eq(
         ('domain', 'example.de'),
         ('emoji-only', U&'\+01F600\+01F64F'),
         ('too-long', pg_catalog.repeat('A', 51)),
-        ('variation-selector', U&'Safe\FE0FName'),
+        ('variation-selector-only', U&'\2764\FE0F'),
         ('zero-width', U&'Safe\200CName')
     ) as cases(case_name, candidate)
     order by case_name
@@ -381,7 +520,7 @@ select results_eq(
       ('domain', 'NAME_REJECTED'),
       ('emoji-only', 'NAME_REJECTED'),
       ('too-long', 'NAME_REJECTED'),
-      ('variation-selector', 'NAME_REJECTED'),
+      ('variation-selector-only', 'NAME_REJECTED'),
       ('zero-width', 'NAME_REJECTED')
   $$,
   'update_group_name returns NAME_REJECTED for every shared policy category'
@@ -394,6 +533,20 @@ select has_function(
   'normalise_group_name',
   array['text'],
   'one private group-name normalizer and validator exists'
+);
+
+select is(
+  (
+    select procedure.provolatile::text
+    from pg_catalog.pg_proc procedure
+    join pg_catalog.pg_namespace namespace
+      on namespace.oid = procedure.pronamespace
+    where namespace.nspname = 'private'
+      and procedure.proname = 'normalise_group_name'
+      and pg_catalog.pg_get_function_identity_arguments(procedure.oid) = 'p_name text'
+  ),
+  's',
+  'the group-name validator is STABLE rather than IMMUTABLE'
 );
 
 select results_eq(

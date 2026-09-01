@@ -90,16 +90,18 @@ export function AuthProvider({
     [providedGateway],
   );
   const clearLocalData = useMemo(
-    () =>
-      providedClearLocalData ??
-      (async () => {
-        const { clearAllOfflineData } = await import("@/lib/offline");
-        await Promise.all([
-          clearSecureAuthSession(),
-          inviteStore.clear(),
-          clearAllOfflineData(),
-        ]);
-      }),
+    () => async () => {
+      const clearAccountData =
+        providedClearLocalData ??
+        (async () => {
+          const { clearAllOfflineData } = await import("@/lib/offline");
+          await Promise.all([
+            clearSecureAuthSession(),
+            clearAllOfflineData(),
+          ]);
+        });
+      await Promise.all([inviteStore.clear(), clearAccountData()]);
+    },
     [inviteStore, providedClearLocalData],
   );
   const coordinator = useMemo(
@@ -181,6 +183,18 @@ export function AuthProvider({
     },
     [refresh],
   );
+  const rememberInvite = useCallback(
+    (token: string) => inviteStore.save(token),
+    [inviteStore],
+  );
+  const peekPendingInvite = useCallback(
+    () => inviteStore.peek(),
+    [inviteStore],
+  );
+  const clearPendingInvite = useCallback(
+    () => inviteStore.clear(),
+    [inviteStore],
+  );
 
   const value = useMemo<AuthContextValue>(() => {
     void revision;
@@ -203,12 +217,21 @@ export function AuthProvider({
       grantConsent: (locale) =>
         run(() => coordinator.grantConsent(locale), "CONSENT_SAVE_FAILED"),
       signOut: () => run(() => coordinator.signOut(), "SIGN_OUT_FAILED"),
-      rememberInvite: (token) => inviteStore.save(token),
-      peekPendingInvite: () => inviteStore.peek(),
-      clearPendingInvite: () => inviteStore.clear(),
+      rememberInvite,
+      peekPendingInvite,
+      clearPendingInvite,
       clearError: () => setErrorCode(null),
     };
-  }, [busy, coordinator, errorCode, inviteStore, revision, run]);
+  }, [
+    busy,
+    clearPendingInvite,
+    coordinator,
+    errorCode,
+    peekPendingInvite,
+    rememberInvite,
+    revision,
+    run,
+  ]);
 
   return (
     <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

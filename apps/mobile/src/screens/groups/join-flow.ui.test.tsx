@@ -265,6 +265,33 @@ describe("Task 15 join flows", () => {
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
+  it("allows a ready user to preview and accept when invite persistence fails", async () => {
+    mockRememberInvite.mockRejectedValueOnce(new Error("keychain unavailable"));
+    const view = await render(<JoinTokenRoute />);
+
+    await waitFor(() =>
+      expect(mockPreviewInvite).toHaveBeenCalledWith(
+        "token",
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      ),
+    );
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "Einladung annehmen" }));
+    });
+
+    await waitFor(() =>
+      expect(mockAcceptInvite).toHaveBeenCalledWith(
+        "token",
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "de",
+      ),
+    );
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: "/groups/[id]",
+      params: { id: "group-1" },
+    });
+  });
+
   it("confirms explicit invite abandonment while cancel keeps the token", async () => {
     mockPeekPendingInvite.mockResolvedValue(
       "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",

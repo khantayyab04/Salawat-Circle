@@ -1,40 +1,59 @@
 create or replace function private.normalise_group_name(p_name text)
 returns text
 language plpgsql
-immutable
+stable
 security definer
 set search_path = ''
 as $$
 declare
   v_name text;
   v_folded text;
+  v_has_forbidden_code_point boolean;
 begin
   if p_name is null then
+    raise exception using errcode = 'P0001', message = 'NAME_REJECTED';
+  end if;
+  if pg_catalog.char_length(p_name) > 200 then
     raise exception using errcode = 'P0001', message = 'NAME_REJECTED';
   end if;
 
   v_name := normalize(p_name, NFC);
 
-  if exists (
-    select 1
-    from pg_catalog.generate_series(1, pg_catalog.char_length(v_name)) as position(index)
-    where pg_catalog.ascii(pg_catalog.substr(v_name, position.index, 1))
-            between 0 and 31
-       or pg_catalog.ascii(pg_catalog.substr(v_name, position.index, 1))
-            between 127 and 159
-       or pg_catalog.ascii(pg_catalog.substr(v_name, position.index, 1))
-            in (173, 8203, 8204, 8205, 8288, 65279)
-       or pg_catalog.ascii(pg_catalog.substr(v_name, position.index, 1))
-            in (1564, 8206, 8207)
-       or pg_catalog.ascii(pg_catalog.substr(v_name, position.index, 1))
-            between 8234 and 8238
-       or pg_catalog.ascii(pg_catalog.substr(v_name, position.index, 1))
-            between 8294 and 8303
-       or pg_catalog.ascii(pg_catalog.substr(v_name, position.index, 1))
-            between 65024 and 65039
-       or pg_catalog.ascii(pg_catalog.substr(v_name, position.index, 1))
-            between 917760 and 917999
-  ) then
+  select
+    coalesce(
+      pg_catalog.bool_or(
+        code_points.code_point between 0 and 31
+          or code_points.code_point between 127 and 159
+          or code_points.code_point in (
+            173, 1564, 4447, 4448, 6158, 8203, 8204, 8205, 8206, 8207,
+            8234, 8235, 8236, 8237, 8238, 8288, 8294, 8295, 8296, 8297,
+            8298, 8299, 8300, 8301, 8302, 8303, 10240, 12644, 65279, 65440
+          )
+      ),
+      false
+    ),
+    coalesce(
+      pg_catalog.string_agg(
+        code_points.character,
+        ''
+        order by code_points.ordinality
+      ) filter (
+        where code_points.code_point not between 65024 and 65039
+          and code_points.code_point not between 917760 and 917999
+      ),
+      ''
+    )
+  into v_has_forbidden_code_point, v_name
+  from (
+    select
+      character.value as character,
+      character.ordinality,
+      pg_catalog.ascii(character.value) as code_point
+    from pg_catalog.regexp_split_to_table(v_name, '')
+      with ordinality as character(value, ordinality)
+  ) as code_points;
+
+  if v_has_forbidden_code_point then
     raise exception using errcode = 'P0001', message = 'NAME_REJECTED';
   end if;
 
@@ -55,10 +74,11 @@ begin
   end if;
 
   v_folded := pg_catalog.lower(v_name);
-  if v_folded ~ '(^|[^[:alnum:]])[[:alpha:]][[:alnum:]+.-]{1,31}:(//)?[^[:space:]]'
+  if v_folded ~ '(^|[^[:alnum:]])[[:alpha:]][[:alnum:]+.-]{1,31}://[^[:space:]]'
+     or v_folded ~ '(^|[^[:alnum:]])(mailto|sms|smsto|tel):[^[:space:]]'
      or v_folded ~ '(^|[^[:alnum:]])www\.[[:alnum:]]'
      or v_folded ~ '[[:alnum:]_%+.-]+@[[:alnum:]][[:alnum:].-]*'
-     or v_folded ~ '(^|[^[:alnum:]_])([[:alnum:]][[:alnum:]-]*\.)+[[:alpha:]]{2,63}($|[^[:alnum:]_-])' then
+     or v_folded ~ '(^|[^[:alnum:]_])([[:alnum:]][[:alnum:]-]*\.)+(academy|ai|app|at|biz|ch|cloud|club|co|com|community|de|dev|digital|edu|email|eu|gov|group|info|io|link|live|me|mobi|net|online|org|shop|site|space|store|tech|uk|website|world|xyz)($|[^[:alnum:]_-])' then
     raise exception using errcode = 'P0001', message = 'NAME_REJECTED';
   end if;
   if v_folded ~ '(^|[^[:alnum:]])(cunt|faggot|fotze|hurensohn|nigger)($|[^[:alnum:]])' then

@@ -85,7 +85,7 @@ describe("MVP08 join route", () => {
     expect(mockRememberInvite).not.toHaveBeenCalled();
   });
 
-  it.each(["signed_out", "ready"])(
+  it.each(["signed_out", "profile_required", "consent_required"])(
     "does not discard an invite when secure storage is unavailable for %s users",
     async (status) => {
       mockStatus = status;

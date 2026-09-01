@@ -43,6 +43,17 @@ export default function JoinRoute() {
   }, [rememberInvite, status, token]);
 
   if (status === "loading") return null;
+  if (status === "ready") {
+    return (
+      <>
+        <Stack.Screen options={{ title: t("joinTitle") }} />
+        <JoinScreen
+          initialSecret={token ? { kind: "token", secret: token } : null}
+          invalidRouteSecret={!token}
+        />
+      </>
+    );
+  }
   if (storeFailed) {
     return (
       <AppScreen contentContainerStyle={{ justifyContent: "center" }}>
@@ -51,17 +62,5 @@ export default function JoinRoute() {
     );
   }
   if (!stored && token) return null;
-  if (status !== "ready") {
-    return stored || !token ? <Redirect href="/" /> : null;
-  }
-
-  return (
-    <>
-      <Stack.Screen options={{ title: t("joinTitle") }} />
-      <JoinScreen
-        initialSecret={token ? { kind: "token", secret: token } : null}
-        invalidRouteSecret={!token}
-      />
-    </>
-  );
+  return stored || !token ? <Redirect href="/" /> : null;
 }
