@@ -139,6 +139,10 @@ export function GroupsProvider({
     (listener) => store.subscribe(listener),
     () => store.getVersion(),
   );
+  const snapshot = useSyncExternalStore(
+    (listener) => store.subscribe(listener),
+    () => store.getSnapshot(),
+  );
 
   useEffect(() => {
     if (onlineCheck) return;
@@ -178,7 +182,6 @@ export function GroupsProvider({
     void controller.initialize(accountId).catch(() => undefined);
   }, [accountId, controller, enabled]);
 
-  const snapshot = store.getSnapshot();
   const refreshGroups = useCallback(() => controller.refreshGroups(), [controller]);
   const createGroup = useCallback(
     (

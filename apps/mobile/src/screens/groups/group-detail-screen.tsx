@@ -498,9 +498,10 @@ export function GroupDetailScreen() {
             <AppButton
               label={t("groupDetailInviteAction")}
               variant="secondary"
-              onPress={() =>
-                push({ pathname: "/groups/[id]/invites", params: { id: groupId } })
-              }
+              onPress={() => {
+                if (!groupId) return;
+                push({ pathname: "/groups/[id]/invites", params: { id: groupId } });
+              }}
             />
           </>
         ) : (

@@ -187,6 +187,7 @@ export class GroupsStore {
 
   update(mutator: (snapshot: GroupsSnapshot) => void) {
     mutator(this.snapshot);
+    this.snapshot = { ...this.snapshot };
     this.notify();
   }
 

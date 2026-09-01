@@ -229,6 +229,21 @@ function setup({
 }
 
 describe("GroupsController / GroupsStore", () => {
+  it("publishes a new root snapshot after every update", () => {
+    const store = new GroupsStore("account-1");
+    const before = store.getSnapshot();
+
+    store.update((state) => {
+      state.groups.status = "ready";
+      state.groups.items = [baseGroup];
+    });
+
+    const after = store.getSnapshot();
+    expect(after).not.toBe(before);
+    expect(after.groups.status).toBe("ready");
+    expect(after.groups.items).toEqual([baseGroup]);
+  });
+
   it("initializes account state and loads groups", async () => {
     const { controller, store } = setup();
 
