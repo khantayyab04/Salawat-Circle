@@ -20,7 +20,12 @@ import {
 } from "@/localization";
 import { radius, spacing, useAppTheme } from "@/theme";
 import { Host, Switch } from "@expo/ui";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import {
+  Stack,
+  useFocusEffect,
+  useLocalSearchParams,
+  useRouter,
+} from "expo-router";
 import {
   memo,
   useCallback,
@@ -30,6 +35,7 @@ import {
   useState,
 } from "react";
 import {
+  AppState,
   FlatList,
   Pressable,
   RefreshControl,
@@ -303,6 +309,8 @@ export function GroupDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [switchErrorMessage, setSwitchErrorMessage] = useState<string | null>(null);
   const loadMoreGuardRef = useRef(false);
+  const periodRef = useRef<LeaderboardPeriod>(period);
+  const appStateRef = useRef(AppState.currentState);
 
   const listGroup = useMemo<GroupListItem | null>(() => {
     if (!groupId) return null;
@@ -360,9 +368,25 @@ export function GroupDetailScreen() {
     loadMoreGuardRef.current = false;
   }, [groupId, period]);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (!groupId) return;
+      void loadLeaderboard(groupId, periodRef.current, { mode: "reset" }).catch(
+        () => undefined,
+      );
+    }, [groupId, loadLeaderboard]),
+  );
+
   useEffect(() => {
-    if (!groupId) return;
-    void loadLeaderboard(groupId, "week", { mode: "reset" }).catch(() => undefined);
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      const previousState = appStateRef.current;
+      appStateRef.current = nextState;
+      if (nextState !== "active" || previousState === "active" || !groupId) return;
+      void loadLeaderboard(groupId, periodRef.current, { mode: "reset" }).catch(
+        () => undefined,
+      );
+    });
+    return () => subscription.remove();
   }, [groupId, loadLeaderboard]);
 
   const refreshCurrentPeriod = useCallback(async () => {
@@ -383,6 +407,7 @@ export function GroupDetailScreen() {
     (nextPeriod: LeaderboardPeriod) => {
       if (!groupId) return;
       setSwitchErrorMessage(null);
+      periodRef.current = nextPeriod;
       setPeriod(nextPeriod);
       void loadLeaderboard(groupId, nextPeriod, { mode: "reset" }).catch(
         () => undefined,
