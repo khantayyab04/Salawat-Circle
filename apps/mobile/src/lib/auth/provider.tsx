@@ -22,6 +22,7 @@ import {
 import {
   createSupabaseAuthGateway,
 } from "./supabase-gateway";
+import { clearExpoReminderForLogout } from "@/lib/reminder/expo-reminder-cleanup";
 
 type AuthContextValue = {
   status: AuthStatus;
@@ -39,6 +40,7 @@ type AuthContextValue = {
   ): Promise<void>;
   grantConsent(locale: "de" | "en"): Promise<void>;
   signOut(): Promise<void>;
+  signOutEverywhere(): Promise<void>;
   rememberInvite(token: string): Promise<void>;
   peekPendingInvite(): Promise<string | null>;
   clearPendingInvite(): Promise<void>;
@@ -59,6 +61,7 @@ function createUnavailableGateway(): AuthGateway {
     upsertProfile: unavailable,
     grantConsent: unavailable,
     signOut: async () => undefined,
+    signOutEverywhere: async () => undefined,
   };
 }
 
@@ -100,7 +103,11 @@ export function AuthProvider({
             clearAllOfflineData(),
           ]);
         });
-      await Promise.all([inviteStore.clear(), clearAccountData()]);
+      await Promise.all([
+        inviteStore.clear(),
+        clearExpoReminderForLogout(),
+        clearAccountData(),
+      ]);
     },
     [inviteStore, providedClearLocalData],
   );
@@ -217,6 +224,8 @@ export function AuthProvider({
       grantConsent: (locale) =>
         run(() => coordinator.grantConsent(locale), "CONSENT_SAVE_FAILED"),
       signOut: () => run(() => coordinator.signOut(), "SIGN_OUT_FAILED"),
+      signOutEverywhere: () =>
+        run(() => coordinator.signOutEverywhere(), "SIGN_OUT_FAILED"),
       rememberInvite,
       peekPendingInvite,
       clearPendingInvite,

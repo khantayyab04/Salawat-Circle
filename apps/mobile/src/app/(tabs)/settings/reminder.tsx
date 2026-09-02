@@ -1,4 +1,4 @@
-import { ReminderScreen } from "@/screens/settings";
+import { ReminderSettingsScreen } from "@/screens/settings/reminder-screen";
 export default function ReminderRoute() {
-  return <ReminderScreen />;
+  return <ReminderSettingsScreen />;
 }

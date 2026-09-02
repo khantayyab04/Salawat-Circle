@@ -324,9 +324,33 @@ export const de = {
   settingsLegal: "Rechtliches",
   settingsSupport: "Hilfe und Support",
   settingsSignOut: "Abmelden",
+  settingsSignOutEverywhere: "Auf allen Geräten abmelden",
+  settingsSignOutEverywhereConfirmTitle: "Auf allen Geräten abmelden?",
+  settingsSignOutEverywhereConfirmBody:
+    "Du wirst auf allen Geräten abgemeldet. Auf diesem Gerät werden auch lokale Daten bereinigt.",
   settingsSignOutFailed: "Die lokalen Kontodaten konnten nicht vollständig gelöscht werden.",
+  settingsVersion: "App-Version",
+  settingsProfileSave: "Profil speichern",
+  settingsProfileLoadFailed:
+    "Dein Profil konnte nicht geladen werden. Prüfe die Verbindung und versuche es erneut.",
+  settingsProfileTimezoneHint:
+    "Die erkannte Zeitzone ist vorausgewählt. Du kannst eine andere passende Zone wählen.",
+  settingsProfileTimezoneImpact:
+    "Die Zeitzone gilt für künftige Einträge. Bestehende Einträge behalten ihr gespeichertes Datum.",
   reminderTitle: "Tägliche Erinnerung",
+  reminderEnabledLabel: "Tägliche Erinnerung",
+  reminderPurpose: "Eine ruhige Erinnerung zur von dir gewählten Uhrzeit.",
+  reminderNotificationBody: "Zeit für deine heutige Salawat.",
   reminderTimeLabel: "Uhrzeit",
+  reminderDeviceOnly: "Die Erinnerung gilt nur auf diesem Gerät.",
+  reminderPermissionNotAsked:
+    "Du entscheidest erst beim Aktivieren, ob Benachrichtigungen erlaubt werden.",
+  reminderPermissionGranted: "Benachrichtigungen sind für diese Erinnerung erlaubt.",
+  reminderPermissionDenied:
+    "Benachrichtigungen wurden nicht erlaubt. Du kannst die App weiterhin vollständig nutzen.",
+  reminderPermissionBlocked:
+    "Benachrichtigungen sind in den Systemeinstellungen deaktiviert.",
+  reminderOpenSettings: "Systemeinstellungen öffnen",
   privacyTitle: "Datenschutz",
   privacyExport: "Daten exportieren",
   privacyDelete: "Konto löschen",
@@ -337,6 +361,8 @@ export const de = {
   supportTitle: "Hilfe und Support",
   supportReport: "Problem melden",
   supportContact: "Kontakt aufnehmen",
+  supportBody:
+    "Salawat Circle hilft dir, selbst angegebene Salawat privat festzuhalten. Für Hilfe wende dich an den Support. Melden und Meldestatus folgen in einer späteren Version.",
   stateLoadingTitle: "Wird geladen",
   stateLoadingBody: "Einen Moment bitte.",
   stateEmptyTitle: "Noch keine Inhalte",

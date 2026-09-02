@@ -3,14 +3,14 @@ import {
   AppCard,
   AppScreen,
   AppText,
-  FormField,
 } from "@/components";
 import { useAuth } from "@/lib/auth";
 import { useTranslation, type LanguagePreference } from "@/localization";
 import { spacing } from "@/theme";
+import Constants from "expo-constants";
 import { Host, List, ListItem, Picker } from "@expo/ui";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { Alert } from "react-native";
 
 export function SettingsScreen() {
   const { t, preference, setPreference } = useTranslation();
@@ -23,6 +23,24 @@ export function SettingsScreen() {
     } catch {
       // The provider still performs local cleanup and exposes a stable error.
     }
+  };
+  const confirmSignOutEverywhere = () => {
+    Alert.alert(
+      t("settingsSignOutEverywhereConfirmTitle"),
+      t("settingsSignOutEverywhereConfirmBody"),
+      [
+        { text: t("commonCancel"), style: "cancel" },
+        {
+          text: t("settingsSignOutEverywhere"),
+          style: "destructive",
+          onPress: () => {
+            void auth.signOutEverywhere().then(() => router.replace("/welcome")).catch(() => {
+              // The provider exposes a stable localized error.
+            });
+          },
+        },
+      ],
+    );
   };
   return (
     <AppScreen>
@@ -67,43 +85,24 @@ export function SettingsScreen() {
         </AppText>
       ) : null}
       <AppButton
+        label={t("settingsSignOutEverywhere")}
+        loading={auth.busy}
+        variant="secondary"
+        onPress={confirmSignOutEverywhere}
+      />
+      <AppButton
         label={t("settingsSignOut")}
         loading={auth.busy}
         variant="destructive"
         onPress={() => void handleSignOut()}
       />
+      <AppText variant="caption">{`${t("settingsVersion")}: ${
+        Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? "0.1.0"
+      }`}</AppText>
     </AppScreen>
   );
 }
 
-export function SettingsProfileScreen() {
-  const { t } = useTranslation();
-  const [name, setName] = useState("");
-  return (
-    <AppScreen>
-      <FormField
-        label={t("profileNameLabel")}
-        value={name}
-        onChangeText={setName}
-      />
-      <FormField
-        editable={false}
-        label={t("profileTimezoneLabel")}
-        value={Intl.DateTimeFormat().resolvedOptions().timeZone}
-      />
-      <AppButton disabled label={t("commonSave")} />
-    </AppScreen>
-  );
-}
-export function ReminderScreen() {
-  const { t } = useTranslation();
-  return (
-    <AppScreen>
-      <FormField editable={false} label={t("reminderTimeLabel")} />
-      <AppButton disabled label={t("commonSave")} />
-    </AppScreen>
-  );
-}
 export function PrivacyScreen() {
   const { t } = useTranslation();
   return (
@@ -129,8 +128,9 @@ export function SupportScreen() {
   const { t } = useTranslation();
   return (
     <AppScreen>
-      <AppButton disabled label={t("supportReport")} variant="secondary" />
-      <AppButton disabled label={t("supportContact")} variant="secondary" />
+      <AppCard>
+        <AppText>{t("supportBody")}</AppText>
+      </AppCard>
     </AppScreen>
   );
 }

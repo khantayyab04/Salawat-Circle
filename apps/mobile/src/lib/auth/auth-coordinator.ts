@@ -28,6 +28,7 @@ export type AuthGateway = {
   ): Promise<void>;
   grantConsent(locale: "de" | "en"): Promise<void>;
   signOut(): Promise<void>;
+  signOutEverywhere(): Promise<void>;
   getCachedReadyUserId?(): Promise<string | null>;
   cacheReadyUserId?(userId: string): Promise<void>;
   clearCachedReadyUserId?(): Promise<void>;
@@ -121,7 +122,9 @@ export class AuthCoordinator {
       parseTimeZone(timeZone),
       locale,
     );
-    this.snapshot.status = "consent_required";
+    if (this.snapshot.status === "profile_required") {
+      this.snapshot.status = "consent_required";
+    }
   }
 
   async grantConsent(locale: "de" | "en") {
@@ -133,8 +136,16 @@ export class AuthCoordinator {
   }
 
   async signOut() {
+    await this.signOutWith(() => this.gateway.signOut());
+  }
+
+  async signOutEverywhere() {
+    await this.signOutWith(() => this.gateway.signOutEverywhere());
+  }
+
+  private async signOutWith(action: () => Promise<void>) {
     try {
-      await this.gateway.signOut();
+      await action();
     } finally {
       try {
         await this.gateway.clearCachedReadyUserId?.();

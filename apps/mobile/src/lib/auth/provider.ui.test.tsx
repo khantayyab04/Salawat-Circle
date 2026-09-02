@@ -19,6 +19,12 @@ jest.mock("expo-secure-store", () => ({
     mockSecureStoreValues.delete(key);
   }),
 }));
+jest.mock("@/lib/reminder/expo-reminder-cleanup", () => ({
+  clearExpoReminderForLogout: jest.fn(async () => undefined),
+}));
+jest.mock("@/lib/offline", () => ({
+  clearAllOfflineData: jest.fn(async () => undefined),
+}));
 
 function TestConsumer() {
   const auth = useAuth();
@@ -119,6 +125,7 @@ describe("AuthProvider", () => {
       upsertProfile: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
       grantConsent: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
       signOut: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      signOutEverywhere: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
     };
 
     const view = await render(
@@ -159,6 +166,7 @@ describe("AuthProvider", () => {
       upsertProfile: jest.fn<() => Promise<void>>(),
       grantConsent: jest.fn<() => Promise<void>>(),
       signOut: jest.fn<() => Promise<void>>(),
+      signOutEverywhere: jest.fn<() => Promise<void>>(),
     };
     const view = await render(
       <AuthProvider gateway={gateway} clearLocalData={async () => undefined}>
@@ -183,6 +191,7 @@ describe("AuthProvider", () => {
       upsertProfile: jest.fn<() => Promise<void>>(),
       grantConsent: jest.fn<() => Promise<void>>(),
       signOut: jest.fn<() => Promise<void>>(),
+      signOutEverywhere: jest.fn<() => Promise<void>>(),
     };
     const view = await render(
       <AuthProvider gateway={gateway} clearLocalData={async () => undefined}>
@@ -216,6 +225,7 @@ describe("AuthProvider", () => {
       upsertProfile: jest.fn<() => Promise<void>>(),
       grantConsent: jest.fn<() => Promise<void>>(),
       signOut: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      signOutEverywhere: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
     };
     const clearAccountData = jest
       .fn<() => Promise<void>>()
@@ -245,6 +255,45 @@ describe("AuthProvider", () => {
     });
     await waitFor(() =>
       expect(view.getByTestId("invite-state").children).toEqual(["empty"]),
+    );
+  });
+
+  it("clears the active local reminder as part of default logout cleanup", async () => {
+    const { clearExpoReminderForLogout } = jest.requireMock(
+      "@/lib/reminder/expo-reminder-cleanup",
+    ) as {
+      clearExpoReminderForLogout: jest.MockedFunction<
+        () => Promise<void>
+      >;
+    };
+    clearExpoReminderForLogout.mockClear();
+    const gateway: AuthGateway = {
+      getCurrentUser: jest
+        .fn<() => Promise<{ id: string }>>()
+        .mockResolvedValue({ id: "user-1" }),
+      requestOtp: jest.fn<AuthGateway["requestOtp"]>(),
+      verifyOtp: jest.fn<AuthGateway["verifyOtp"]>(),
+      getOnboardingState: jest.fn(async () => ({
+        profileComplete: true,
+        consentGranted: true,
+      })),
+      upsertProfile: jest.fn<AuthGateway["upsertProfile"]>(),
+      grantConsent: jest.fn<AuthGateway["grantConsent"]>(),
+      signOut: jest.fn(async () => undefined),
+      signOutEverywhere: jest.fn(async () => undefined),
+    };
+    const view = await render(
+      <AuthProvider gateway={gateway} clearLocalData={async () => undefined}>
+        <InviteLifecycleConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => expect(view.getByText("ready")).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "sign-out" }));
+    });
+    await waitFor(() =>
+      expect(clearExpoReminderForLogout).toHaveBeenCalledTimes(1),
     );
   });
 });
