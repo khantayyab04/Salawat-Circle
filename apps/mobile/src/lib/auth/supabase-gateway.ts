@@ -92,6 +92,11 @@ export function createSupabaseAuthGateway(
       ensureSuccess(error);
     },
 
+    async signOutEverywhere() {
+      const { error } = await client.auth.signOut({ scope: "global" });
+      ensureSuccess(error);
+    },
+
     getCachedReadyUserId() {
       return readySessionBackend.getItemAsync(READY_USER_KEY);
     },

@@ -317,9 +317,33 @@ export const en = {
   settingsLegal: "Legal",
   settingsSupport: "Help and support",
   settingsSignOut: "Sign out",
+  settingsSignOutEverywhere: "Sign out on all devices",
+  settingsSignOutEverywhereConfirmTitle: "Sign out on all devices?",
+  settingsSignOutEverywhereConfirmBody:
+    "You will be signed out on all devices. Local data on this device will also be cleared.",
   settingsSignOutFailed: "Local account data could not be removed completely.",
+  settingsVersion: "App version",
+  settingsProfileSave: "Save profile",
+  settingsProfileLoadFailed:
+    "Your profile could not be loaded. Check your connection and try again.",
+  settingsProfileTimezoneHint:
+    "Your detected time zone is preselected. You can choose another suitable zone.",
+  settingsProfileTimezoneImpact:
+    "The time zone applies to future entries. Existing entries keep their recorded date.",
   reminderTitle: "Daily reminder",
+  reminderEnabledLabel: "Daily reminder",
+  reminderPurpose: "A quiet reminder at your chosen time.",
+  reminderNotificationBody: "Time for your Salawat today.",
   reminderTimeLabel: "Time",
+  reminderDeviceOnly: "This reminder applies only on this device.",
+  reminderPermissionNotAsked:
+    "You decide whether notifications are allowed when you enable the reminder.",
+  reminderPermissionGranted: "Notifications are allowed for this reminder.",
+  reminderPermissionDenied:
+    "Notifications were not allowed. You can continue using the app fully.",
+  reminderPermissionBlocked:
+    "Notifications are disabled in your system settings.",
+  reminderOpenSettings: "Open system settings",
   privacyTitle: "Privacy",
   privacyExport: "Export data",
   privacyDelete: "Delete account",
@@ -330,6 +354,8 @@ export const en = {
   supportTitle: "Help and support",
   supportReport: "Report a problem",
   supportContact: "Contact support",
+  supportBody:
+    "Salawat Circle helps you record self-reported Salawat privately. Contact support if you need help. Reporting and report status will follow in a later version.",
   stateLoadingTitle: "Loading",
   stateLoadingBody: "Please wait a moment.",
   stateEmptyTitle: "No content yet",

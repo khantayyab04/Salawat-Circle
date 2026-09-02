@@ -1,4 +1,4 @@
-import { SettingsProfileScreen } from "@/screens/settings";
+import { ProfileSettingsScreen } from "@/screens/settings/profile-screen";
 export default function ProfileSettingsRoute() {
-  return <SettingsProfileScreen />;
+  return <ProfileSettingsScreen />;
 }

@@ -15,6 +15,7 @@ function createGateway(overrides: Partial<AuthGateway> = {}): AuthGateway {
     upsertProfile: vi.fn().mockResolvedValue(undefined),
     grantConsent: vi.fn().mockResolvedValue(undefined),
     signOut: vi.fn().mockResolvedValue(undefined),
+    signOutEverywhere: vi.fn().mockResolvedValue(undefined),
     getCachedReadyUserId: vi.fn().mockResolvedValue(null),
     cacheReadyUserId: vi.fn().mockResolvedValue(undefined),
     clearCachedReadyUserId: vi.fn().mockResolvedValue(undefined),
@@ -131,5 +132,33 @@ describe("AuthCoordinator", () => {
       pendingEmail: null,
       nextOtpRequestAt: null,
     });
+  });
+
+  it("signs out globally and still clears the local account state", async () => {
+    const signOutEverywhere = vi.fn().mockResolvedValue(undefined);
+    const clearLocalData = vi.fn().mockResolvedValue(undefined);
+    const coordinator = new AuthCoordinator(
+      createGateway({ signOutEverywhere }),
+      clearLocalData,
+    );
+
+    await coordinator.signOutEverywhere();
+
+    expect(signOutEverywhere).toHaveBeenCalledOnce();
+    expect(clearLocalData).toHaveBeenCalledOnce();
+    expect(coordinator.snapshot.status).toBe("signed_out");
+  });
+
+  it("keeps a ready session ready when profile settings are updated", async () => {
+    const coordinator = new AuthCoordinator(
+      createGateway(),
+      async () => undefined,
+    );
+    coordinator.snapshot.status = "ready";
+    coordinator.snapshot.userId = "user-1";
+
+    await coordinator.saveProfile("Jules Example", "Europe/Berlin", "de");
+
+    expect(coordinator.snapshot.status).toBe("ready");
   });
 });

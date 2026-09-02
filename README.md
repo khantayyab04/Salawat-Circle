@@ -274,6 +274,44 @@ pnpm test:management-integration
 Audit-Prozesse (PROD02), Lastoptimierung für große Gruppen sowie manuelle
 iOS/Android- und Accessibility-Geräteabnahmen.
 
+### MVP10 – Tägliche Erinnerung und Basiseinstellungen
+
+MVP10 ergänzt eine freiwillige, lokale tägliche Erinnerung sowie bearbeitbare
+Profil- und Zeitzoneneinstellungen. Die Erinnerung ist pro Konto und Gerät auf
+eine Benachrichtigung begrenzt und wird ausschließlich lokal geplant; es
+werden weder Push-Token gespeichert noch Remote-Push-Nachrichten versendet.
+
+Wichtigste Eigenschaften und Sicherheitsgrenzen:
+- **Bewusste Berechtigung:** Die App fragt die Systemberechtigung erst an,
+  nachdem eine Person die Erinnerung aktiv eingeschaltet hat. Nicht gefragt,
+  erlaubt, abgelehnt und systemseitig gesperrt werden getrennt dargestellt.
+  Eine Ablehnung schränkt keine andere App-Funktion ein.
+- **Lokale, geschützte Speicherung:** Uhrzeit, Aktivierungszustand und
+  Triggerkennung liegen ausschließlich kontobezogen im SecureStore dieses
+  Geräts. Beim Kontowechsel wird der vorherige Datensatz entfernt.
+- **Logout:** Beim Abmelden wird der lokale Trigger abgebrochen und der
+  Schalter deaktiviert. Die gewählte Uhrzeit desselben Kontos bleibt nur als
+  Vorauswahl erhalten und aktiviert beim erneuten Anmelden nichts automatisch.
+- **Zeitzone:** Die App schlägt die Gerätezeitzone vor und bietet zusätzlich
+  häufig verwendete IANA-Zeitzonen an. Änderungen betreffen nur zukünftige
+  Einträge; bestehende Einträge behalten ihr gespeichertes Datum.
+- **Sitzungen:** Einstellungen enthalten neben der lokalen Abmeldung eine
+  bestätigte Aktion zum Abmelden von allen Geräten sowie die installierte
+  App-Version.
+
+Lokale Erinnerungen funktionieren mit Expo Go; lediglich Remote-Push ist dort
+auf Android nicht verfügbar. Der Profil-Einstellungsvertrag lässt sich gegen
+das lokale Backend prüfen:
+
+```bash
+pnpm test:settings-integration
+```
+
+**Verbleibende Production-Arbeit:** E-Mail-Änderung, Export,
+Einwilligungswiderruf und Kontolöschung (PROD01), Melden und Meldestatus
+(PROD02), umfassende Sommerzeit-/Zeitzonen-Geräteabnahmen, Statusseite und
+Store-Dokumentation.
+
 ### Qualitätsprüfung
 
 ```bash
