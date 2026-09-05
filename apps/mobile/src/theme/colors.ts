@@ -1,43 +1,105 @@
+/**
+ * Colour tokens derived from the Figma Make design.
+ *
+ * The design uses a warm off-white page, white cards, a deep Medina green as
+ * the primary colour and a muted gold as the accent. The dark palette keeps
+ * the same relationships: the green becomes a light mint so it stays legible
+ * on dark surfaces, and the gold is lifted for the same reason.
+ *
+ * Legacy aliases (`accent`, `surfaceElevated`, `textInverse`, `borderSubtle`)
+ * are kept so existing screens continue to compile while they are migrated.
+ */
+
 export const lightColors = {
-  background: "#FAF8F4",
+  // Surfaces
+  background: "#F8F6F0",
   surface: "#FFFFFF",
-  surfaceElevated: "#F2EFE8",
-  textPrimary: "#1C211D",
-  textSecondary: "#59625B",
-  textDisabled: "#68706A",
+  surfaceMuted: "#E6E2D6",
+  surfaceSubtle: "#EFEBE1",
+
+  // Text
+  textPrimary: "#0B5C4B",
+  textSecondary: "#55655F",
+  textDisabled: "#6B7A74",
+  textOnPrimary: "#FFFFFF",
+  textOnGold: "#3A2B08",
+
+  // Brand
+  primary: "#0B5C4B",
+  primaryPressed: "#084537",
+  primarySoft: "#DDEAE4",
+
+  // Accent
+  gold: "#C5A059",
+  goldPressed: "#A98442",
+  goldSoft: "#F1E7D4",
+  goldText: "#7A5B14",
+
+  // Feedback
+  success: "#0F6B4B",
+  warning: "#7A5B14",
+  error: "#B3261E",
+  offline: "#55655F",
+  pending: "#7A5B14",
+
+  // Lines
+  border: "#DCD7C9",
+  borderStrong: "#6E7B75",
+  focusRing: "#0B5C4B",
+
+  // Legacy aliases
+  accent: "#0B5C4B",
+  accentPressed: "#084537",
+  accentMuted: "#DDEAE4",
+  surfaceElevated: "#E6E2D6",
   textInverse: "#FFFFFF",
-  accent: "#0F6B4B",
-  accentPressed: "#0A5038",
-  accentMuted: "#DCECE4",
-  success: "#18704D",
-  warning: "#8A5A00",
-  error: "#B42318",
-  offline: "#59625B",
-  pending: "#7A5A13",
-  borderSubtle: "#DEDAD2",
-  borderStrong: "#858C87",
-  focusRing: "#0F6B4B",
+  borderSubtle: "#DCD7C9",
 } as const;
 
 export const darkColors = {
-  background: "#101411",
-  surface: "#171C18",
-  surfaceElevated: "#202721",
-  textPrimary: "#F4F7F4",
-  textSecondary: "#B5BDB7",
-  textDisabled: "#878F89",
-  textInverse: "#082C1E",
-  accent: "#6ED3A3",
-  accentPressed: "#55B98A",
-  accentMuted: "#1D3A2D",
+  // Surfaces
+  background: "#0E1512",
+  surface: "#161E1A",
+  surfaceMuted: "#212B26",
+  surfaceSubtle: "#1B2420",
+
+  // Text
+  textPrimary: "#EDF3F0",
+  textSecondary: "#AFBAB4",
+  textDisabled: "#8A958F",
+  textOnPrimary: "#04241A",
+  textOnGold: "#2A1E05",
+
+  // Brand
+  primary: "#6ED3A3",
+  primaryPressed: "#8FE0BA",
+  primarySoft: "#183A2C",
+
+  // Accent
+  gold: "#E0BE79",
+  goldPressed: "#EED4A0",
+  goldSoft: "#33290F",
+  goldText: "#E0BE79",
+
+  // Feedback
   success: "#6ED3A3",
-  warning: "#F0C36A",
+  warning: "#E0BE79",
   error: "#FFB4AB",
-  offline: "#B5BDB7",
-  pending: "#E4B95F",
-  borderSubtle: "#343C36",
-  borderStrong: "#657067",
+  offline: "#AFBAB4",
+  pending: "#E0BE79",
+
+  // Lines
+  border: "#2C3833",
+  borderStrong: "#7C8983",
   focusRing: "#6ED3A3",
+
+  // Legacy aliases
+  accent: "#6ED3A3",
+  accentPressed: "#8FE0BA",
+  accentMuted: "#183A2C",
+  surfaceElevated: "#212B26",
+  textInverse: "#04241A",
+  borderSubtle: "#2C3833",
 } as const;
 
 export type ColorTokens = { [Key in keyof typeof lightColors]: string };

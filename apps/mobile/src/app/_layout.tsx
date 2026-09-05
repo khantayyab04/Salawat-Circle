@@ -4,6 +4,9 @@ import { GroupsProvider } from "@/lib/groups";
 import { ReminderProvider } from "@/lib/reminder";
 import { I18nProvider } from "@/localization";
 import { AppThemeProvider } from "@/theme";
+import { appFontAssets } from "@/theme/fonts.assets";
+import { resolveFontGate } from "@/theme/fonts";
+import { useFonts } from "expo-font";
 import { useRouter } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { StatusBar } from "expo-status-bar";
@@ -48,6 +51,11 @@ function RootNavigator() {
 }
 
 export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts(appFontAssets);
+  const { ready } = resolveFontGate({ loaded: fontsLoaded, error: fontError });
+
+  if (!ready) return null;
+
   return (
     <I18nProvider>
       <AppThemeProvider>
