@@ -289,3 +289,19 @@ export function createDemoGroupsGateway(): GroupsGateway {
     deleteGroup: unsupported,
   };
 }
+
+/**
+ * Profile used by the local preview so the account screen can be reviewed
+ * without a backend session.
+ */
+export function createDemoSettingsGateway() {
+  return {
+    async loadProfile() {
+      return {
+        displayName: "Amina",
+        timeZone: timezone,
+        locale: "de" as const,
+      };
+    },
+  };
+}

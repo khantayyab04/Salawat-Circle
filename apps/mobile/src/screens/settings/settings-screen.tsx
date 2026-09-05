@@ -10,6 +10,7 @@ import {
 import { AppHeader } from "@/components/app-header";
 import { useAuth } from "@/lib/auth";
 import { getSupabaseClient } from "@/lib/auth/supabase-client";
+import { createDemoSettingsGateway } from "@/lib/demo-gateways";
 import {
   createSupabaseSettingsGateway,
   type SettingsProfile,
@@ -26,7 +27,7 @@ import LogOut from "lucide-react-native/icons/log-out";
 import Shield from "lucide-react-native/icons/shield";
 import Smartphone from "lucide-react-native/icons/smartphone";
 import User from "lucide-react-native/icons/user";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 
 const languageOptions: readonly {
@@ -47,14 +48,32 @@ export function SettingsScreen({ gateway }: { gateway?: SettingsGateway } = {}) 
   const router = useRouter();
 
   const [profile, setProfile] = useState<SettingsProfile | null>(null);
-  const [profileFailed, setProfileFailed] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
 
+  // Creating the client throws synchronously when the backend is not
+  // configured, so it is resolved during render rather than inside the effect.
+  const source = useMemo(() => {
+    if (gateway) return gateway;
+    // The local preview has no session, so a real request would never settle
+    // and the card would stay on "loading" forever.
+    if (
+      process.env.NODE_ENV !== "production" &&
+      process.env.EXPO_PUBLIC_LOCAL_DEMO === "true"
+    ) {
+      return createDemoSettingsGateway();
+    }
+    try {
+      return createSupabaseSettingsGateway(getSupabaseClient());
+    } catch {
+      return null;
+    }
+  }, [gateway]);
+
   useEffect(() => {
+    if (!source) return;
     let active = true;
-    const source =
-      gateway ?? createSupabaseSettingsGateway(getSupabaseClient());
     void source
       .loadProfile()
       .then((loaded) => {
@@ -63,12 +82,14 @@ export function SettingsScreen({ gateway }: { gateway?: SettingsGateway } = {}) 
       .catch(() => {
         // The profile screen owns the retry; here the card simply stops
         // pretending to load so the rest of the account stays usable.
-        if (active) setProfileFailed(true);
+        if (active) setLoadFailed(true);
       });
     return () => {
       active = false;
     };
-  }, [gateway]);
+  }, [source]);
+
+  const profileFailed = source === null || loadFailed;
 
   const languageLabel = t(
     languageOptions.find((option) => option.value === preference)?.labelKey ??
