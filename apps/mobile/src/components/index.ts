@@ -24,6 +24,11 @@ export {
   type GroupInsightsCopy,
 } from "./group-insights-panel";
 export { StatCard } from "./stat-card";
+export {
+  SettingsGroup,
+  SettingsRow,
+  SettingsSectionLabel,
+} from "./settings-row";
 export { StateCard } from "./state-card";
 export { StateFeedback, type ViewState } from "./state-feedback";
 export { StatusBanner } from "./status-banner";

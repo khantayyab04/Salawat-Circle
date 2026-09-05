@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
-import { Alert } from "react-native";
 import { SettingsScreen } from "./index";
 
 const mockReplace = jest.fn();
@@ -56,6 +55,7 @@ jest.mock("@/localization", () => ({
         settingsPrivacy: "Datenschutz",
         settingsLegal: "Rechtliches",
         settingsSupport: "Support",
+        commonCancel: "Abbrechen",
         settingsSignOut: "Abmelden",
         settingsSignOutEverywhere: "Auf allen Geräten abmelden",
         settingsSignOutEverywhereConfirmTitle: "Auf allen Geräten abmelden?",
@@ -78,28 +78,48 @@ beforeEach(() => {
   mockSignOutEverywhere.mockResolvedValue(undefined);
 });
 
-describe("MVP03 settings", () => {
-  it("signs out and returns to the public welcome flow", async () => {
-    const view = await render(<SettingsScreen />);
+const profileGateway = {
+  loadProfile: async () => ({
+    displayName: "Amina",
+    timeZone: "Europe/Berlin",
+    locale: "de" as const,
+  }),
+};
 
-    fireEvent.press(view.getByRole("button", { name: "Abmelden" }));
+describe("MVP03 settings", () => {
+  it("confirms before signing out and returns to the public welcome flow", async () => {
+    const view = await render(<SettingsScreen gateway={profileGateway} />);
+
+    // Signing out is confirmed in a sheet rather than fired straight away.
+    await fireEvent.press(view.getByRole("button", { name: "Abmelden" }));
+    expect(mockSignOut).not.toHaveBeenCalled();
+
+    const [, confirm] = view.getAllByRole("button", { name: "Abmelden" });
+    await fireEvent.press(confirm);
 
     await waitFor(() => expect(mockSignOut).toHaveBeenCalledTimes(1));
     expect(mockReplace).toHaveBeenCalledWith("/welcome");
   });
 
-  it("confirms global sign-out before revoking every session", async () => {
-    const alert = jest.spyOn(Alert, "alert").mockImplementation((_title, _body, buttons) => {
-      buttons?.find((button) => button.style === "destructive")?.onPress?.();
-    });
-    const view = await render(<SettingsScreen />);
+  it("offers revoking every session from the same confirmation", async () => {
+    const view = await render(<SettingsScreen gateway={profileGateway} />);
 
-    fireEvent.press(
+    await fireEvent.press(view.getByRole("button", { name: "Abmelden" }));
+    await fireEvent.press(
       view.getByRole("button", { name: "Auf allen Geräten abmelden" }),
     );
 
     await waitFor(() => expect(mockSignOutEverywhere).toHaveBeenCalledTimes(1));
     expect(mockReplace).toHaveBeenCalledWith("/welcome");
-    alert.mockRestore();
+  });
+
+  it("can be dismissed without signing out", async () => {
+    const view = await render(<SettingsScreen gateway={profileGateway} />);
+
+    await fireEvent.press(view.getByRole("button", { name: "Abmelden" }));
+    await fireEvent.press(view.getAllByRole("button", { name: "Abbrechen" })[0]);
+
+    expect(mockSignOut).not.toHaveBeenCalled();
+    expect(mockSignOutEverywhere).not.toHaveBeenCalled();
   });
 });
