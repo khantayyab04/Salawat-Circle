@@ -1,4 +1,4 @@
-import { radius, spacing, typography, useAppTheme } from "@/theme";
+import { radius, shadows, spacing, typography, useAppTheme } from "@/theme";
 import {
   ActivityIndicator,
   Pressable,
@@ -8,6 +8,15 @@ import {
 } from "react-native";
 
 type Variant = "primary" | "secondary" | "ghost" | "destructive";
+
+/**
+ * The primary action style from the design: a tall, very round button with a
+ * bold label, a soft coloured shadow on the primary variant and a hairline
+ * outline on the secondary one.
+ *
+ * Labels shrink slightly rather than truncate, so a long translation still
+ * fits on a narrow phone.
+ */
 export function AppButton({
   label,
   onPress,
@@ -28,12 +37,32 @@ export function AppButton({
   const { colors } = useAppTheme();
   const palette =
     variant === "primary"
-      ? { background: colors.accent, foreground: colors.textInverse }
+      ? {
+          background: colors.primary,
+          foreground: colors.textOnPrimary,
+          border: "transparent",
+          shadow: shadows.raised,
+        }
       : variant === "destructive"
-        ? { background: colors.error, foreground: colors.textInverse }
+        ? {
+            background: colors.surface,
+            foreground: colors.error,
+            border: colors.error,
+            shadow: undefined,
+          }
         : variant === "secondary"
-          ? { background: colors.accentMuted, foreground: colors.accent }
-          : { background: "transparent", foreground: colors.accent };
+          ? {
+              background: colors.surface,
+              foreground: colors.textPrimary,
+              border: colors.border,
+              shadow: shadows.card,
+            }
+          : {
+              background: "transparent",
+              foreground: colors.primary,
+              border: "transparent",
+              shadow: undefined,
+            };
   const inactive = disabled || loading;
   return (
     <Pressable
@@ -44,16 +73,19 @@ export function AppButton({
       onPress={onPress}
       style={({ pressed }) => [
         {
-          minHeight: 48,
+          minHeight: 56,
           minWidth: 48,
-          borderRadius: radius.md,
+          borderRadius: radius.xl,
           borderCurve: "continuous",
+          borderColor: palette.border,
+          borderWidth: palette.border === "transparent" ? 0 : 1,
           alignItems: "center",
           justifyContent: "center",
-          paddingHorizontal: spacing.lg,
-          paddingVertical: spacing.md,
+          paddingHorizontal: spacing.xl,
+          paddingVertical: spacing.lg,
           backgroundColor: palette.background,
-          opacity: inactive ? 0.55 : pressed ? 0.75 : 1,
+          boxShadow: inactive ? undefined : palette.shadow,
+          opacity: inactive ? 0.55 : pressed ? 0.85 : 1,
         },
         style,
       ]}
@@ -61,7 +93,12 @@ export function AppButton({
       {loading ? (
         <ActivityIndicator color={palette.foreground} />
       ) : (
-        <Text style={[typography.bodyStrong, { color: palette.foreground }]}>
+        <Text
+          adjustsFontSizeToFit
+          maxFontSizeMultiplier={1.4}
+          numberOfLines={1}
+          style={[typography.button, { color: palette.foreground }]}
+        >
           {label}
         </Text>
       )}

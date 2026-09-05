@@ -295,10 +295,14 @@ describe("Task 14 group detail screen", () => {
     expect(mockLoadLeaderboard).toHaveBeenCalledTimes(1);
 
     expect(view.queryByText("Private Gruppe")).toBeNull();
+    // The circle name now sits in the header, and the member count and the
+    // calculation time are shown as labelled figures in the insights panel.
     expect(view.getByText("Alpha Circle")).toBeTruthy();
-    expect(view.getByText("5 aktive Mitglieder")).toBeTruthy();
+    expect(view.getByText("5")).toBeTruthy();
+    // The tile shows a short relative age; the exact timestamp stays available
+    // to assistive technology.
     expect(
-      view.getByText("Zuletzt berechnet: date:2026-08-31 time:20:05"),
+      view.getByLabelText(/date:2026-08-31 time:20:05/),
     ).toBeTruthy();
   });
 
@@ -383,8 +387,8 @@ describe("Task 14 group detail screen", () => {
   it("supports accessible week/all-time switching and resets each period", async () => {
     const view = await render(<GroupDetailRoute />);
 
-    const weekButton = view.getByRole("button", { name: "Woche" });
-    const allTimeButton = view.getByRole("button", { name: "Gesamt" });
+    const weekButton = view.getByRole("tab", { name: "Woche" });
+    const allTimeButton = view.getByRole("tab", { name: "Gesamt" });
 
     expect(weekButton.props.accessibilityState.selected).toBe(true);
     expect(allTimeButton.props.accessibilityState.selected).toBe(false);

@@ -47,4 +47,27 @@ describe.each([
       4.5,
     );
   });
+
+  it("keeps copy on the primary surface readable", () => {
+    expect(
+      contrast(colors.textOnPrimary, colors.primary),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("keeps copy on the gold surface readable", () => {
+    expect(contrast(colors.textOnGold, colors.gold)).toBeGreaterThanOrEqual(
+      4.5,
+    );
+  });
+
+  it("keeps gold labels readable on cards", () => {
+    expect(contrast(colors.goldText, colors.surface)).toBeGreaterThanOrEqual(
+      4.5,
+    );
+  });
+
+  it("separates the muted surfaces from the page background", () => {
+    expect(colors.surfaceMuted).not.toBe(colors.background);
+    expect(colors.surface).not.toBe(colors.surfaceMuted);
+  });
 });

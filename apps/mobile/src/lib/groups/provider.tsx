@@ -37,6 +37,7 @@ import type {
   UpdateGroupNameResponse,
 } from "./types";
 import type { GroupInsights } from "@/lib/group-insights";
+import type { GroupPeriod } from "./periods";
 
 type GroupsContextValue = ReturnType<GroupsStore["getSnapshot"]> & {
   revision: number;
@@ -52,7 +53,7 @@ type GroupsContextValue = ReturnType<GroupsStore["getSnapshot"]> & {
     period: LeaderboardPeriod,
     options?: LoadLeaderboardOptions,
   ): Promise<void>;
-  loadInsights(groupId: string): Promise<GroupInsights>;
+  loadInsights(groupId: string, period?: GroupPeriod): Promise<GroupInsights>;
   setAnonymity(
     groupId: string,
     anonymous: boolean,
@@ -60,7 +61,7 @@ type GroupsContextValue = ReturnType<GroupsStore["getSnapshot"]> & {
   ): Promise<SetLeaderboardAnonymityResponse>;
   setGroupGoal(
     groupId: string,
-    period: "week" | "month",
+    period: GroupPeriod,
     amount: number,
     expectedRevision?: number,
   ): Promise<SetGroupGoalResponse>;
@@ -251,7 +252,8 @@ export function GroupsProvider({
     [controller],
   );
   const loadInsights = useCallback(
-    (groupId: string) => controller.loadInsights(groupId),
+    (groupId: string, period?: GroupPeriod) =>
+      controller.loadInsights(groupId, period),
     [controller],
   );
   const setAnonymity = useCallback(

@@ -41,6 +41,7 @@ export type GroupsLeaderboardByGroup = Record<
   string,
   {
     week: GroupsLeaderboardPeriodState;
+    month: GroupsLeaderboardPeriodState;
     all_time: GroupsLeaderboardPeriodState;
   }
 >;
@@ -101,6 +102,8 @@ export type GroupsSnapshot = {
   members: GroupsMembersState;
   invitePreview: GroupsInvitePreviewState;
   insightsByGroup: Record<string, GroupInsights | null>;
+  /** Set when the last insights request failed; previous figures stay visible. */
+  insightsFailed: boolean;
   mutation: GroupsMutationState;
 };
 
@@ -162,6 +165,7 @@ export function createGroupsSnapshot(
       errorCode: null,
     },
     insightsByGroup: {},
+    insightsFailed: false,
     mutation: {
       pending: false,
       kind: null,
@@ -178,6 +182,7 @@ export function ensureLeaderboardState(
   if (!snapshot.leaderboard.byGroup[groupId]) {
     snapshot.leaderboard.byGroup[groupId] = {
       week: createEmptyLeaderboardState("week"),
+      month: createEmptyLeaderboardState("month"),
       all_time: createEmptyLeaderboardState("all_time"),
     };
   }

@@ -1,6 +1,11 @@
-import { radius, spacing, useAppTheme } from "@/theme";
-import { View } from "react-native";
-import { AppText } from "./app-text";
+import { radius, spacing, typography, useAppTheme } from "@/theme";
+import { Text, View } from "react-native";
+import { SectionLabel } from "./section-label";
+
+/**
+ * A short status message above the content, styled like the cards around it
+ * rather than as a system banner.
+ */
 export function StatusBanner({
   title,
   body,
@@ -11,12 +16,13 @@ export function StatusBanner({
   tone?: "offline" | "pending" | "error";
 }) {
   const { colors } = useAppTheme();
-  const color =
+  const accent =
     tone === "error"
       ? colors.error
       : tone === "pending"
-        ? colors.pending
-        : colors.offline;
+        ? colors.gold
+        : colors.textSecondary;
+
   return (
     <View
       accessible
@@ -24,17 +30,16 @@ export function StatusBanner({
       accessibilityRole="alert"
       style={{
         gap: spacing.xs,
-        borderColor: color,
+        backgroundColor: colors.surface,
+        borderColor: accent,
         borderWidth: 1,
-        borderRadius: radius.md,
+        borderRadius: radius.card,
         borderCurve: "continuous",
-        padding: spacing.md,
+        padding: spacing.xl,
       }}
     >
-      <AppText variant="bodyStrong" style={{ color }}>
-        {title}
-      </AppText>
-      <AppText variant="caption">{body}</AppText>
+      <Text style={[typography.bodyStrong, { color: accent }]}>{title}</Text>
+      <SectionLabel size="small">{body}</SectionLabel>
     </View>
   );
 }

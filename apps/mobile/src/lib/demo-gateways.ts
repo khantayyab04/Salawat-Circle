@@ -69,6 +69,70 @@ export function createDemoEntriesGateway(): EntriesGateway {
         })),
       };
     },
+    async getProgressSeries(_timezone: string, range = "week" as const) {
+      const byRange = {
+        week: {
+          labels: ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"],
+          totals: ["1500", "1333", "0", "0", "0", "800", "1100"],
+          future: 3,
+        },
+        month: {
+          labels: ["W1", "W2", "W3", "W4", "W5"],
+          totals: ["4200", "5100", "3800", "2733", "0"],
+          future: 1,
+        },
+        year: {
+          labels: [
+            "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+            "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+          ],
+          totals: [
+            "12000", "9800", "14200", "11100", "13400", "10200",
+            "12800", "15733", "4733", "0", "0", "0",
+          ],
+          future: 3,
+        },
+        all: {
+          labels: ["2024", "2025", "2026"],
+          totals: ["18000", "42000", "63482"],
+          future: 0,
+        },
+      } as const;
+
+      const selected = byRange[range];
+      const buckets = selected.labels.map((label, index) => ({
+        start: `${label}-${index}`,
+        label,
+        total: selected.totals[index],
+        goalReached:
+          index >= selected.labels.length - selected.future
+            ? null
+            : Number(selected.totals[index]) >= Number(summary.todayGoal),
+        future: index >= selected.labels.length - selected.future,
+      }));
+
+      const total = buckets
+        .reduce((sum, bucket) => sum + BigInt(bucket.total), 0n)
+        .toString();
+
+      return {
+        range,
+        periodStart: "2026-08-31",
+        periodEnd: "2026-09-06",
+        today: "2026-09-02",
+        total,
+        activeDays: String(
+          buckets.filter((bucket) => Number(bucket.total) > 0).length,
+        ),
+        goalDays: String(buckets.length - selected.future),
+        achievedGoalDays: String(
+          buckets.filter((bucket) => bucket.goalReached === true).length,
+        ),
+        currentStreak: 2,
+        longestStreak: 9,
+        buckets,
+      };
+    },
     async list() {
       return { items: entries, nextCursor: null, hasMore: false };
     },
@@ -165,17 +229,40 @@ export function createDemoGroupsGateway(): GroupsGateway {
         calculatedAt: now,
       };
     },
-    async getInsights(groupId: string) {
+    async getInsights(
+      groupId: string,
+      period: "week" | "month" | "all" = "week",
+    ) {
+      const byPeriod = {
+        week: { total: "24500", goal: "31000", days: 4 },
+        month: { total: "84000", goal: "120000", days: 12 },
+        all: { total: "340000", goal: "500000", days: 1 },
+      } as const;
+      const selected = byPeriod[period];
+      const remaining = String(
+        Math.max(0, Number(selected.goal) - Number(selected.total)),
+      );
+      const activeMembers = 6;
       return {
         groupId,
-        weekTotal: "24500",
-        activeMembers: "6",
-        weeklyAverage: "4083",
-        goalAmount: "31000",
-        remaining: "6500",
-        daysRemaining: 4,
-        perPersonRemaining: "1084",
-        perPersonPerDay: "271",
+        period,
+        periodTotal: selected.total,
+        weekTotal: byPeriod.week.total,
+        activeMembers: String(activeMembers),
+        totalMembers: "9",
+        weeklyAverage: String(
+          Math.floor(Number(selected.total) / activeMembers),
+        ),
+        goalAmount: selected.goal,
+        remaining,
+        daysRemaining: selected.days,
+        groupPerDay: String(Math.ceil(Number(remaining) / selected.days)),
+        perPersonRemaining: String(
+          Math.ceil(Number(remaining) / activeMembers),
+        ),
+        perPersonPerDay: String(
+          Math.ceil(Number(remaining) / (activeMembers * selected.days)),
+        ),
       };
     },
     createGroup: unsupported,
@@ -200,5 +287,21 @@ export function createDemoGroupsGateway(): GroupsGateway {
     leaveGroup: unsupported,
     transferGroupOwnership: unsupported,
     deleteGroup: unsupported,
+  };
+}
+
+/**
+ * Profile used by the local preview so the account screen can be reviewed
+ * without a backend session.
+ */
+export function createDemoSettingsGateway() {
+  return {
+    async loadProfile() {
+      return {
+        displayName: "Amina",
+        timeZone: timezone,
+        locale: "de" as const,
+      };
+    },
   };
 }

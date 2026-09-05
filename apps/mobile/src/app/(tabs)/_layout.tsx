@@ -1,35 +1,53 @@
+import { FloatingTabBar, type TabName } from "@/components/floating-tab-bar";
 import { useTranslation } from "@/localization";
 import { useAppTheme } from "@/theme";
-import { NativeTabs } from "expo-router/unstable-native-tabs";
+import { Tabs } from "expo-router";
+import { View } from "react-native";
+
 export default function TabsLayout() {
   const { t } = useTranslation();
   const { colors } = useAppTheme();
+
+  const tabs = [
+    { name: "today" as const, label: t("tabsToday") },
+    { name: "progress" as const, label: t("tabsProgress") },
+    { name: "groups" as const, label: t("tabsGroups") },
+    { name: "settings" as const, label: t("tabsSettings") },
+  ];
+
   return (
-    <NativeTabs backgroundColor={colors.surface} tintColor={colors.accent}>
-      <NativeTabs.Trigger
-        name="today"
-        accessibilityLabel={t("tabsToday")}
-        disableTransparentOnScrollEdge
-      >
-        <NativeTabs.Trigger.Icon sf="calendar" md="today" />
-        <NativeTabs.Trigger.Label>{t("tabsToday")}</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger
-        name="groups"
-        accessibilityLabel={t("tabsGroups")}
-        disableTransparentOnScrollEdge
-      >
-        <NativeTabs.Trigger.Icon sf="person.3.fill" md="groups" />
-        <NativeTabs.Trigger.Label>{t("tabsGroups")}</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger
-        name="settings"
-        accessibilityLabel={t("tabsSettings")}
-        disableTransparentOnScrollEdge
-      >
-        <NativeTabs.Trigger.Icon sf="gearshape.fill" md="settings" />
-        <NativeTabs.Trigger.Label>{t("tabsSettings")}</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-    </NativeTabs>
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        // The bar floats above the content, so the native one is replaced
+        // entirely rather than restyled.
+        sceneStyle: { backgroundColor: colors.background },
+      }}
+      tabBar={({ state, navigation }) => {
+        const activeName = state.routeNames[state.index] as TabName;
+        return (
+          <View
+            pointerEvents="box-none"
+            style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+          >
+            <FloatingTabBar
+              activeName={activeName}
+              onSelect={(name) => navigation.navigate(name)}
+              tabs={tabs}
+            />
+          </View>
+        );
+      }}
+    >
+      <Tabs.Screen name="today" />
+      <Tabs.Screen name="progress" />
+      <Tabs.Screen name="groups" />
+      <Tabs.Screen name="settings" />
+    </Tabs>
   );
 }

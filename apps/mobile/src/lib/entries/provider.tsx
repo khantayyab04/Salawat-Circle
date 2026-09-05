@@ -16,6 +16,7 @@ import {
   type EntriesGateway,
 } from "./entries-gateway";
 import { EntriesStore } from "./entries-store";
+import type { ProgressRange } from "@/lib/progress-series";
 
 type EntriesContextValue = EntriesStore["snapshot"] & {
   revision: number;
@@ -31,6 +32,7 @@ type EntriesContextValue = EntriesStore["snapshot"] & {
   keepServerVersion(entryId?: string): Promise<void>;
   reapplyConflict(entryId?: string): Promise<void>;
   loadProgressOverview(days?: number): Promise<void>;
+  loadProgressSeries(range: ProgressRange): Promise<void>;
 };
 
 const EntriesContext = createContext<EntriesContextValue | null>(null);
@@ -176,21 +178,37 @@ export function EntriesProvider({
     };
   }, [enabled, offline, store]);
 
+  // The actions are memoised on the store rather than recreated per render.
+  // A screen that loads data in an effect keyed on one of these would
+  // otherwise refetch endlessly: every store update re-renders the provider,
+  // a new function identity re-runs the effect, and that updates the store
+  // again.
+  const actions = useMemo(
+    () => ({
+      create: (amount: number) => store.create(amount),
+      update: (id: string, amount: number, entryDate: string) =>
+        store.update(id, amount, entryDate),
+      delete: (id: string) => store.delete(id),
+      setGoal: (amount: number) => store.setGoal(amount),
+      clearGoal: () => store.clearGoal(),
+      loadMore: () => store.loadMore(),
+      retrySync: () => store.retrySync(),
+      retryOfflineLoad: () => store.retryOfflineLoad(),
+      resetOfflineState: () => store.resetOfflineState(),
+      keepServerVersion: (entryId?: string) => store.keepServerVersion(entryId),
+      reapplyConflict: (entryId?: string) => store.reapplyConflict(entryId),
+      loadProgressOverview: (days?: number) =>
+        store.loadProgressOverview(days),
+      loadProgressSeries: (range: ProgressRange) =>
+        store.loadProgressSeries(range),
+    }),
+    [store],
+  );
+
   const value: EntriesContextValue = {
     ...store.snapshot,
     revision,
-    create: (amount) => store.create(amount),
-    update: (id, amount, entryDate) => store.update(id, amount, entryDate),
-    delete: (id) => store.delete(id),
-    setGoal: (amount) => store.setGoal(amount),
-    clearGoal: () => store.clearGoal(),
-    loadMore: () => store.loadMore(),
-    retrySync: () => store.retrySync(),
-    retryOfflineLoad: () => store.retryOfflineLoad(),
-    resetOfflineState: () => store.resetOfflineState(),
-    keepServerVersion: (entryId) => store.keepServerVersion(entryId),
-    reapplyConflict: (entryId) => store.reapplyConflict(entryId),
-    loadProgressOverview: (days) => store.loadProgressOverview(days),
+    ...actions,
   };
 
   return (

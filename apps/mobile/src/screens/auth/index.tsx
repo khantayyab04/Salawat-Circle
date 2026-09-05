@@ -4,6 +4,8 @@ import {
   AppScreen,
   AppText,
   FormField,
+  SectionLabel,
+  Surface,
 } from "@/components";
 import { useAuth } from "@/lib/auth";
 import {
@@ -13,22 +15,54 @@ import {
   parseTimeZone,
 } from "@/lib/auth/validation";
 import { useTranslation } from "@/localization";
+import { radius, spacing, typography, useAppTheme } from "@/theme";
 import { Host, Checkbox } from "@expo/ui";
 import { Redirect, useRouter } from "expo-router";
+import Heart from "lucide-react-native/icons/heart";
 import { useEffect, useMemo, useState } from "react";
+import { Text, View } from "react-native";
 
 export function WelcomeScreen() {
   const { t } = useTranslation();
+  const { colors } = useAppTheme();
   const router = useRouter();
+
   return (
     <AppScreen contentContainerStyle={{ justifyContent: "center" }}>
-      <AppText variant="bodyStrong" style={{ textTransform: "uppercase" }}>
-        {t("welcomeEyebrow")}
-      </AppText>
-      <AppText accessibilityRole="header" variant="title">
-        {t("welcomeTitle")}
-      </AppText>
-      <AppText>{t("welcomeBody")}</AppText>
+      <View style={{ alignItems: "center", gap: spacing.xl }}>
+        <View
+          style={{
+            width: 88,
+            height: 88,
+            borderRadius: radius.pill,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: colors.primary,
+          }}
+        >
+          <Heart color={colors.gold} fill={colors.gold} size={36} />
+        </View>
+        <Text
+          accessibilityRole="header"
+          style={[
+            typography.screenTitle,
+            { color: colors.textPrimary, textAlign: "center" },
+          ]}
+        >
+          {t("appName")}
+        </Text>
+      </View>
+
+      <Surface style={{ gap: spacing.lg, marginTop: spacing.section }}>
+        <SectionLabel tone="gold">{t("welcomeEyebrow")}</SectionLabel>
+        <Text style={[typography.title, { color: colors.textPrimary }]}>
+          {t("welcomeTitle")}
+        </Text>
+        <Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>
+          {t("welcomeBody")}
+        </Text>
+      </Surface>
+
       <AppButton
         label={t("welcomeAction")}
         onPress={() => router.push("/auth/email")}

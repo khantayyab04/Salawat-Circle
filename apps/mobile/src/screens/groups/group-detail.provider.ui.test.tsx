@@ -364,7 +364,7 @@ describe("Group detail with real GroupsProvider", () => {
     );
     await waitFor(() => expect(getLeaderboard).toHaveBeenCalledTimes(1));
 
-    fireEvent.press(view.getByRole("button", { name: "Gesamt" }));
+    fireEvent.press(view.getByRole("tab", { name: "Gesamt" }));
     await waitFor(() =>
       expect(getLeaderboard).toHaveBeenLastCalledWith(
         "group-1",
@@ -418,7 +418,7 @@ describe("Group detail with real GroupsProvider", () => {
     );
     await waitFor(() => expect(getLeaderboard).toHaveBeenCalledTimes(1));
 
-    fireEvent.press(view.getByRole("button", { name: "Gesamt" }));
+    fireEvent.press(view.getByRole("tab", { name: "Gesamt" }));
     await waitFor(() => expect(getLeaderboard).toHaveBeenCalledTimes(2));
 
     await act(async () => {

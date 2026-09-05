@@ -2,8 +2,7 @@ import { useTranslation, type TranslationKey } from "@/localization";
 import { spacing } from "@/theme";
 import type { PropsWithChildren } from "react";
 import { View } from "react-native";
-import { AppCard } from "./app-card";
-import { AppText } from "./app-text";
+import { StateCard } from "./state-card";
 import { StatusBanner } from "./status-banner";
 export type ViewState =
   | "loading"
@@ -68,18 +67,5 @@ export function StateFeedback({
         {children}
       </View>
     );
-  return (
-    <AppCard
-      accessible
-      accessibilityRole="alert"
-      style={{
-        alignItems: "flex-start",
-        justifyContent: "center",
-        minHeight: 160,
-      }}
-    >
-      <AppText variant="title">{t(title)}</AppText>
-      <AppText>{t(body)}</AppText>
-    </AppCard>
-  );
+  return <StateCard body={t(body)} title={t(title)} />;
 }

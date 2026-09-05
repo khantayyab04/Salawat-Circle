@@ -35,6 +35,7 @@ import type {
   SetGroupGoalResponse,
 } from "./types";
 import { parseGroupInsights, type GroupInsights } from "@/lib/group-insights";
+import type { GroupPeriod } from "./periods";
 
 export type GroupsGateway = {
   listMyGroups(): Promise<ListMyGroupsResponse>;
@@ -51,7 +52,7 @@ export type GroupsGateway = {
     cursor: GroupLeaderboardCursor | null,
     limit: number,
   ): Promise<GroupLeaderboardResponse>;
-  getInsights?(groupId: string): Promise<GroupInsights>;
+  getInsights?(groupId: string, period?: GroupPeriod): Promise<GroupInsights>;
   setLeaderboardAnonymity(
     groupId: string,
     anonymous: boolean,
@@ -658,9 +659,10 @@ export function createSupabaseGroupsGateway(
       return parseGroupLeaderboardResponse(data);
     },
 
-    async getInsights(groupId) {
+    async getInsights(groupId, period = "week") {
       const data = await callRpc(client, "get_group_insights", {
         p_group_id: groupId,
+        p_period: period,
       });
       return parseGroupInsights(data);
     },

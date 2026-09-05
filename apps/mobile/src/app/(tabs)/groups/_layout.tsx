@@ -6,7 +6,7 @@ export default function GroupsLayout() {
     <Stack screenOptions={{ headerBackButtonDisplayMode: "minimal" }}>
       <Stack.Screen
         name="index"
-        options={{ title: t("tabsGroups"), headerLargeTitle: true }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen name="create" options={{ title: t("groupCreateTitle") }} />
       <Stack.Screen name="[id]/index" options={{ title: t("groupTitle") }} />
