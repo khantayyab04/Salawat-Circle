@@ -49,10 +49,12 @@ export function ProgressRing({
     >
       <Svg
         height={size}
-        style={{ position: "absolute" }}
-        width={size}
-        // Start the arc at the top rather than at three o'clock.
+        // Rotating the canvas starts the arc at the top rather than at three
+        // o'clock. Doing it here rather than per-circle keeps the markup valid
+        // on web, where per-element `origin` is not a DOM property.
+        style={{ position: "absolute", transform: [{ rotate: "-90deg" }] }}
         viewBox={`0 0 ${size} ${size}`}
+        width={size}
       >
         <Circle
           cx={size / 2}
@@ -66,9 +68,7 @@ export function ProgressRing({
           cx={size / 2}
           cy={size / 2}
           fill="none"
-          origin={`${size / 2}, ${size / 2}`}
           r={radius}
-          rotation={-90}
           stroke={colors.gold}
           strokeDasharray={circumference}
           strokeDashoffset={circumference * (1 - ratio)}

@@ -137,14 +137,11 @@ describe("MVP08 groups list rows", () => {
     const view = await render(<GroupsScreen />);
 
     expect(view.getByText("Alpha Circle")).toBeTruthy();
-    expect(view.getByText("Diese Woche: Rang 2 · 1234")).toBeTruthy();
+    expect(view.getByText("1234")).toBeTruthy();
+    expect(view.getByText("#2")).toBeTruthy();
     expect(view.getByText("5 aktive Mitglieder")).toBeTruthy();
-    expect(
-      view.getByText("Berechnet: date:2026-08-31 time:20:05"),
-    ).toBeTruthy();
-    expect(
-      view.getByText("Aktualisiert: date:2026-08-31 time:20:00"),
-    ).toBeTruthy();
+    // Whether the ranking is anonymous is privacy relevant and stays in the
+    // list; the calculation timestamps moved into the detail view.
     expect(view.getByText("Anonyme Rangliste aktiv")).toBeTruthy();
 
     const groupButton = view.getByRole("button", { name: /Alpha Circle/ });
@@ -153,9 +150,6 @@ describe("MVP08 groups list rows", () => {
     expect(groupButton.props.accessibilityLabel).toContain("5 aktive Mitglieder");
     expect(groupButton.props.accessibilityHint).toContain("Berechnet");
     expect(groupButton.props.accessibilityHint).toContain("Aktualisiert");
-    expect(groupButton.props.accessibilityHint).toContain(
-      "Anonyme Rangliste aktiv",
-    );
 
     await act(async () => {
       fireEvent.press(groupButton);
