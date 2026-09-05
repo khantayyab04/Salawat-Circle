@@ -1,10 +1,3 @@
-import {
-  AppButton,
-  AppCard,
-  AppScreen,
-  AppText,
-  FormField,
-} from "@/components";
 import { useAuth } from "@/lib/auth";
 import {
   parseDisplayName,
@@ -16,24 +9,228 @@ import { useTranslation } from "@/localization";
 import { Host, Checkbox } from "@expo/ui";
 import { Redirect, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
+import {
+  AppButton,
+  AppCard,
+  AppScreen,
+  AppText,
+  Button,
+  FormField,
+  Screen,
+  Text,
+  TextField,
+} from "@/ui";
+import { space } from "@/design-system";
+import { View } from "react-native";
 
 export function WelcomeScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   return (
-    <AppScreen contentContainerStyle={{ justifyContent: "center" }}>
-      <AppText variant="bodyStrong" style={{ textTransform: "uppercase" }}>
+    <Screen contentContainerStyle={{ justifyContent: "center" }}>
+      <Text variant="label" style={{ textTransform: "uppercase" }}>
         {t("welcomeEyebrow")}
-      </AppText>
-      <AppText accessibilityRole="header" variant="title">
+      </Text>
+      <Text accessibilityRole="header" variant="largeTitle">
         {t("welcomeTitle")}
-      </AppText>
-      <AppText>{t("welcomeBody")}</AppText>
-      <AppButton
+      </Text>
+      <Text>{t("welcomeBody")}</Text>
+      <Button
         label={t("welcomeAction")}
-        onPress={() => router.push("/auth/email")}
+        onPress={() => router.push("/auth")}
       />
-    </AppScreen>
+    </Screen>
+  );
+}
+
+export function AuthFlowScreen() {
+  const { t } = useTranslation();
+  const auth = useAuth();
+  const router = useRouter();
+  const [email, setEmail] = useState(auth.pendingEmail ?? "");
+  const [code, setCode] = useState("");
+  const [step, setStep] = useState<"email" | "code">(
+    auth.pendingEmail ? "code" : "email",
+  );
+  const validEmail = useMemo(() => {
+    try {
+      parseEmail(email);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [email]);
+  const validCode = (() => {
+    try {
+      parseOtp(code);
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+  const submitEmail = async () => {
+    try {
+      await auth.requestOtp(email);
+      setStep("code");
+    } catch {
+      // The provider exposes a neutral error.
+    }
+  };
+  const submitCode = async () => {
+    try {
+      const next = await auth.verifyOtp(code);
+      if (next === "ready") {
+        const inviteToken = await auth.peekPendingInvite().catch(() => null);
+        router.replace(
+          inviteToken ? { pathname: "/join/[token]", params: { token: inviteToken } } : "/",
+        );
+      } else {
+        router.replace("/");
+      }
+    } catch {
+      // The provider exposes a neutral error.
+    }
+  };
+  return (
+    <Screen contentContainerStyle={{ justifyContent: "center" }}>
+      <Text accessibilityRole="header" variant="largeTitle">
+        {step === "email" ? t("authEmailTitle") : t("authCodeTitle")}
+      </Text>
+      {step === "email" ? (
+        <>
+          <Text variant="secondary">{t("authEmailHint")}</Text>
+          <TextField
+            autoCapitalize="none"
+            autoComplete="email"
+            keyboardType="email-address"
+            label={t("authEmailLabel")}
+            onChangeText={(value) => {
+              auth.clearError();
+              setEmail(value);
+            }}
+            textContentType="emailAddress"
+            value={email}
+          />
+          {auth.errorCode ? <Text accessibilityLiveRegion="polite">{t("authRequestFailed")}</Text> : null}
+          <Button
+            disabled={!validEmail}
+            label={t("authEmailAction")}
+            loading={auth.busy}
+            onPress={() => void submitEmail()}
+          />
+        </>
+      ) : (
+        <>
+          <Text variant="secondary">{t("authCodeSent")}</Text>
+          <TextField
+            autoComplete="one-time-code"
+            keyboardType="number-pad"
+            label={t("authCodeLabel")}
+            maxLength={6}
+            onChangeText={(value) => {
+              auth.clearError();
+              setCode(value.replace(/\D/gu, ""));
+            }}
+            textContentType="oneTimeCode"
+            value={code}
+          />
+          {auth.errorCode ? <Text accessibilityLiveRegion="polite">{t("authCodeInvalid")}</Text> : null}
+          <Button
+            disabled={!validCode}
+            label={t("authCodeAction")}
+            loading={auth.busy}
+            onPress={() => void submitCode()}
+          />
+          <Button
+            label={t("authCodeResend")}
+            onPress={() => void submitEmail()}
+            variant="tertiary"
+          />
+          <Button
+            label={t("authEmailTitle")}
+            onPress={() => setStep("email")}
+            variant="tertiary"
+          />
+        </>
+      )}
+    </Screen>
+  );
+}
+
+export function OnboardingScreen() {
+  const { t, locale } = useTranslation();
+  const auth = useAuth();
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [accepted, setAccepted] = useState(false);
+  const timeZone = useMemo(() => {
+    try {
+      return parseTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    } catch {
+      return "UTC";
+    }
+  }, []);
+  const nameValid = (() => {
+    try {
+      parseDisplayName(name);
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+  const save = async () => {
+    try {
+      if (auth.status === "profile_required") {
+        await auth.saveProfile(name, timeZone, locale);
+      }
+      await auth.grantConsent(locale);
+      const inviteToken = await auth.peekPendingInvite().catch(() => null);
+      router.replace(
+        inviteToken ? { pathname: "/join/[token]", params: { token: inviteToken } } : "/today",
+      );
+    } catch {
+      // The provider exposes stable error copy.
+    }
+  };
+  return (
+    <Screen>
+      <Text accessibilityRole="header" variant="largeTitle">
+        {t("profileTitle")}
+      </Text>
+      {auth.status === "profile_required" ? (
+        <>
+          <TextField
+            error={name.length > 0 && !nameValid ? t("profileNameInvalid") : undefined}
+            label={t("profileNameLabel")}
+            onChangeText={setName}
+            value={name}
+          />
+          <View style={{ gap: space.xs }}>
+            <Text variant="label">{t("profileTimezoneLabel")}</Text>
+            <Text>{timeZone}</Text>
+            <Text variant="secondary">{t("profileTimezoneHint")}</Text>
+          </View>
+        </>
+      ) : null}
+      <View style={{ gap: space.sm }}>
+        <Text>{t("consentBody")}</Text>
+        <Host matchContents>
+          <Checkbox
+            label={t("consentLabel")}
+            onValueChange={setAccepted}
+            value={accepted}
+          />
+        </Host>
+        <Text variant="secondary">{t("consentHint")}</Text>
+      </View>
+      {auth.errorCode ? <Text accessibilityLiveRegion="polite">{t("consentSaveFailed")}</Text> : null}
+      <Button
+        disabled={(auth.status === "profile_required" && !nameValid) || !accepted}
+        label={t("commonContinue")}
+        loading={auth.busy}
+        onPress={() => void save()}
+      />
+    </Screen>
   );
 }
 
@@ -53,7 +250,7 @@ export function EmailScreen() {
   const handleSubmit = async () => {
     try {
       await auth.requestOtp(email);
-      router.push("/auth/code");
+      router.push("/auth");
     } catch {
       // The provider exposes only stable, non-enumerating error codes.
     }
@@ -110,7 +307,7 @@ export function CodeScreen() {
     );
     return () => clearInterval(timer);
   }, [auth.nextOtpRequestAt]);
-  if (!auth.pendingEmail) return <Redirect href="/auth/email" />;
+  if (!auth.pendingEmail) return <Redirect href="/auth" />;
   const codeValid = (() => {
     try {
       parseOtp(code);
@@ -208,7 +405,7 @@ export function ProfileOnboardingScreen() {
   const handleSave = async () => {
     try {
       await auth.saveProfile(name, timeZone, locale);
-      router.replace("/onboarding/consent");
+      router.replace("/onboarding");
     } catch {
       // A localized stable error is rendered from provider state.
     }

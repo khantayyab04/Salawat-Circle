@@ -20,14 +20,21 @@
         "expo-localization",
         {
           "supportedLocales": {
-            "ios": ["de", "en"],
-            "android": ["de", "en"]
+            "ios": [
+              "de",
+              "en"
+            ],
+            "android": [
+              "de",
+              "en"
+            ]
           }
         }
       ],
       "expo-sqlite",
       "expo-secure-store",
-      "expo-notifications"
+      "expo-notifications",
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -1,4 +1,4 @@
-import { AppButton, AppScreen, StateFeedback } from "@/components";
+import { AppButton, AppScreen, StateFeedback } from "@/ui";
 import { useAuth } from "@/lib/auth";
 import { useTranslation } from "@/localization";
 import { Redirect } from "expo-router";
@@ -16,6 +16,13 @@ type PendingInviteLookup =
       revision: number;
       status: "error";
     };
+
+function isLocalPreview() {
+    return (
+    process.env.NODE_ENV !== "production" &&
+    process.env.EXPO_PUBLIC_LOCAL_DEMO === "true"
+    );
+}
 
 export default function IndexRoute() {
   const { t } = useTranslation();
@@ -62,6 +69,7 @@ export default function IndexRoute() {
       ? inviteLookup
       : null;
 
+  if (isLocalPreview()) return <Redirect href="/today" />;
   if (status === "loading") {
     return (
       <AppScreen contentContainerStyle={{ justifyContent: "center" }}>
@@ -71,10 +79,10 @@ export default function IndexRoute() {
   }
   if (status === "signed_out") return <Redirect href="/welcome" />;
   if (status === "profile_required") {
-    return <Redirect href="/onboarding/profile" />;
+    return <Redirect href="/onboarding" />;
   }
   if (status === "consent_required") {
-    return <Redirect href="/onboarding/consent" />;
+    return <Redirect href="/onboarding" />;
   }
   if (currentInviteLookup?.status === "error") {
     return (

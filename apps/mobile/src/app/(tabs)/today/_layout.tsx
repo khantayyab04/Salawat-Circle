@@ -1,4 +1,5 @@
 import { useTranslation } from "@/localization";
+import { AccountButton } from "@/ui";
 import { Stack } from "expo-router/stack";
 export default function TodayLayout() {
   const { t } = useTranslation();
@@ -6,7 +7,11 @@ export default function TodayLayout() {
     <Stack>
       <Stack.Screen
         name="index"
-        options={{ title: t("tabsToday"), headerLargeTitle: true }}
+        options={{
+          title: t("tabsToday"),
+          headerLargeTitle: true,
+          headerRight: () => <AccountButton label={t("accountTitle")} />,
+        }}
       />
     </Stack>
   );

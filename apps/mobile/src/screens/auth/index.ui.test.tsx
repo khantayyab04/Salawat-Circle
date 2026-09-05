@@ -126,7 +126,7 @@ describe("MVP03 auth screens", () => {
     await waitFor(() =>
       expect(mockRequestOtp).toHaveBeenCalledWith("person@example.com"),
     );
-    expect(mockPush).toHaveBeenCalledWith("/auth/code");
+    expect(mockPush).toHaveBeenCalledWith("/auth");
   });
 
   it("requires an explicit unchecked consent before continuing", async () => {

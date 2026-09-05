@@ -14,7 +14,7 @@ jest.mock("@/lib/auth", () => ({
     rememberInvite: mockRememberInvite,
   }),
 }));
-jest.mock("@/components", () => {
+jest.mock("@/ui", () => {
   const { Pressable, Text, View } = jest.requireActual<typeof import("react-native")>(
     "react-native",
   );

@@ -1,4 +1,4 @@
-import { AppButton, AppScreen, StateFeedback } from "@/components";
+import { AppButton, AppScreen, StateFeedback } from "@/ui";
 import { useAuth } from "@/lib/auth";
 import { normalizeTokenInvite } from "@/lib/groups";
 import { useTranslation } from "@/localization";

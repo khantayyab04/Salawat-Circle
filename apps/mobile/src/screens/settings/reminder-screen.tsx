@@ -1,14 +1,10 @@
-import {
-  AppCard,
-  AppScreen,
-  AppText,
-} from "@/components";
 import { useReminder } from "@/lib/reminder";
 import { fromPickerDate, toPickerDate } from "@/lib/reminder/reminder-time";
 import { useTranslation } from "@/localization";
+import { Banner, Button, Card, Screen, Text } from "@/ui";
 import { Host, Switch } from "@expo/ui";
 import { DateTimePicker } from "@expo/ui/community/datetime-picker";
-import { Linking, Pressable, View } from "react-native";
+import { Linking } from "react-native";
 
 export function ReminderSettingsScreen() {
   const { t } = useTranslation();
@@ -22,10 +18,10 @@ export function ReminderSettingsScreen() {
           ? t("reminderPermissionBlocked")
           : t("reminderPermissionNotAsked");
   return (
-    <AppScreen>
-      <AppCard>
-        <AppText variant="bodyStrong">{t("reminderTitle")}</AppText>
-        <AppText>{t("reminderPurpose")}</AppText>
+    <Screen>
+      <Card>
+        <Text variant="headline">{t("reminderTitle")}</Text>
+        <Text>{t("reminderPurpose")}</Text>
         <Host matchContents>
           <Switch
             label={t("reminderEnabledLabel")}
@@ -36,30 +32,62 @@ export function ReminderSettingsScreen() {
             }}
           />
         </Host>
-      </AppCard>
-      <AppCard>
-        <AppText variant="bodyStrong">{t("reminderTimeLabel")}</AppText>
-        <DateTimePicker
-          mode="time"
-          presentation="inline"
-          value={toPickerDate(reminder.time)}
-          onValueChange={(_event, value) => {
-            void reminder.setTime(fromPickerDate(value));
-          }}
-        />
-      </AppCard>
-      <AppText accessibilityLiveRegion="polite">{permissionCopy}</AppText>
+      </Card>
+      <Card>
+        <Text variant="headline">{t("reminderTimeLabel")}</Text>
+        <Host matchContents>
+          <DateTimePicker
+            mode="time"
+            presentation="inline"
+            value={toPickerDate(reminder.time)}
+            onValueChange={(_event, value) => {
+              void reminder.setTime(fromPickerDate(value));
+            }}
+          />
+        </Host>
+      </Card>
+      <Card>
+        <Text variant="headline">{t("reminderJumuahTitle")}</Text>
+        <Text>{t("reminderJumuahPurpose")}</Text>
+        <Host matchContents>
+          <Switch
+            label={t("reminderJumuahEnabledLabel")}
+            value={reminder.jumuah.enabled}
+            disabled={reminder.busy}
+            onValueChange={(enabled) => {
+              void (
+                enabled ? reminder.enableJumuah() : reminder.disableJumuah()
+              );
+            }}
+          />
+        </Host>
+      </Card>
+      <Card>
+        <Text variant="headline">{t("reminderJumuahTimeLabel")}</Text>
+        <Host matchContents>
+          <DateTimePicker
+            mode="time"
+            presentation="inline"
+            value={toPickerDate(reminder.jumuah.time)}
+            onValueChange={(_event, value) => {
+              void reminder.setJumuahTime(fromPickerDate(value));
+            }}
+          />
+        </Host>
+      </Card>
+      <Banner
+        body={permissionCopy}
+        title={t("reminderPermissionTitle")}
+        tone={reminder.permission === "blocked" ? "error" : "info"}
+      />
       {reminder.permission === "blocked" ? (
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          label={t("reminderOpenSettings")}
           onPress={() => void Linking.openSettings()}
-        >
-          <AppText variant="bodyStrong">{t("reminderOpenSettings")}</AppText>
-        </Pressable>
+          variant="secondary"
+        />
       ) : null}
-      <View>
-        <AppText variant="caption">{t("reminderDeviceOnly")}</AppText>
-      </View>
-    </AppScreen>
+      <Text variant="caption">{t("reminderDeviceOnly")}</Text>
+    </Screen>
   );
 }

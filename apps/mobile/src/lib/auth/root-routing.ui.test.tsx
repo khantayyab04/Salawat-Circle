@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
 import IndexRoute from "@/app/index";
 
@@ -12,7 +12,7 @@ jest.mock("@/lib/auth", () => ({
     peekPendingInvite: mockPeekPendingInvite,
   }),
 }));
-jest.mock("@/components", () => {
+jest.mock("@/ui", () => {
   const { Pressable, Text, View } = jest.requireActual<typeof import("react-native")>(
     "react-native",
   );
@@ -59,15 +59,28 @@ beforeEach(() => {
   mockPeekPendingInvite.mockResolvedValue(null);
 });
 
+afterEach(() => {
+  delete process.env.EXPO_PUBLIC_LOCAL_DEMO;
+});
+
 describe("MVP03 root auth routing", () => {
   it.each([
     ["signed_out", "/welcome"],
-    ["profile_required", "/onboarding/profile"],
-    ["consent_required", "/onboarding/consent"],
+    ["profile_required", "/onboarding"],
+    ["consent_required", "/onboarding"],
   ])("routes %s to %s", async (nextStatus, expectedRoute) => {
     mockStatus = nextStatus;
     const view = await render(<IndexRoute />);
     expect(view.getByText(expectedRoute)).toBeTruthy();
+  });
+
+  it("opens the private UI preview without authentication in local development", async () => {
+    process.env.EXPO_PUBLIC_LOCAL_DEMO = "true";
+    mockStatus = "signed_out";
+
+    const view = await render(<IndexRoute />);
+
+    expect(view.getByText("/today")).toBeTruthy();
   });
 
   it("routes a restored ready session without a pending invite to today", async () => {

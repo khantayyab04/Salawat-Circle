@@ -1,11 +1,4 @@
 import {
-  AppButton,
-  AppCard,
-  AppScreen,
-  AppText,
-  StatusBanner,
-} from "@/components";
-import {
   buildInviteLink,
   toGroupsError,
   type GroupInvite,
@@ -20,6 +13,7 @@ import {
   useTranslation,
 } from "@/localization";
 import { spacing } from "@/theme";
+import { AppCard, AppText, Button, Screen, StatusBanner } from "@/ui";
 import * as Clipboard from "expo-clipboard";
 import { Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -198,7 +192,7 @@ function StateCard({
         <AppText>{body}</AppText>
       </AppCard>
       {actionLabel && onAction ? (
-        <AppButton
+        <Button
           label={actionLabel}
           variant="secondary"
           style={retryButtonStyle}
@@ -394,9 +388,9 @@ export function GroupInvitesScreen() {
   const notOwner = group !== null && !isOwner;
 
   return (
-    <AppScreen>
+    <Screen>
       <Stack.Screen options={{ title: group?.name ?? t("groupInvitesTitle") }} />
-      <AppButton
+      <Button
         label={t("groupInvitesCreateAction")}
         disabled={!groupId || !isOwner}
         loading={createPending}
@@ -411,7 +405,7 @@ export function GroupInvitesScreen() {
             body={actionErrorCopy.body}
             tone={actionErrorCopy.tone}
           />
-          <AppButton
+          <Button
             label={t("groupInvitesRefresh")}
             variant="secondary"
             style={retryButtonStyle}
@@ -432,21 +426,21 @@ export function GroupInvitesScreen() {
             {visibleSecretCard.code}
           </AppText>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
-            <AppButton
+            <Button
               label={t("groupInvitesShareAction")}
               variant="secondary"
               onPress={() => {
                 void handleShare();
               }}
             />
-            <AppButton
+            <Button
               label={t("groupInvitesCopyLinkAction")}
               variant="secondary"
               onPress={() => {
                 void handleCopyLink();
               }}
             />
-            <AppButton
+            <Button
               label={t("groupInvitesCopyCodeAction")}
               variant="secondary"
               onPress={() => {
@@ -455,12 +449,12 @@ export function GroupInvitesScreen() {
             />
           </View>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
-            <AppButton
+            <Button
               label={t("groupInvitesDismissSecretAction")}
-              variant="ghost"
+              variant="tertiary"
               onPress={() => setSecretCard(null)}
             />
-            <AppButton
+            <Button
               label={t("groupInvitesRevokeAction")}
               loading={pendingRevokeInviteId === visibleSecretCard.inviteId}
               variant="destructive"
@@ -478,7 +472,7 @@ export function GroupInvitesScreen() {
             tone={errorCopy.tone}
           />
           <AppText variant="caption">{errorCopy.body}</AppText>
-          <AppButton
+          <Button
             label={t("groupInvitesRefresh")}
             variant="secondary"
             style={retryButtonStyle}
@@ -522,7 +516,7 @@ export function GroupInvitesScreen() {
             <AppText variant="caption" style={tabularNumberStyle}>{`${t(
               "groupInvitesExpiryLabel",
             )}: ${formatInviteTimestamp(invite.expiresAt, localeTag, timeZone)}`}</AppText>
-            <AppButton
+            <Button
               label={t("groupInvitesRevokeAction")}
               variant="destructive"
               loading={pendingRevokeInviteId === invite.id}
@@ -532,6 +526,6 @@ export function GroupInvitesScreen() {
           </AppCard>
         ))
       )}
-    </AppScreen>
+    </Screen>
   );
 }

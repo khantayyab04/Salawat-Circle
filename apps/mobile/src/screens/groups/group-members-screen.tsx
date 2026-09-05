@@ -1,10 +1,4 @@
 import {
-  AppButton,
-  AppCard,
-  AppText,
-  StatusBanner,
-} from "@/components";
-import {
   toGroupsError,
   type GroupMember,
   type GroupsErrorCode,
@@ -16,6 +10,7 @@ import {
   useTranslation,
 } from "@/localization";
 import { spacing, useAppTheme } from "@/theme";
+import { Banner, Button, Text } from "@/ui";
 import {
   Stack,
   useFocusEffect,
@@ -73,28 +68,35 @@ function MemberRow({
     : formatAppDate(joinedAt, localeTag, "UTC");
 
   return (
-    <AppCard style={{ gap: spacing.sm }}>
+    <View
+      style={{
+        gap: spacing.sm,
+        paddingVertical: spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.borderSubtle,
+      }}
+    >
       <View style={{ flexDirection: "row", justifyContent: "space-between", gap: spacing.sm }}>
         <View style={{ flex: 1, gap: spacing.xs }}>
-          <AppText variant="bodyStrong">{member.displayName}</AppText>
-          <AppText variant="caption">
+          <Text variant="headline">{member.displayName}</Text>
+          <Text variant="caption">
             {member.role === "owner" ? t("groupMembersOwner") : t("groupMembersMember")}
             {member.isSelf ? ` · ${t("groupDetailSelfLabel")}` : ""}
-          </AppText>
+          </Text>
         </View>
-        <AppText selectable variant="caption" style={{ color: colors.textSecondary }}>
+        <Text selectable variant="caption" style={{ color: colors.textSecondary }}>
           {t("groupMembersJoined", { date: joined })}
-        </AppText>
+        </Text>
       </View>
       {canManage && !member.isSelf ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
-          <AppButton
+          <Button
             label={t("groupMembersTransferAction")}
             variant="secondary"
             disabled={disabled}
             onPress={onTransfer}
           />
-          <AppButton
+          <Button
             label={t("groupMembersRemoveAction")}
             variant="secondary"
             disabled={disabled}
@@ -102,7 +104,7 @@ function MemberRow({
           />
         </View>
       ) : null}
-    </AppCard>
+    </View>
   );
 }
 
@@ -241,31 +243,31 @@ export function GroupMembersScreen() {
         ListHeaderComponent={
           <View style={{ gap: spacing.md }}>
             {group?.leaderboardAnonymous ? (
-              <StatusBanner
+              <Banner
                 title={t("groupMembersAnonymousTitle")}
                 body={t("groupMembersAnonymousBody")}
-                tone="pending"
+                tone="info"
               />
             ) : null}
-            {copy ? <StatusBanner title={copy.title} body={copy.body} tone="error" /> : null}
+            {copy ? <Banner title={copy.title} body={copy.body} tone="error" /> : null}
           </View>
         }
         ListEmptyComponent={
           isLoading ? (
-            <AppCard accessibilityRole="alert">
-              <AppText variant="title">{t("groupMembersLoadingTitle")}</AppText>
-              <AppText>{t("groupMembersLoadingBody")}</AppText>
-            </AppCard>
+            <View accessibilityRole="alert" style={{ gap: spacing.sm }}>
+              <Text variant="title">{t("groupMembersLoadingTitle")}</Text>
+              <Text>{t("groupMembersLoadingBody")}</Text>
+            </View>
           ) : (
-            <AppCard accessibilityRole="alert">
-              <AppText variant="title">{t("groupMembersEmptyTitle")}</AppText>
-              <AppText>{t("groupMembersEmptyBody")}</AppText>
-            </AppCard>
+            <View accessibilityRole="alert" style={{ gap: spacing.sm }}>
+              <Text variant="title">{t("groupMembersEmptyTitle")}</Text>
+              <Text>{t("groupMembersEmptyBody")}</Text>
+            </View>
           )
         }
         ListFooterComponent={
           members.hasMore ? (
-            <AppButton
+            <Button
               label={t("groupMembersLoadMore")}
               variant="secondary"
               loading={members.status === "loading"}

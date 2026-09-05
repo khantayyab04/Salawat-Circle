@@ -36,6 +36,44 @@ export type Database = {
         }
         Relationships: []
       }
+      group_goal_versions: {
+        Row: {
+          amount: number | null
+          created_at: string
+          created_by: string
+          effective_from: string
+          group_id: string
+          id: string
+          period: string
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string
+          created_by: string
+          effective_from: string
+          group_id: string
+          id?: string
+          period: string
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string
+          created_by?: string
+          effective_from?: string
+          group_id?: string
+          id?: string
+          period?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_goal_versions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       group_memberships: {
         Row: {
           alias_key: string | null
@@ -272,6 +310,7 @@ export type Database = {
         Returns: Json
       }
       get_entry: { Args: { p_id: string }; Returns: Json }
+      get_group_insights: { Args: { p_group_id: string }; Returns: Json }
       get_group_leaderboard: {
         Args: {
           p_cursor_membership_id?: string
@@ -285,6 +324,10 @@ export type Database = {
       }
       get_home_summary: { Args: { p_timezone: string }; Returns: Json }
       get_onboarding_state: { Args: never; Returns: Json }
+      get_progress_overview: {
+        Args: { p_days?: number; p_timezone: string }
+        Returns: Json
+      }
       grant_core_consent: { Args: { p_locale: string }; Returns: Json }
       leave_group: { Args: { p_group_id: string }; Returns: Json }
       list_entries: {
@@ -325,6 +368,15 @@ export type Database = {
       }
       set_daily_goal: {
         Args: { p_amount: number; p_effective_from: string }
+        Returns: Json
+      }
+      set_group_goal: {
+        Args: {
+          p_amount: number
+          p_expected_revision: number
+          p_group_id: string
+          p_period: string
+        }
         Returns: Json
       }
       set_group_leaderboard_anonymity: {

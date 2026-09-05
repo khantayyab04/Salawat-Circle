@@ -1,23 +1,12 @@
-import {
-  AppButton,
-  AppCard,
-  AppScreen,
-  AppText,
-  FormField,
-} from "@/components";
 import { useEntries } from "@/lib/entries";
 import { useGroups } from "@/lib/groups";
 import { useTranslation, type TranslationKey } from "@/localization";
-import { spacing } from "@/theme";
+import { space } from "@/design-system";
+import { Button, Screen, Section, Text, TextField } from "@/ui";
 import { Host, Switch } from "@expo/ui";
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
-import { type ViewStyle } from "react-native";
-
-const legalActionButtonStyle: ViewStyle = {
-  alignSelf: "flex-start",
-  paddingHorizontal: 0,
-};
+import { View } from "react-native";
 
 function normalizeGroupName(value: string) {
   return value.normalize("NFC").trim().replace(/\s+/gu, " ");
@@ -165,84 +154,88 @@ export function GroupCreateScreen() {
   };
 
   return (
-    <AppScreen>
-      <FormField
-        testID="group-create-name-input"
-        accessibilityLabel={t("groupNameLabel")}
-        label={t("groupNameLabel")}
-        hint={t("groupNameHint")}
-        error={name.length > 0 && !validName ? t("groupNameInvalid") : undefined}
-        value={name}
-        onChangeText={(value) => {
-          setSubmitErrorCode(null);
-          setName(value);
-        }}
-      />
-      <FormField
-        testID="group-create-timezone-input"
-        accessibilityLabel={t("groupTimezoneLabel")}
-        autoCapitalize="none"
-        autoCorrect={false}
-        label={t("groupTimezoneLabel")}
-        hint={t("groupTimezoneHint")}
-        error={timeZoneError}
-        value={timeZone}
-        onChangeText={(value) => {
-          setSubmitErrorCode(null);
-          setTimeZoneTouched(true);
-          setTimeZoneValid(validateTimeZone(value));
-          setTimeZone(value);
-        }}
-      />
-      <AppCard style={{ gap: spacing.sm }}>
-        <Host matchContents>
-          <Switch
-            testID="group-create-anonymous-switch"
-            value={leaderboardAnonymous}
-            disabled={submitting}
-            label={t("groupCreateAnonymousLabel")}
-            onValueChange={(value) => {
-              setSubmitErrorCode(null);
-              setLeaderboardAnonymous(value);
-            }}
-          />
-        </Host>
-        <AppText variant="caption">{t("groupCreateAnonymousHint")}</AppText>
-        <AppText variant="caption">{t("groupCreateAnonymousCaveat")}</AppText>
-      </AppCard>
-      <AppCard style={{ gap: spacing.sm }}>
-        <Host matchContents>
-          <Switch
-            testID="group-create-rules-switch"
-            value={rulesAccepted}
-            disabled={submitting}
-            label={t("groupCreateRulesLabel")}
-            onValueChange={(value) => {
-              setSubmitErrorCode(null);
-              setRulesAccepted(value);
-            }}
-          />
-        </Host>
-        <AppText variant="caption">{t("groupCreateRulesHint")}</AppText>
-        <AppButton
-          label={t("groupCreateLegalAction")}
-          variant="ghost"
-          style={legalActionButtonStyle}
-          accessibilityHint={t("groupCreateLegalActionHint")}
-          onPress={() => router.push("/settings/legal")}
+    <Screen>
+      <Section>
+        <TextField
+          testID="group-create-name-input"
+          label={t("groupNameLabel")}
+          error={name.length > 0 && !validName ? t("groupNameInvalid") : undefined}
+          value={name}
+          onChangeText={(value) => {
+            setSubmitErrorCode(null);
+            setName(value);
+          }}
         />
-      </AppCard>
+        <Text variant="secondary">{t("groupNameHint")}</Text>
+        <TextField
+          testID="group-create-timezone-input"
+          autoCapitalize="none"
+          autoCorrect={false}
+          label={t("groupTimezoneLabel")}
+          error={timeZoneError}
+          value={timeZone}
+          onChangeText={(value) => {
+            setSubmitErrorCode(null);
+            setTimeZoneTouched(true);
+            setTimeZoneValid(validateTimeZone(value));
+            setTimeZone(value);
+          }}
+        />
+        <Text variant="secondary">{t("groupTimezoneHint")}</Text>
+      </Section>
+      <Section title={t("groupCreateOptionsTitle")}>
+        <View style={{ gap: space.sm }}>
+          <Host matchContents>
+            <Switch
+              testID="group-create-anonymous-switch"
+              value={leaderboardAnonymous}
+              disabled={submitting}
+              label={t("groupCreateAnonymousLabel")}
+              onValueChange={(value) => {
+                setSubmitErrorCode(null);
+                setLeaderboardAnonymous(value);
+              }}
+            />
+          </Host>
+          <Text variant="secondary">{t("groupCreateAnonymousHint")}</Text>
+          <Text variant="secondary">{t("groupCreateAnonymousCaveat")}</Text>
+        </View>
+      </Section>
+      <Section title={t("groupCreateConsentTitle")}>
+        <View style={{ gap: space.sm }}>
+          <Host matchContents>
+            <Switch
+              testID="group-create-rules-switch"
+              value={rulesAccepted}
+              disabled={submitting}
+              label={t("groupCreateRulesLabel")}
+              onValueChange={(value) => {
+                setSubmitErrorCode(null);
+                setRulesAccepted(value);
+              }}
+            />
+          </Host>
+          <Text variant="secondary">{t("groupCreateRulesHint")}</Text>
+          <Button
+            label={t("groupCreateLegalAction")}
+            variant="tertiary"
+            accessibilityHint={t("groupCreateLegalActionHint")}
+            onPress={() => router.push("/account/legal")}
+            style={{ alignSelf: "flex-start", paddingHorizontal: 0 }}
+          />
+        </View>
+      </Section>
       {submitErrorCode ? (
-        <AppText accessibilityLiveRegion="polite">
+        <Text accessibilityLiveRegion="polite">
           {t(createErrorKey(submitErrorCode))}
-        </AppText>
+        </Text>
       ) : null}
-      <AppButton
+      <Button
         disabled={!canSubmit}
         loading={submitting}
         label={t("groupsCreate")}
         onPress={handleSubmit}
       />
-    </AppScreen>
+    </Screen>
   );
 }

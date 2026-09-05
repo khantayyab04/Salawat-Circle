@@ -3,6 +3,7 @@ import { de } from "@/localization/de";
 import { en } from "@/localization/en";
 import {
   formatAppDate,
+  formatBigInt,
   formatAppNumber,
   resolveAppLocale,
 } from "@/localization/locale";
@@ -37,6 +38,21 @@ describe("locale formatting", () => {
   it("formats numbers for German and English independently", () => {
     expect(formatAppNumber(1234567, "de-DE")).toBe("1.234.567");
     expect(formatAppNumber(1234567, "en-US")).toBe("1,234,567");
+  });
+
+  it("formats BigInt totals without converting them to an imprecise number", () => {
+    expect(formatAppNumber(12345678901234567890n, "de-DE")).toBe(
+      "12.345.678.901.234.567.890",
+    );
+    expect(formatAppNumber(12345678901234567890n, "en-US")).toBe(
+      "12,345,678,901,234,567,890",
+    );
+  });
+
+  it("groups an arbitrary BigInt string without using Intl number coercion", () => {
+    expect(formatBigInt("-12345678901234567890", "de-DE")).toBe(
+      "-12.345.678.901.234.567.890",
+    );
   });
 
   it("formats dates for German and English independently", () => {

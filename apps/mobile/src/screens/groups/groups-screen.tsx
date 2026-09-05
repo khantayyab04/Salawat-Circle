@@ -1,10 +1,4 @@
-import {
-  AppButton,
-  AppCard,
-  AppScreen,
-  AppText,
-  StatusBanner,
-} from "@/components";
+import { space } from "@/design-system";
 import { useGroups, type GroupListItem } from "@/lib/groups";
 import {
   formatAppDate,
@@ -12,19 +6,11 @@ import {
   formatAppTime,
   useTranslation,
 } from "@/localization";
-import { spacing } from "@/theme";
+import { useAppTheme } from "@/theme";
+import { Banner, Button, Screen, Text } from "@/ui";
 import { useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useState } from "react";
-import {
-  Pressable,
-  RefreshControl,
-  type TextStyle,
-  type ViewStyle,
-  View,
-} from "react-native";
-
-const tabularNumbersStyle: TextStyle = { fontVariant: ["tabular-nums"] };
-const retryButtonStyle: ViewStyle = { alignSelf: "flex-start" };
+import { Pressable, RefreshControl, View } from "react-native";
 
 function formatNumeric(value: string, localeTag: string) {
   try {
@@ -34,18 +20,11 @@ function formatNumeric(value: string, localeTag: string) {
   }
 }
 
-function formatServerTimestamp(
-  value: string,
-  localeTag: string,
-  timeZone: string,
-) {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return `${formatAppDate(parsed, localeTag, timeZone)} ${formatAppTime(
-    parsed,
+function formatTimestamp(value: string, localeTag: string, timeZone: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return `${formatAppDate(date, localeTag, timeZone)} ${formatAppTime(
+    date,
     localeTag,
     timeZone,
   )}`;
@@ -53,233 +32,179 @@ function formatServerTimestamp(
 
 const GroupRow = memo(function GroupRow({
   group,
-  localeTag,
-  onOpenGroup,
-  weekLabel,
-  rankLabel,
-  rankUnranked,
-  membersLabel,
-  calculatedLabel,
-  updatedLabel,
-  anonymityLabel,
+  onOpen,
 }: {
   group: GroupListItem;
-  localeTag: string;
-  onOpenGroup(groupId: string): void;
-  weekLabel: string;
-  rankLabel: string;
-  rankUnranked: string;
-  membersLabel: string;
-  calculatedLabel: string;
-  updatedLabel: string;
-  anonymityLabel: string;
+  onOpen: (id: string) => void;
 }) {
-  const ownRankText =
+  const { t, localeTag } = useTranslation();
+  const { colors } = useAppTheme();
+  const rank =
     group.ownRank > 0
       ? formatAppNumber(group.ownRank, localeTag)
-      : rankUnranked;
-  const ownWeekTotalText = formatNumeric(group.ownWeekTotal, localeTag);
-  const memberCountText = formatNumeric(group.memberCount, localeTag);
-  const calculatedText = formatServerTimestamp(
-    group.calculatedAt,
-    localeTag,
-    group.timezone,
-  );
-  const updatedText = formatServerTimestamp(group.updatedAt, localeTag, group.timezone);
-  const accessibilityLabel = `${group.name}. ${weekLabel}: ${rankLabel} ${ownRankText} · ${ownWeekTotalText}. ${memberCountText} ${membersLabel}.`;
-  const accessibilityHint = `${calculatedLabel}: ${calculatedText}. ${updatedLabel}: ${updatedText}. ${anonymityLabel}.`;
-
+      : t("groupsListRankUnranked");
+  const total = formatNumeric(group.ownWeekTotal, localeTag);
+  const members = formatNumeric(group.memberCount, localeTag);
+  const calculated = formatTimestamp(group.calculatedAt, localeTag, group.timezone);
+  const updated = formatTimestamp(group.updatedAt, localeTag, group.timezone);
+  const anonymity = group.leaderboardAnonymous
+    ? t("groupsListAnonymousOn")
+    : t("groupsListAnonymousOff");
   return (
     <Pressable
+      accessibilityHint={`${t("groupsListCalculatedLabel")}: ${calculated}. ${t("groupsListUpdatedLabel")}: ${updated}. ${anonymity}.`}
+      accessibilityLabel={`${group.name}. ${t("groupsListRankLabel")} ${rank}. ${total}. ${members} ${t("groupsListMembersLabel")}.`}
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      accessibilityHint={accessibilityHint}
-      onPress={() => onOpenGroup(group.id)}
-      style={({ pressed }) => [
-        {
-          minHeight: 44,
-          opacity: pressed ? 0.82 : 1,
-        },
-      ]}
+      onPress={() => onOpen(group.id)}
+      style={({ pressed }) => ({
+        minHeight: 72,
+        paddingVertical: space.md,
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        borderBottomWidth: 1,
+        borderBottomColor: colors.borderSubtle,
+        opacity: pressed ? 0.72 : 1,
+      })}
     >
-      <AppCard style={{ minHeight: 56, gap: spacing.xs, justifyContent: "center" }}>
-        <AppText variant="bodyStrong">{group.name}</AppText>
-        <AppText style={tabularNumbersStyle}>{`${weekLabel}: ${rankLabel} ${ownRankText} · ${ownWeekTotalText}`}</AppText>
-        <AppText style={tabularNumbersStyle}>{`${memberCountText} ${membersLabel}`}</AppText>
-        <AppText variant="caption" style={tabularNumbersStyle}>{`${calculatedLabel}: ${calculatedText}`}</AppText>
-        <AppText variant="caption" style={tabularNumbersStyle}>{`${updatedLabel}: ${updatedText}`}</AppText>
-        <AppText variant="caption">{anonymityLabel}</AppText>
-      </AppCard>
+      <View style={{ flex: 1, gap: space.xs }}>
+        <Text variant="headline">{group.name}</Text>
+        <Text variant="secondary">{`${t("groupsListWeekTotalLabel")}: ${t("groupsListRankLabel")} ${rank} · ${total}`}</Text>
+        <Text variant="caption">{`${members} ${t("groupsListMembersLabel")}`}</Text>
+        <Text variant="caption">{`${t("groupsListCalculatedLabel")}: ${calculated}`}</Text>
+        <Text variant="caption">{`${t("groupsListUpdatedLabel")}: ${updated}`}</Text>
+        <Text variant="caption">{anonymity}</Text>
+      </View>
+      <View style={{ alignItems: "flex-end", gap: space.xs }}>
+        <Text variant="caption">{t("groupsListRankLabel")}</Text>
+        <Text variant="headline" style={{ fontVariant: ["tabular-nums"] }}>
+          {rank}
+        </Text>
+      </View>
     </Pressable>
   );
 });
 
-function StateCard({
+function StatePanel({
   title,
   body,
-  actionLabel,
-  onAction,
+  action,
 }: {
   title: string;
   body: string;
-  actionLabel?: string;
-  onAction?: () => void;
+  action?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
-    <View style={{ gap: spacing.sm }}>
-      <AppCard
-        accessible
-        accessibilityRole="alert"
-        style={{ alignItems: "flex-start", justifyContent: "center", minHeight: 160 }}
-      >
-        <AppText variant="title">{title}</AppText>
-        <AppText>{body}</AppText>
-      </AppCard>
-      {actionLabel && onAction ? (
-        <AppButton
-          label={actionLabel}
-          variant="secondary"
-          style={retryButtonStyle}
-          onPress={onAction}
-        />
+    <View
+      accessible
+      accessibilityRole="alert"
+      style={{ gap: space.md, paddingVertical: space.page }}
+    >
+      <Text variant="title">{title}</Text>
+      <Text variant="secondary">{body}</Text>
+      {action ? (
+        <Button label={t("groupsListRefresh")} onPress={action} variant="secondary" />
       ) : null}
     </View>
   );
 }
 
 export function GroupsScreen() {
-  const { t, localeTag } = useTranslation();
+  const { t } = useTranslation();
   const { push } = useRouter();
   const { groups, online, refreshGroups } = useGroups();
   const [refreshing, setRefreshing] = useState(false);
-  const weekLabel = t("groupsListWeekTotalLabel");
-  const rankLabel = t("groupsListRankLabel");
-  const rankUnrankedLabel = t("groupsListRankUnranked");
-  const membersLabel = t("groupsListMembersLabel");
-  const calculatedLabel = t("groupsListCalculatedLabel");
-  const updatedLabel = t("groupsListUpdatedLabel");
-
-  const handleRefresh = useCallback(async () => {
+  const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
       await refreshGroups();
-    } catch {
-      // State is surfaced by the provider through typed status + error fields.
     } finally {
       setRefreshing(false);
     }
   }, [refreshGroups]);
 
   useEffect(() => {
-    if (groups.status !== "idle") return;
-    void refreshGroups().catch(() => undefined);
+    if (groups.status === "idle") void refreshGroups().catch(() => undefined);
   }, [groups.status, refreshGroups]);
 
+  const hasGroups = groups.items.length > 0;
+  const offline = groups.errorCode === "OFFLINE" || !online;
+  const loading = !hasGroups && (groups.status === "idle" || groups.status === "loading");
+  const empty = !hasGroups && groups.status === "ready";
+  const error = !hasGroups && groups.status === "error";
   const openGroup = useCallback(
-    (groupId: string) => {
-      push({ pathname: "/groups/[id]", params: { id: groupId } });
-    },
+    (id: string) => push({ pathname: "/groups/[id]", params: { id } }),
     [push],
   );
 
-  const hasGroups = groups.items.length > 0;
-  const offlineError = groups.errorCode === "OFFLINE" || !online;
-  const showLoading =
-    !hasGroups && (groups.status === "idle" || groups.status === "loading");
-  const showEmpty = !hasGroups && groups.status === "ready";
-  const showOffline = !hasGroups && offlineError && !showEmpty;
-  const showError = !hasGroups && groups.status === "error" && !offlineError;
-  const showOfflineBanner = offlineError && (hasGroups || showEmpty);
-  const showPartialErrorBanner = hasGroups && !offlineError && !!groups.errorCode;
-
   return (
-    <AppScreen
+    <Screen
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
       testID="groups-list-screen"
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-      }
     >
-      <AppButton label={t("groupsCreate")} onPress={() => push("/groups/create")} />
-      <AppButton
-        label={t("groupsJoinManualCode")}
-        variant="secondary"
-        onPress={() => push("/join")}
-      />
-      {showOfflineBanner ? (
-        <StatusBanner
-          title={t("groupsListOfflineTitle")}
-          body={t("groupsListOfflineBody")}
-          tone="offline"
+      <View style={{ flexDirection: "row", gap: space.sm }}>
+        <Button
+          label={t("groupsCreate")}
+          onPress={() => push("/groups/create")}
+          style={{ flex: 1 }}
         />
+        <Button
+          label={t("groupsJoinManualCode")}
+          onPress={() => push("/join")}
+          style={{ flex: 1 }}
+          variant="secondary"
+        />
+      </View>
+      {offline && hasGroups ? (
+        <Banner body={t("groupsListOfflineBody")} title={t("groupsListOfflineTitle")} />
       ) : null}
-      {showPartialErrorBanner ? (
-        <View style={{ gap: spacing.sm }}>
-          <StatusBanner
-            title={t("statePartialErrorTitle")}
+      {groups.errorCode && hasGroups && !offline ? (
+        <View style={{ gap: space.sm }}>
+          <Banner
             body={t("statePartialErrorBody")}
+            title={t("statePartialErrorTitle")}
             tone="error"
           />
-          <AppButton
+          <Button
             label={t("groupsListRefresh")}
+            onPress={() => void refresh()}
             variant="secondary"
-            style={retryButtonStyle}
-            onPress={() => {
-              void handleRefresh();
-            }}
           />
         </View>
       ) : null}
-      {showLoading ? (
-        <StateCard
-          title={t("groupsListLoadingTitle")}
+      {loading ? (
+        <StatePanel
           body={t("groupsListLoadingBody")}
+          title={t("groupsListLoadingTitle")}
         />
-      ) : showOffline ? (
-        <StateCard
-          title={t("groupsListOfflineTitle")}
+      ) : error && offline ? (
+        <StatePanel
+          action={() => void refresh()}
           body={t("groupsListOfflineBody")}
-          actionLabel={t("groupsListRefresh")}
-          onAction={() => {
-            void handleRefresh();
-          }}
+          title={t("groupsListOfflineTitle")}
         />
-      ) : showError ? (
-        <StateCard
-          title={t("groupsListErrorTitle")}
+      ) : error ? (
+        <StatePanel
+          action={() => void refresh()}
           body={t("groupsListErrorBody")}
-          actionLabel={t("groupsListRefresh")}
-          onAction={() => {
-            void handleRefresh();
-          }}
+          title={t("groupsListErrorTitle")}
         />
-      ) : showEmpty ? (
-        <AppCard>
-          <AppText variant="title">{t("groupsEmptyTitle")}</AppText>
-          <AppText>{t("groupsEmptyBody")}</AppText>
-        </AppCard>
+      ) : empty ? (
+        <View style={{ gap: space.sm, paddingVertical: space.page }}>
+          {offline ? (
+            <Banner body={t("groupsListOfflineBody")} title={t("groupsListOfflineTitle")} />
+          ) : null}
+          <Text variant="title">{t("groupsEmptyTitle")}</Text>
+          <Text variant="secondary">{t("groupsEmptyBody")}</Text>
+        </View>
       ) : (
-        <View style={{ gap: spacing.md }}>
+        <View>
           {groups.items.map((group) => (
-            <GroupRow
-              key={group.id}
-              group={group}
-              localeTag={localeTag}
-              weekLabel={weekLabel}
-              rankLabel={rankLabel}
-              rankUnranked={rankUnrankedLabel}
-              membersLabel={membersLabel}
-              calculatedLabel={calculatedLabel}
-              updatedLabel={updatedLabel}
-              anonymityLabel={
-                group.leaderboardAnonymous
-                  ? t("groupsListAnonymousOn")
-                  : t("groupsListAnonymousOff")
-              }
-              onOpenGroup={openGroup}
-            />
+            <GroupRow key={group.id} group={group} onOpen={openGroup} />
           ))}
         </View>
       )}
-    </AppScreen>
+    </Screen>
   );
 }

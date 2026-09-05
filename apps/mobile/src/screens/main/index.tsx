@@ -2,7 +2,7 @@ import {
   AppButton,
   AppScreen,
   StateFeedback,
-} from "@/components";
+} from "@/ui";
 import { useTranslation } from "@/localization";
 import { View } from "react-native";
 export function GroupMembersScreen() {

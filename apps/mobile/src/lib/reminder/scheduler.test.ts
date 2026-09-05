@@ -42,6 +42,39 @@ describe("reminder scheduler", () => {
     });
   });
 
+  it("schedules a local Friday reminder at the selected wall-clock time", async () => {
+    const scheduleNotificationAsync = vi.fn(async () => "friday-notification");
+    const scheduler = createReminderScheduler({
+      getPermissionsAsync: async () => ({ status: "granted", canAskAgain: true }),
+      requestPermissionsAsync: async () => ({
+        status: "granted",
+        canAskAgain: true,
+      }),
+      scheduleNotificationAsync,
+      cancelScheduledNotificationAsync: async () => undefined,
+      getAllScheduledNotificationsAsync: async () => [],
+      setNotificationChannelAsync: async () => null,
+    });
+
+    await expect(scheduler.scheduleFriday({ hour: 12, minute: 30 })).resolves.toBe(
+      "friday-notification",
+    );
+    expect(scheduleNotificationAsync).toHaveBeenCalledWith({
+      content: {
+        title: "Salawat Circle",
+        body: "Zeit für deine heutige Salawat.",
+        data: { url: "salawat-circle://today" },
+      },
+      trigger: {
+        type: "weekly",
+        weekday: 6,
+        hour: 12,
+        minute: 30,
+        channelId: "salawat-friday",
+      },
+    });
+  });
+
   it("uses the caller's localized notification copy", async () => {
     const scheduleNotificationAsync = vi.fn(async () => "notification-1");
     const scheduler = createReminderScheduler({

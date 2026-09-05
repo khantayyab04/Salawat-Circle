@@ -1,257 +1,187 @@
-import {
-  AppButton,
-  AppCard,
-  EntryRow,
-  GoalSection,
-  AppText,
-  FormField,
-  OfflineLoadErrorCard,
-  OfflineRecoveryCard,
-  AppScreen,
-  StateFeedback,
-  StatusBanner,
-} from "@/components";
-import {
-  describeGoalProgress,
-  parseEntryAmount,
-  useEntries,
-} from "@/lib/entries";
 import { formatAppNumber, useTranslation } from "@/localization";
-import { spacing, useAppTheme } from "@/theme";
-import { useState } from "react";
-import { FlatList, View, useWindowDimensions } from "react-native";
+import { addTallyAmount, createTally, resetTally } from "@/lib/entries/tally";
+import { parseEntryAmount, useEntries } from "@/lib/entries";
+import {
+  Banner,
+  Button,
+  Chip,
+  ProgressRing,
+  QuoteCard,
+  NumberField,
+  Screen,
+  Text,
+} from "@/ui";
+import { useAppTheme } from "@/theme";
 import { useRouter } from "expo-router";
+import * as Haptics from "expo-haptics";
+import { useState } from "react";
+import { View } from "react-native";
+import { space } from "@/design-system";
+import { BottomSheet, Column, Host } from "@expo/ui";
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <AppCard style={{ flex: 1, minWidth: 140 }}>
-      <AppText variant="caption">{label}</AppText>
-      <AppText variant="bodyStrong">{value}</AppText>
-    </AppCard>
-  );
-}
+const quickAmounts = [100, 200, 500, 1000] as const;
 
 export function TodayScreen() {
   const { t, localeTag } = useTranslation();
-  const { colors } = useAppTheme();
-  const { width, fontScale } = useWindowDimensions();
   const entries = useEntries();
+  const { isJumuah } = useAppTheme();
   const router = useRouter();
-  const [amount, setAmount] = useState("");
-  const [inputError, setInputError] = useState<string | undefined>();
-  const stacked = width < 360 || fontScale >= 1.3;
+  const [tally, setTally] = useState(createTally);
+  const [saveError, setSaveError] = useState(false);
+  const [customAmount, setCustomAmount] = useState("");
+  const [customSheetOpen, setCustomSheetOpen] = useState(false);
+  const [customError, setCustomError] = useState<string>();
 
-  if (entries.offlineLoadErrorCode === "INVALID_OFFLINE_STATE") {
-    return (
-      <AppScreen>
-        <OfflineRecoveryCard
-          busy={entries.busy}
-          onReset={entries.resetOfflineState}
-        />
-      </AppScreen>
-    );
-  }
-
-  if (entries.offlineLoadErrorCode === "INTERNAL") {
-    return (
-      <AppScreen>
-        <OfflineLoadErrorCard
-          busy={entries.busy}
-          onRetry={entries.retryOfflineLoad}
-        />
-      </AppScreen>
-    );
-  }
-
-  const goalProgress = describeGoalProgress(
-    entries.summary.achievedDays,
-    entries.summary.eligibleGoalDays,
+  const todayTotal = formatAppNumber(BigInt(entries.summary.todayTotal), localeTag);
+  const stagedTotal = formatAppNumber(
+    BigInt(entries.summary.todayTotal) + BigInt(tally.amount),
+    localeTag,
   );
-  const syncFeedback =
-    entries.syncState === "offline"
-      ? {
-          title: t("syncOfflineTitle"),
-          body: t("syncOfflineBody"),
-          tone: "offline" as const,
-        }
-      : entries.syncState === "pending"
-        ? {
-            title: t("syncPendingTitle"),
-            body: t("syncPendingBody"),
-            tone: "pending" as const,
-          }
-        : entries.syncState === "error"
-          ? {
-              title: t("syncFailedTitle"),
-              body: t("syncFailedBody"),
-              tone: "error" as const,
-            }
-          : entries.syncState === "conflict"
-            ? {
-                title: t("syncConflictTitle"),
-                body: t("syncConflictBody"),
-                tone: "error" as const,
-              }
-            : null;
+  const commitLabel = t("todayCommit", {
+    amount: formatAppNumber(BigInt(tally.amount), localeTag),
+  });
 
   const submit = async () => {
-    let parsedAmount: number;
+    if (!tally.amount) return;
+    setSaveError(false);
     try {
-      parsedAmount = parseEntryAmount(amount);
+      await entries.create(tally.amount);
+      setTally(resetTally);
+      void Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      ).catch(() => undefined);
     } catch {
-      setInputError(t("entryAmountInvalid"));
-      return;
+      setSaveError(true);
     }
-    setInputError(undefined);
+  };
+  const applyCustomAmount = () => {
     try {
-      await entries.create(parsedAmount);
-      setAmount("");
+      const amount = parseEntryAmount(customAmount);
+      setTally((current) => addTallyAmount(current, amount));
+      setCustomAmount("");
+      setCustomError(undefined);
+      setCustomSheetOpen(false);
     } catch {
-      setInputError(t("entrySaveFailed"));
+      setCustomError(t("entryAmountInvalid"));
     }
   };
 
-  const header = (
-    <View style={{ gap: spacing.lg }}>
-      {syncFeedback ? (
-        <View style={{ gap: spacing.sm }}>
-          <StatusBanner {...syncFeedback} />
-          {entries.syncState === "error" ? (
-            <AppButton
-              label={t("syncRetry")}
-              variant="secondary"
-              onPress={() => void entries.retrySync()}
-            />
-          ) : null}
-        </View>
-      ) : null}
-      <AppCard>
-        <AppText>{t("todayHeading")}</AppText>
-        <AppText
-          accessibilityLabel={`${formatAppNumber(
-            BigInt(entries.summary.todayTotal),
-            localeTag,
-          )} Salawat`}
-          variant="displayNumber"
-        >
-          {formatAppNumber(BigInt(entries.summary.todayTotal), localeTag)}
-        </AppText>
-        <FormField
-          keyboardType="number-pad"
-          label={t("todayAddLabel")}
-          hint={t("todayAddHint")}
-          error={inputError}
-          value={amount}
-          onChangeText={setAmount}
-        />
-        <AppButton
-          disabled={!amount.trim()}
-          label={t("todaySubmit")}
-          loading={entries.busy}
-          onPress={() => void submit()}
-        />
-      </AppCard>
-      <AppText variant="title">{t("todayDashboard")}</AppText>
-      <View
-        style={{
-          flexDirection: stacked ? "column" : "row",
-          flexWrap: stacked ? "nowrap" : "wrap",
-          gap: spacing.md,
-        }}
-      >
-        <Metric
-          label={t("todayTotal")}
-          value={formatAppNumber(BigInt(entries.summary.allTimeTotal), localeTag)}
-        />
-        <Metric
-          label={t("todayWeek")}
-          value={formatAppNumber(BigInt(entries.summary.weekTotal), localeTag)}
-        />
-        <Metric
-          label={t("todayGoal")}
-          value={
-            entries.summary.todayGoal
-              ? formatAppNumber(BigInt(entries.summary.todayGoal), localeTag)
-              : t("todayNoGoal")
-          }
-        />
-        <Metric
-          label={t("todayGoalDays")}
-          value={
-            goalProgress
-              ? `${goalProgress.achievedDays}/${goalProgress.eligibleDays}`
-              : t("todayNoGoalDay")
-          }
-        />
-      </View>
-      <GoalSection
-        busy={entries.busy}
-        goal={entries.summary.todayGoal}
-        onClear={entries.clearGoal}
-        onSave={entries.setGoal}
-      />
-      <AppText variant="title">{t("todayHistory")}</AppText>
-    </View>
-  );
+  const syncFeedback =
+    entries.syncState === "offline"
+      ? { title: t("syncOfflineTitle"), body: t("syncOfflineBody"), tone: "info" as const }
+      : entries.syncState === "pending"
+        ? { title: t("syncPendingTitle"), body: t("syncPendingBody"), tone: "info" as const }
+        : entries.syncState === "error"
+          ? { title: t("syncFailedTitle"), body: t("syncFailedBody"), tone: "error" as const }
+          : null;
 
-  if (entries.viewState === "loading" || entries.viewState === "error") {
-    return (
-      <View style={{ flex: 1, backgroundColor: colors.background, padding: spacing.lg }}>
-        {header}
-        <StateFeedback state={entries.viewState} />
-      </View>
-    );
-  }
+  const weeklyContext = entries.summary.todayGoal
+    ? t("todayWeeklyContext", {
+        week: formatAppNumber(BigInt(entries.summary.weekTotal), localeTag),
+        achieved: entries.summary.achievedDays,
+        eligible: entries.summary.eligibleGoalDays,
+      })
+    : t("todayNoGoalContext");
 
   return (
-    <FlatList
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{
-        gap: spacing.lg,
-        paddingHorizontal: spacing.lg,
-        paddingVertical: spacing.xl,
-      }}
-      data={entries.entries}
-      keyExtractor={(entry) => entry.id}
-      ListEmptyComponent={
-        <AppCard>
-          <AppText>{t("todayHistoryEmpty")}</AppText>
-        </AppCard>
-      }
-      ListFooterComponent={
-        entries.hasMore ? (
-          <View style={{ gap: spacing.sm }}>
-            {entries.paginationError ? (
-              <AppText accessibilityLiveRegion="polite">
-                {t("historyLoadFailed")}
-              </AppText>
-            ) : null}
-            <AppButton
-              label={t("historyLoadMore")}
-              loading={entries.loadingMore}
-              variant="secondary"
-              onPress={() => void entries.loadMore()}
-            />
-          </View>
-        ) : entries.entries.length ? (
-          <AppText variant="caption">{t("historyEnd")}</AppText>
-        ) : null
-      }
-      ListHeaderComponent={header}
-      onEndReached={() => void entries.loadMore()}
-      onEndReachedThreshold={0.4}
-      renderItem={({ item }) => (
-        <EntryRow
-          entry={item}
-          showTime={
-            entries.entries.filter((entry) => entry.entryDate === item.entryDate)
-              .length > 1
-          }
-          onDelete={(id) => void entries.delete(id)}
-          onEdit={(id) => router.push({ pathname: "/entry/[id]/edit", params: { id } })}
+    <>
+      <Screen contentContainerStyle={{ justifyContent: "center" }}>
+      {syncFeedback ? <Banner {...syncFeedback} /> : null}
+      <View style={{ alignItems: "center", gap: space.lg }}>
+        <Text accessibilityRole="header" variant="largeTitle">
+          {t("todayTitle")}
+        </Text>
+        {isJumuah ? (
+          <Text variant="label">{t("jumuahLabel")}</Text>
+        ) : null}
+        <ProgressRing
+          current={Number(entries.summary.todayTotal)}
+          display={stagedTotal}
+          goal={entries.summary.todayGoal}
+          label={`${todayTotal} Salawat`}
+          staged={tally.amount}
         />
-      )}
-      style={{ backgroundColor: colors.background }}
-    />
+      </View>
+      <View
+        accessibilityLabel={t("todayStageAmount", {
+          amount: formatAppNumber(BigInt(tally.amount), localeTag),
+        })}
+        style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}
+      >
+        {quickAmounts.map((amount) => (
+          <Chip
+            key={amount}
+            label={t("todayStageAmount", { amount })}
+            onPress={() => {
+              setSaveError(false);
+              setTally((current) => addTallyAmount(current, amount));
+            }}
+          />
+        ))}
+      </View>
+      <Button
+        label={t("todayCustomAmount")}
+        onPress={() => setCustomSheetOpen(true)}
+        variant="secondary"
+      />
+      {tally.amount ? (
+        <Button
+          label={t("todayResetTally")}
+          variant="tertiary"
+          onPress={() => setTally(resetTally)}
+        />
+      ) : null}
+      {saveError ? (
+        <Banner title={t("syncFailedTitle")} body={t("todaySaveFailed")} tone="error" />
+      ) : null}
+      <Button
+        disabled={!tally.amount || tally.limitReached}
+        label={commitLabel}
+        loading={entries.busy}
+        onPress={() => void submit()}
+      />
+      {entries.syncState === "error" ? (
+        <Button
+          label={t("syncRetry")}
+          variant="secondary"
+          onPress={() => void entries.retrySync()}
+        />
+      ) : null}
+      <Button
+        accessibilityHint={weeklyContext}
+        label={t("todayOpenProgress")}
+        variant="tertiary"
+        onPress={() => router.push("/progress")}
+      />
+      {isJumuah ? (
+        <QuoteCard
+          label={t("jumuahQuoteLabel")}
+          quote={t("jumuahQuote")}
+          source={t("jumuahQuoteSource")}
+        />
+      ) : null}
+      </Screen>
+      <Host matchContents>
+        <BottomSheet
+          isPresented={customSheetOpen}
+          onDismiss={() => setCustomSheetOpen(false)}
+          snapPoints={["half"]}
+        >
+          <Column spacing={16}>
+            <Text variant="title">{t("todayCustomAmount")}</Text>
+            <NumberField
+              error={customError}
+              label={t("todayCustomAmount")}
+              onChangeText={(value) => {
+                setCustomError(undefined);
+                setCustomAmount(value);
+              }}
+              value={customAmount}
+            />
+            <Button label={t("todayApplyCustom")} onPress={applyCustomAmount} />
+          </Column>
+        </BottomSheet>
+      </Host>
+    </>
   );
 }

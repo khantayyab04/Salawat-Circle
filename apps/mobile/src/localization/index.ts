@@ -1,6 +1,7 @@
 export { type TranslationKey } from "./de";
 export {
   formatAppDate,
+  formatBigInt,
   formatAppNumber,
   formatAppTime,
   resolveAppLocale,

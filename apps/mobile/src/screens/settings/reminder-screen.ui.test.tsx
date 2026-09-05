@@ -6,6 +6,9 @@ import type { ReminderTime } from "@/lib/reminder/reminder-time";
 const mockEnable = jest.fn<() => Promise<void>>();
 const mockDisable = jest.fn<() => Promise<void>>();
 const mockSetTime = jest.fn<(time: ReminderTime) => Promise<void>>();
+const mockEnableJumuah = jest.fn<() => Promise<void>>();
+const mockDisableJumuah = jest.fn<() => Promise<void>>();
+const mockSetJumuahTime = jest.fn<(time: ReminderTime) => Promise<void>>();
 const mockDateTimePickerProps = jest.fn();
 
 jest.mock("@/lib/reminder", () => ({
@@ -13,10 +16,17 @@ jest.mock("@/lib/reminder", () => ({
     permission: "not_asked",
     enabled: false,
     time: { hour: 20, minute: 0 },
+    jumuah: {
+      enabled: false,
+      time: { hour: 12, minute: 0 },
+    },
     busy: false,
     enable: mockEnable,
     disable: mockDisable,
     setTime: mockSetTime,
+    enableJumuah: mockEnableJumuah,
+    disableJumuah: mockDisableJumuah,
+    setJumuahTime: mockSetJumuahTime,
   }),
 }));
 jest.mock("@expo/ui", () => {
@@ -60,6 +70,9 @@ jest.mock("@/localization", () => ({
     t: (key: string) =>
       ({
         reminderEnabledLabel: "Tägliche Erinnerung",
+        reminderJumuahTitle: "Jumuʿah-Erinnerung",
+        reminderJumuahEnabledLabel: "Freitags erinnern",
+        reminderJumuahPurpose: "Eine ruhige Erinnerung am Freitag zur gewählten Uhrzeit.",
         reminderPurpose: "Eine ruhige Erinnerung zur gewählten Uhrzeit.",
         reminderDeviceOnly: "Gilt nur auf diesem Gerät.",
         reminderPermissionNotAsked: "Du entscheidest erst beim Aktivieren.",
@@ -72,6 +85,9 @@ beforeEach(() => {
   mockEnable.mockResolvedValue(undefined);
   mockDisable.mockResolvedValue(undefined);
   mockSetTime.mockResolvedValue(undefined);
+  mockEnableJumuah.mockResolvedValue(undefined);
+  mockDisableJumuah.mockResolvedValue(undefined);
+  mockSetJumuahTime.mockResolvedValue(undefined);
   mockDateTimePickerProps.mockClear();
 });
 
@@ -91,5 +107,19 @@ describe("ReminderSettingsScreen", () => {
     expect(mockDateTimePickerProps).toHaveBeenCalledWith(
       expect.objectContaining({ presentation: "inline" }),
     );
+  });
+
+  it("enables the separate Friday reminder only when its switch is turned on", async () => {
+    const view = await render(<ReminderSettingsScreen />);
+
+    expect(mockEnableJumuah).not.toHaveBeenCalled();
+    await act(async () => {
+      fireEvent.press(
+        view.getByRole("switch", { name: "Freitags erinnern" }),
+      );
+    });
+
+    expect(mockEnableJumuah).toHaveBeenCalledTimes(1);
+    expect(mockEnable).not.toHaveBeenCalled();
   });
 });

@@ -1,43 +1,46 @@
-export const lightColors = {
-  background: "#FAF8F4",
-  surface: "#FFFFFF",
-  surfaceElevated: "#F2EFE8",
-  textPrimary: "#1C211D",
-  textSecondary: "#59625B",
-  textDisabled: "#68706A",
-  textInverse: "#FFFFFF",
-  accent: "#0F6B4B",
-  accentPressed: "#0A5038",
-  accentMuted: "#DCECE4",
-  success: "#18704D",
-  warning: "#8A5A00",
-  error: "#B42318",
-  offline: "#59625B",
-  pending: "#7A5A13",
-  borderSubtle: "#DEDAD2",
-  borderStrong: "#858C87",
-  focusRing: "#0F6B4B",
-} as const;
+import {
+  darkColors as darkSystemColors,
+  jumuahDarkColors as jumuahDarkSystemColors,
+  jumuahLightColors as jumuahLightSystemColors,
+  lightColors as lightSystemColors,
+} from "@/design-system";
 
-export const darkColors = {
-  background: "#101411",
-  surface: "#171C18",
-  surfaceElevated: "#202721",
-  textPrimary: "#F4F7F4",
-  textSecondary: "#B5BDB7",
-  textDisabled: "#878F89",
-  textInverse: "#082C1E",
-  accent: "#6ED3A3",
-  accentPressed: "#55B98A",
-  accentMuted: "#1D3A2D",
-  success: "#6ED3A3",
-  warning: "#F0C36A",
-  error: "#FFB4AB",
-  offline: "#B5BDB7",
-  pending: "#E4B95F",
-  borderSubtle: "#343C36",
-  borderStrong: "#657067",
-  focusRing: "#6ED3A3",
-} as const;
+function legacyColors<
+  T extends {
+    background: string;
+    surface: string;
+    surfaceRaised: string;
+    textPrimary: string;
+    textSecondary: string;
+    textDisabled: string;
+    textOnAccent: string;
+    primary: string;
+    primaryPressed: string;
+    primaryMuted: string;
+    success: string;
+    warning: string;
+    error: string;
+    info: string;
+    borderSubtle: string;
+    borderStrong: string;
+    focus: string;
+  },
+>(colors: T) {
+  return {
+    ...colors,
+    surfaceElevated: colors.surfaceRaised,
+    textInverse: colors.textOnAccent,
+    accent: colors.primary,
+    accentPressed: colors.primaryPressed,
+    accentMuted: colors.primaryMuted,
+    offline: colors.info,
+    pending: colors.info,
+    focusRing: colors.focus,
+  };
+}
 
+export const lightColors = legacyColors(lightSystemColors);
+export const darkColors = legacyColors(darkSystemColors);
+export const jumuahLightColors = legacyColors(jumuahLightSystemColors);
+export const jumuahDarkColors = legacyColors(jumuahDarkSystemColors);
 export type ColorTokens = { [Key in keyof typeof lightColors]: string };

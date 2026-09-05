@@ -8,12 +8,21 @@ export function createExpoReminderScheduler() {
     scheduleNotificationAsync: (input) =>
       Notifications.scheduleNotificationAsync({
         content: input.content,
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DAILY,
-          hour: input.trigger.hour,
-          minute: input.trigger.minute,
-          channelId: input.trigger.channelId,
-        },
+        trigger:
+          input.trigger.weekday === undefined
+            ? {
+                type: Notifications.SchedulableTriggerInputTypes.DAILY,
+                hour: input.trigger.hour,
+                minute: input.trigger.minute,
+                channelId: input.trigger.channelId,
+              }
+            : {
+                type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+                weekday: input.trigger.weekday,
+                hour: input.trigger.hour,
+                minute: input.trigger.minute,
+                channelId: input.trigger.channelId,
+              },
       }),
     cancelScheduledNotificationAsync: (identifier) =>
       Notifications.cancelScheduledNotificationAsync(identifier),

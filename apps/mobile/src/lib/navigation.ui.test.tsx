@@ -29,7 +29,7 @@ function collectRoutes(
 }
 
 describe("MVP02 route inventory", () => {
-  it("registers every public shell route", () => {
+  it("registers the streamlined route inventory without legacy duplicates", () => {
     const config = getMockConfig("src/app") as {
       screens: Record<string, RouteNode>;
     };
@@ -37,27 +37,36 @@ describe("MVP02 route inventory", () => {
 
     for (const route of [
       "welcome",
-      "auth/email",
-      "auth/code",
-      "onboarding/profile",
-      "onboarding/consent",
+      "auth",
+      "onboarding",
       "today",
-      "entry/:id/edit",
+      "progress",
       "groups",
       "groups/create",
       "groups/:id",
       "groups/:id/members",
       "groups/:id/invites",
+      "groups/:id/manage",
       "join",
       "join/:token",
-      "settings",
-      "settings/profile",
-      "settings/reminder",
-      "settings/privacy",
-      "settings/legal",
-      "settings/support",
+      "account",
+      "account/profile",
+      "account/reminder",
+      "account/privacy",
+      "account/legal",
+      "account/support",
     ]) {
       expect(routes).toContain(route);
+    }
+    for (const retiredRoute of [
+      "auth/email",
+      "auth/code",
+      "onboarding/profile",
+      "onboarding/consent",
+      "entry/:id/edit",
+      "settings",
+    ]) {
+      expect(routes).not.toContain(retiredRoute);
     }
   });
 });

@@ -1,12 +1,5 @@
-import {
-  AppButton,
-  AppCard,
-  AppScreen,
-  AppText,
-  FormField,
-  StatusBanner,
-} from "@/components";
 import { useAuth } from "@/lib/auth";
+import { space } from "@/design-system";
 import {
   normalizeManualInviteCode,
   toGroupsError,
@@ -15,12 +8,11 @@ import {
   useGroups,
 } from "@/lib/groups";
 import { formatAppNumber, type TranslationKey, useTranslation } from "@/localization";
-import { spacing } from "@/theme";
+import { Banner, Button, Card, Screen, Section, Text, TextField } from "@/ui";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Alert, View, type TextStyle, type ViewStyle } from "react-native";
+import { Alert, View, type TextStyle } from "react-native";
 
-const retryButtonStyle: ViewStyle = { alignSelf: "flex-start" };
 const tabularNumberStyle: TextStyle = { fontVariant: ["tabular-nums"] };
 
 function createSecretKey(secret: InviteSecret) {
@@ -63,15 +55,8 @@ function StateCard({
   action?: ReactNode;
 }) {
   return (
-    <View style={{ gap: spacing.sm }}>
-      <AppCard
-        accessible
-        accessibilityRole="alert"
-        style={{ alignItems: "flex-start", justifyContent: "center", minHeight: 160 }}
-      >
-        <AppText variant="title">{title}</AppText>
-        <AppText>{body}</AppText>
-      </AppCard>
+    <View style={{ gap: space.sm }}>
+      <Banner title={title} body={body} tone="error" />
       {action}
     </View>
   );
@@ -218,16 +203,14 @@ export function JoinScreen({
     : "0";
 
   return (
-    <AppScreen>
+    <Screen>
       {allowManualCode ? (
-        <AppCard style={{ gap: spacing.md }}>
-          <AppText variant="title">{t("joinManualCodeTitle")}</AppText>
-          <AppText>{t("joinBody")}</AppText>
-          <FormField
+        <Section title={t("joinManualCodeTitle")}>
+          <Text variant="secondary">{t("joinBody")}</Text>
+          <TextField
             autoCapitalize="characters"
             autoCorrect={false}
             label={t("joinManualCodeLabel")}
-            hint={t("joinManualCodeHint")}
             value={manualCode}
             onChangeText={(value) => {
               setManualCode(value.toUpperCase());
@@ -238,13 +221,14 @@ export function JoinScreen({
               }
             }}
           />
-          <AppButton
+          <Text variant="secondary">{t("joinManualCodeHint")}</Text>
+          <Button
             label={t("joinManualCodeSubmit")}
             disabled={!manualCodeNormalized}
             loading={invitePreview.status === "loading" && activeSecretKind === "code"}
             onPress={handlePreviewSubmit}
           />
-        </AppCard>
+        </Section>
       ) : null}
 
       {activeSecret && invitePreview.status === "loading" ? (
@@ -260,10 +244,10 @@ export function JoinScreen({
           body={resolvedErrorMessage}
           action={
             activeSecret ? (
-              <AppButton
+              <Button
                 label={t("joinRefresh")}
                 variant="secondary"
-                style={retryButtonStyle}
+                style={{ alignSelf: "flex-start" }}
                 onPress={() => {
                   if (!activeSecretKind || !activeSecretValue) return;
                   setErrorCode(null);
@@ -272,10 +256,10 @@ export function JoinScreen({
                 }}
               />
             ) : invalidRouteSecret ? (
-              <AppButton
+              <Button
                 label={t("joinExitAction")}
                 variant="secondary"
-                style={retryButtonStyle}
+                style={{ alignSelf: "flex-start" }}
                 onPress={() => replace("/today")}
               />
             ) : undefined
@@ -285,31 +269,32 @@ export function JoinScreen({
 
       {previewData ? (
         <>
-          <AppCard style={{ gap: spacing.sm }}>
-            <AppText variant="title">{t("joinPreviewHeading")}</AppText>
-            <AppText variant="bodyStrong">{previewData.group.name}</AppText>
-            <AppText style={tabularNumberStyle}>{`${memberCountLabel} ${t(
-              "joinMembersLabel",
-            )}`}</AppText>
-            <AppText>{t("joinSharingExplanation")}</AppText>
-            <AppText>
+          <Section title={t("joinPreviewHeading")}>
+            <Card>
+              <Text variant="headline">{previewData.group.name}</Text>
+              <Text style={tabularNumberStyle}>{`${memberCountLabel} ${t(
+                "joinMembersLabel",
+              )}`}</Text>
+              <Text>{t("joinSharingExplanation")}</Text>
+              <Text variant="secondary">
               {previewData.group.leaderboardAnonymous
                 ? t("joinAnonymityOn")
                 : t("joinAnonymityOff")}
-            </AppText>
-            <AppText variant="caption">{t("joinNoShareBeforeConfirm")}</AppText>
+              </Text>
+              <Text variant="caption">{t("joinNoShareBeforeConfirm")}</Text>
             {previewData.alreadyActive ? (
-              <AppText variant="caption">{t("joinAlreadyActiveHint")}</AppText>
+                <Text variant="caption">{t("joinAlreadyActiveHint")}</Text>
             ) : null}
-          </AppCard>
+            </Card>
+          </Section>
           {resolvedErrorMessage ? (
-            <StatusBanner
+            <Banner
               title={t("joinErrorTitle")}
               body={resolvedErrorMessage}
               tone="error"
             />
           ) : null}
-          <AppButton
+          <Button
             label={t("joinAction")}
             loading={acceptPending}
             onPress={() => {
@@ -320,12 +305,12 @@ export function JoinScreen({
       ) : null}
 
       {hasPersistedToken ? (
-        <AppButton
+        <Button
           label={t("joinAbandonAction")}
           variant="destructive"
           onPress={requestAbandon}
         />
       ) : null}
-    </AppScreen>
+    </Screen>
   );
 }

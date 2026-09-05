@@ -1,10 +1,3 @@
-import {
-  AppButton,
-  AppCard,
-  AppScreen,
-  AppText,
-  FormField,
-} from "@/components";
 import { parseDisplayName, parseTimeZone } from "@/lib/auth/validation";
 import { useAuth } from "@/lib/auth";
 import { getSupabaseClient } from "@/lib/auth/supabase-client";
@@ -14,6 +7,7 @@ import {
 } from "@/lib/settings/settings-gateway";
 import { getTimeZoneOptions } from "@/lib/settings/timezones";
 import { useTranslation } from "@/localization";
+import { Banner, Button, Card, Screen, Section, Text, TextField } from "@/ui";
 import { Host, Picker } from "@expo/ui";
 import { useEffect, useMemo, useState } from "react";
 
@@ -87,26 +81,33 @@ export function ProfileSettingsScreen({ gateway }: { gateway?: SettingsGateway }
   };
 
   return (
-    <AppScreen>
+    <Screen>
       {loadError ? (
-        <AppText accessibilityLiveRegion="polite">{t("settingsProfileLoadFailed")}</AppText>
+        <Banner
+          body={t("settingsProfileLoadFailed")}
+          title={t("stateErrorTitle")}
+          tone="error"
+        />
       ) : null}
       {auth.errorCode === "PROFILE_SAVE_FAILED" ? (
-        <AppText accessibilityLiveRegion="polite">{t("profileSaveFailed")}</AppText>
+        <Banner body={t("profileSaveFailed")} title={t("stateErrorTitle")} tone="error" />
       ) : null}
-      <FormField
-        label={t("profileNameLabel")}
-        hint={t("profileNameHint")}
-        error={displayName.length > 0 && !nameValid ? t("profileNameInvalid") : undefined}
-        value={displayName}
-        onChangeText={(value) => {
-          auth.clearError();
-          setDisplayName(value);
-        }}
-      />
-      <AppCard>
-        <AppText variant="bodyStrong">{t("profileTimezoneLabel")}</AppText>
-        <AppText variant="caption">{t("settingsProfileTimezoneHint")}</AppText>
+      <Section>
+        <TextField
+          accessibilityHint={t("profileNameHint")}
+          label={t("profileNameLabel")}
+          error={displayName.length > 0 && !nameValid ? t("profileNameInvalid") : undefined}
+          value={displayName}
+          onChangeText={(value) => {
+            auth.clearError();
+            setDisplayName(value);
+          }}
+        />
+        <Text variant="secondary">{t("profileNameHint")}</Text>
+      </Section>
+      <Card>
+        <Text variant="headline">{t("profileTimezoneLabel")}</Text>
+        <Text variant="secondary">{t("settingsProfileTimezoneHint")}</Text>
         <Host matchContents>
           <Picker<string>
             appearance="menu"
@@ -118,14 +119,14 @@ export function ProfileSettingsScreen({ gateway }: { gateway?: SettingsGateway }
             ))}
           </Picker>
         </Host>
-      </AppCard>
-      <AppText variant="caption">{t("settingsProfileTimezoneImpact")}</AppText>
-      <AppButton
+      </Card>
+      <Text variant="secondary">{t("settingsProfileTimezoneImpact")}</Text>
+      <Button
         disabled={!loaded || !nameValid || auth.busy}
         loading={auth.busy}
         label={t("settingsProfileSave")}
         onPress={() => void save()}
       />
-    </AppScreen>
+    </Screen>
   );
 }

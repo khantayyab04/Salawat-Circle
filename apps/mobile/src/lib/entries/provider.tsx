@@ -30,6 +30,7 @@ type EntriesContextValue = EntriesStore["snapshot"] & {
   resetOfflineState(): Promise<void>;
   keepServerVersion(entryId?: string): Promise<void>;
   reapplyConflict(entryId?: string): Promise<void>;
+  loadProgressOverview(days?: number): Promise<void>;
 };
 
 const EntriesContext = createContext<EntriesContextValue | null>(null);
@@ -189,6 +190,7 @@ export function EntriesProvider({
     resetOfflineState: () => store.resetOfflineState(),
     keepServerVersion: (entryId) => store.keepServerVersion(entryId),
     reapplyConflict: (entryId) => store.reapplyConflict(entryId),
+    loadProgressOverview: (days) => store.loadProgressOverview(days),
   };
 
   return (

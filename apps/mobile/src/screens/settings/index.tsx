@@ -1,12 +1,6 @@
-import {
-  AppButton,
-  AppCard,
-  AppScreen,
-  AppText,
-} from "@/components";
 import { useAuth } from "@/lib/auth";
 import { useTranslation, type LanguagePreference } from "@/localization";
-import { spacing } from "@/theme";
+import { Banner, Button, Card, Screen, Section, Text } from "@/ui";
 import Constants from "expo-constants";
 import { Host, List, ListItem, Picker } from "@expo/ui";
 import { useRouter } from "expo-router";
@@ -43,10 +37,12 @@ export function SettingsScreen() {
     );
   };
   return (
-    <AppScreen>
-      <AppCard>
-        <AppText variant="bodyStrong">{t("settingsLanguage")}</AppText>
-        <AppText variant="caption">{t("settingsLanguageHint")}</AppText>
+    <Screen>
+      <Section>
+        <Text accessibilityRole="header" variant="title">
+          {t("settingsLanguage")}
+        </Text>
+        <Text variant="secondary">{t("settingsLanguageHint")}</Text>
         <Host matchContents>
           <Picker<LanguagePreference>
             appearance="menu"
@@ -59,78 +55,96 @@ export function SettingsScreen() {
             <Picker.Item label={t("settingsLanguageEnglish")} value="en" />
           </Picker>
         </Host>
-      </AppCard>
+      </Section>
       <Host matchContents>
         <List>
-          <ListItem onPress={() => router.push("/settings/profile")}>
+          <ListItem onPress={() => router.push("/account/profile")}>
             {t("settingsProfile")}
           </ListItem>
-          <ListItem onPress={() => router.push("/settings/reminder")}>
+          <ListItem onPress={() => router.push("/account/reminder")}>
             {t("settingsReminder")}
           </ListItem>
-          <ListItem onPress={() => router.push("/settings/privacy")}>
+          <ListItem onPress={() => router.push("/account/privacy")}>
             {t("settingsPrivacy")}
           </ListItem>
-          <ListItem onPress={() => router.push("/settings/legal")}>
+          <ListItem onPress={() => router.push("/account/legal")}>
             {t("settingsLegal")}
           </ListItem>
-          <ListItem onPress={() => router.push("/settings/support")}>
+          <ListItem onPress={() => router.push("/account/support")}>
             {t("settingsSupport")}
           </ListItem>
         </List>
       </Host>
-      {auth.errorCode === "SIGN_OUT_FAILED" ? (
-        <AppText accessibilityLiveRegion="polite">
-          {t("settingsSignOutFailed")}
-        </AppText>
-      ) : null}
-      <AppButton
-        label={t("settingsSignOutEverywhere")}
-        loading={auth.busy}
-        variant="secondary"
-        onPress={confirmSignOutEverywhere}
-      />
-      <AppButton
-        label={t("settingsSignOut")}
-        loading={auth.busy}
-        variant="destructive"
-        onPress={() => void handleSignOut()}
-      />
-      <AppText variant="caption">{`${t("settingsVersion")}: ${
-        Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? "0.1.0"
-      }`}</AppText>
-    </AppScreen>
+      <Section>
+        <Text accessibilityRole="header" variant="title">
+          {t("settingsDangerZone")}
+        </Text>
+        {auth.errorCode === "SIGN_OUT_FAILED" ? (
+          <Banner
+            body={t("settingsSignOutFailed")}
+            title={t("stateErrorTitle")}
+            tone="error"
+          />
+        ) : null}
+        <Button
+          label={t("settingsSignOutEverywhere")}
+          loading={auth.busy}
+          variant="secondary"
+          onPress={confirmSignOutEverywhere}
+        />
+        <Button
+          label={t("settingsSignOut")}
+          loading={auth.busy}
+          variant="destructive"
+          onPress={() => void handleSignOut()}
+        />
+      </Section>
+      <Text variant="caption">{`${t("settingsVersion")}: ${
+        Constants.expoConfig?.version ??
+        Constants.nativeAppVersion ??
+        t("settingsVersionUnavailable")
+      }`}</Text>
+    </Screen>
   );
 }
 
 export function PrivacyScreen() {
   const { t } = useTranslation();
   return (
-    <AppScreen>
-      <AppButton disabled label={t("privacyExport")} variant="secondary" />
-      <AppButton disabled label={t("privacyDelete")} variant="destructive" />
-    </AppScreen>
+    <Screen>
+      <Card>
+        <Button disabled label={t("privacyExport")} variant="secondary" />
+      </Card>
+      <Section>
+        <Text accessibilityRole="header" variant="title">
+          {t("settingsDangerZone")}
+        </Text>
+        <Button disabled label={t("privacyDelete")} variant="destructive" />
+      </Section>
+    </Screen>
   );
 }
+
 export function LegalScreen() {
   const { t } = useTranslation();
   return (
-    <AppScreen>
-      <AppCard style={{ gap: spacing.lg }}>
-        <AppText>{t("legalPrivacy")}</AppText>
-        <AppText>{t("legalTerms")}</AppText>
-        <AppText>{t("legalImprint")}</AppText>
-      </AppCard>
-    </AppScreen>
+    <Screen>
+      <Card>
+        <Text>{t("legalPrivacy")}</Text>
+        <Text>{t("legalTerms")}</Text>
+        <Text>{t("legalImprint")}</Text>
+      </Card>
+    </Screen>
   );
 }
+
 export function SupportScreen() {
   const { t } = useTranslation();
   return (
-    <AppScreen>
-      <AppCard>
-        <AppText>{t("supportBody")}</AppText>
-      </AppCard>
-    </AppScreen>
+    <Screen>
+      <Card>
+        <Text>{t("supportBody")}</Text>
+      </Card>
+    </Screen>
   );
 }

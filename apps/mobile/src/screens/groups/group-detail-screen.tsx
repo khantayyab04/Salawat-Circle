@@ -1,11 +1,4 @@
 import {
-  AppButton,
-  AppCard,
-  AppText,
-  FormField,
-  StatusBanner,
-} from "@/components";
-import {
   useGroups,
   type GroupsLeaderboardPeriodState,
   type GroupLeaderboardRow,
@@ -19,7 +12,15 @@ import {
   type TranslationKey,
   useTranslation,
 } from "@/localization";
-import { radius, spacing, useAppTheme } from "@/theme";
+import { spacing, useAppTheme } from "@/theme";
+import {
+  AppCard,
+  AppText,
+  Button,
+  FormField,
+  SegmentedControl,
+  StatusBanner,
+} from "@/ui";
 import { Host, Switch } from "@expo/ui";
 import {
   Stack,
@@ -38,7 +39,6 @@ import {
 import {
   AppState,
   FlatList,
-  Pressable,
   RefreshControl,
   View,
   useWindowDimensions,
@@ -187,7 +187,7 @@ function StateCard({
         <AppText>{body}</AppText>
       </AppCard>
       {actionLabel && onAction ? (
-        <AppButton
+        <Button
           label={actionLabel}
           variant="secondary"
           style={retryButtonStyle}
@@ -197,46 +197,6 @@ function StateCard({
     </View>
   );
 }
-
-const PeriodButton = memo(function PeriodButton({
-  label,
-  selected,
-  onPress,
-  testID,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-  testID: string;
-}) {
-  const { colors } = useAppTheme();
-
-  return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        minHeight: 44,
-        minWidth: 44,
-        flex: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        borderRadius: radius.pill,
-        borderCurve: "continuous",
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.sm,
-        backgroundColor: selected ? colors.accentMuted : colors.surface,
-        borderColor: selected ? colors.accent : colors.borderSubtle,
-        borderWidth: 1,
-        opacity: pressed ? 0.8 : 1,
-      })}
-    >
-      <AppText variant={selected ? "bodyStrong" : "body"}>{label}</AppText>
-    </Pressable>
-  );
-});
 
 const LeaderboardRow = memo(function LeaderboardRow({
   row,
@@ -301,11 +261,13 @@ export function GroupDetailScreen() {
     mutation,
     online,
     loadLeaderboard,
+    loadInsights,
     refreshGroups,
     setAnonymity,
     updateGroupName,
     leaveGroup,
     deleteGroup,
+    insightsByGroup,
   } = useGroups();
 
   const groupId = readGroupId(id);
@@ -348,6 +310,7 @@ export function GroupDetailScreen() {
     timeZone,
     t("groupDetailCalculatedUnknown"),
   );
+  const insights = groupId ? insightsByGroup?.[groupId] : null;
 
   const effectiveErrorCode =
     !groupId
@@ -390,6 +353,11 @@ export function GroupDetailScreen() {
       );
     }, [groupId, loadLeaderboard]),
   );
+
+  useEffect(() => {
+    if (!groupId || !loadInsights) return;
+    void loadInsights(groupId).catch(() => undefined);
+  }, [groupId, loadInsights]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
@@ -544,32 +512,53 @@ export function GroupDetailScreen() {
           "groupDetailCalculatedLabel",
         )}: ${calculatedText}`}</AppText>
       </AppCard>
+      {insights ? (
+        <AppCard>
+          <AppText variant="bodyStrong">{t("groupInsightsCollective")}</AppText>
+          <AppText style={tabularNumberStyle}>{`${t(
+            "groupInsightsWeekTotal",
+          )}: ${formatNumeric(insights.weekTotal, localeTag)}`}</AppText>
+          <AppText>{t("groupInsightsActiveMembers", {
+            active: insights.activeMembers,
+            total: memberCountText,
+          })}</AppText>
+          {insights.goalAmount ? (
+            <>
+              <AppText style={tabularNumberStyle}>{`${t(
+                "groupInsightsGoal",
+              )}: ${formatNumeric(insights.goalAmount, localeTag)}`}</AppText>
+              <AppText style={tabularNumberStyle}>{t(
+                "groupInsightsRemaining",
+                { amount: formatNumeric(insights.remaining ?? "0", localeTag) },
+              )}</AppText>
+              <AppText variant="caption">{t("groupInsightsPerPersonDay", {
+                amount: formatNumeric(insights.perPersonPerDay ?? "0", localeTag),
+                days: insights.daysRemaining,
+              })}</AppText>
+            </>
+          ) : null}
+        </AppCard>
+      ) : null}
+
+      <SegmentedControl
+        options={[
+          { label: t("groupDetailWeek"), value: "week" },
+          { label: t("groupDetailAllTime"), value: "all_time" },
+        ]}
+        value={period}
+        onChange={switchPeriod}
+      />
 
       <AppCard style={{ gap: spacing.sm }}>
-        <View
-          accessibilityRole="tablist"
-          style={{
-            flexDirection: "row",
-            gap: spacing.sm,
+        <Button
+          label={t("groupManage")}
+          variant="secondary"
+          onPress={() => {
+            if (!groupId) return;
+            push({ pathname: "/groups/[id]/manage", params: { id: groupId } });
           }}
-        >
-          <PeriodButton
-            testID="group-detail-period-week"
-            label={t("groupDetailWeek")}
-            selected={period === "week"}
-            onPress={() => switchPeriod("week")}
-          />
-          <PeriodButton
-            testID="group-detail-period-all-time"
-            label={t("groupDetailAllTime")}
-            selected={period === "all_time"}
-            onPress={() => switchPeriod("all_time")}
-          />
-        </View>
-      </AppCard>
-
-      <AppCard style={{ gap: spacing.sm }}>
-        <AppButton
+        />
+        <Button
           label={t("groupMembers")}
           variant="secondary"
           onPress={() => {
@@ -579,7 +568,7 @@ export function GroupDetailScreen() {
         />
         {isOwner ? (
           <>
-            <AppButton
+            <Button
               label={t("groupDetailRenameAction")}
               variant="secondary"
               disabled={managementPending}
@@ -589,7 +578,7 @@ export function GroupDetailScreen() {
                 setManagementMode("rename");
               }}
             />
-            <AppButton
+            <Button
               label={t("groupDetailDeleteAction")}
               variant="destructive"
               disabled={managementPending}
@@ -601,7 +590,7 @@ export function GroupDetailScreen() {
             />
           </>
         ) : (
-          <AppButton
+          <Button
             label={t("groupDetailLeaveAction")}
             variant="secondary"
             disabled={managementPending}
@@ -621,13 +610,13 @@ export function GroupDetailScreen() {
               onChangeText={setNextGroupName}
             />
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
-              <AppButton
+              <Button
                 label={t("commonCancel")}
                 variant="secondary"
                 disabled={managementPending}
                 onPress={() => setManagementMode(null)}
               />
-              <AppButton
+              <Button
                 label={t("groupDetailRenameSaveAction")}
                 disabled={managementPending || nextGroupName.trim().length < 2}
                 loading={managementPending}
@@ -640,13 +629,13 @@ export function GroupDetailScreen() {
           <View style={{ gap: spacing.sm }}>
             <AppText>{t("groupDetailLeaveConfirmBody")}</AppText>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
-              <AppButton
+              <Button
                 label={t("commonCancel")}
                 variant="secondary"
                 disabled={managementPending}
                 onPress={() => setManagementMode(null)}
               />
-              <AppButton
+              <Button
                 label={t("groupDetailLeaveConfirmAction")}
                 variant="destructive"
                 loading={managementPending}
@@ -665,13 +654,13 @@ export function GroupDetailScreen() {
               onChangeText={setDeleteConfirmation}
             />
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
-              <AppButton
+              <Button
                 label={t("commonCancel")}
                 variant="secondary"
                 disabled={managementPending}
                 onPress={() => setManagementMode(null)}
               />
-              <AppButton
+              <Button
                 label={t("groupDetailDeleteConfirmAction")}
                 variant="destructive"
                 disabled={managementPending || deleteConfirmation !== groupName}
@@ -693,9 +682,8 @@ export function GroupDetailScreen() {
               />
             </Host>
             <AppText variant="caption">{t("groupDetailAnonymityOwnerHint")}</AppText>
-            <AppButton
+            <Button
               label={t("groupDetailInviteAction")}
-              variant="secondary"
               onPress={() => {
                 if (!groupId) return;
                 push({ pathname: "/groups/[id]/invites", params: { id: groupId } });
@@ -730,7 +718,7 @@ export function GroupDetailScreen() {
             tone={resolvedErrorCopy.tone}
           />
           <AppText variant="caption">{resolvedErrorCopy.body}</AppText>
-          <AppButton
+          <Button
             label={t("groupDetailRefresh")}
             variant="secondary"
             style={retryButtonStyle}
@@ -783,7 +771,7 @@ export function GroupDetailScreen() {
         }
         ListFooterComponent={
           groupPeriodState.hasMore ? (
-            <AppButton
+            <Button
               label={t("groupDetailLoadMore")}
               loading={groupPeriodState.loadingMore}
               variant="secondary"

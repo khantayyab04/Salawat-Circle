@@ -19,10 +19,22 @@ export async function clearActiveReminderForLogout(
   const reminder = await store.load(accountId);
   if (!reminder) return;
   if (reminder.notificationId) await scheduler.cancel(reminder.notificationId);
+  if (reminder.jumuah?.notificationId) {
+    await scheduler.cancel(reminder.jumuah.notificationId);
+  }
   await store.save(accountId, {
     hour: reminder.hour,
     minute: reminder.minute,
     enabled: false,
     notificationId: null,
+    ...(reminder.jumuah
+      ? {
+          jumuah: {
+            ...reminder.jumuah,
+            enabled: false,
+            notificationId: null,
+          },
+        }
+      : {}),
   });
 }

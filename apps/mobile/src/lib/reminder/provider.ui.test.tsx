@@ -24,6 +24,15 @@ function Consumer() {
   return <Text>{`${reminder.permission}:${reminder.enabled}:${reminder.time.hour}`}</Text>;
 }
 
+function JumuahConsumer() {
+  const reminder = useReminder();
+  return (
+    <Text>
+      {`${reminder.jumuah.enabled}:${reminder.jumuah.time.hour}:${reminder.jumuah.time.minute}`}
+    </Text>
+  );
+}
+
 function EnableConsumer() {
   const reminder = useReminder();
   return (
@@ -44,6 +53,7 @@ describe("ReminderProvider", () => {
       getPermission: jest.fn(async () => "not_asked" as const),
       requestPermission: jest.fn(async () => "granted" as const),
       scheduleDaily: jest.fn(async () => "notification-1"),
+      scheduleFriday: jest.fn(async () => "friday-notification-1"),
       cancel: jest.fn(async () => undefined),
       list: jest.fn(async () => []),
     };
@@ -84,6 +94,7 @@ describe("ReminderProvider", () => {
         getPermission: async () => "granted",
         requestPermission: async () => "granted",
         scheduleDaily: async () => "notification-1",
+        scheduleFriday: async () => "friday-notification-1",
         cancel: async () => undefined,
         list: async () => [{ identifier: "notification-1" }],
       },
@@ -95,6 +106,43 @@ describe("ReminderProvider", () => {
     );
 
     await waitFor(() => expect(view.getByText("granted:true:7")).toBeTruthy());
+  });
+
+  it("publishes the configured Friday reminder separately from the daily reminder", async () => {
+    const controller = new ReminderController(
+      {
+        activate: async () => undefined,
+        getActiveAccount: async () => null,
+        load: async () => ({
+          hour: 7,
+          minute: 30,
+          enabled: false,
+          notificationId: null,
+          jumuah: {
+            hour: 12,
+            minute: 30,
+            enabled: true,
+            notificationId: "friday-notification-1",
+          },
+        }),
+        save: async () => undefined,
+      },
+      {
+        getPermission: async () => "granted",
+        requestPermission: async () => "granted",
+        scheduleDaily: async () => "notification-1",
+        scheduleFriday: async () => "friday-notification-1",
+        cancel: async () => undefined,
+        list: async () => [{ identifier: "friday-notification-1" }],
+      },
+    );
+    const view = await render(
+      <ReminderProvider accountId="account-1" controller={controller}>
+        <JumuahConsumer />
+      </ReminderProvider>,
+    );
+
+    await waitFor(() => expect(view.getByText("true:12:30")).toBeTruthy());
   });
 
   it("publishes busy before an in-flight reminder action settles", async () => {
@@ -113,6 +161,7 @@ describe("ReminderProvider", () => {
         getPermission: async () => "not_asked",
         requestPermission: () => permission,
         scheduleDaily: async () => "notification-1",
+        scheduleFriday: async () => "friday-notification-1",
         cancel: async () => undefined,
         list: async () => [],
       },
@@ -153,6 +202,7 @@ describe("ReminderProvider", () => {
         getPermission: async () => "granted",
         requestPermission: async () => "granted",
         scheduleDaily: async () => "notification-1",
+        scheduleFriday: async () => "friday-notification-1",
         cancel: async () => undefined,
         list: async () => [],
       },
@@ -188,6 +238,7 @@ describe("ReminderProvider", () => {
         getPermission: async () => "granted",
         requestPermission: async () => "granted",
         scheduleDaily: async () => "notification-1",
+        scheduleFriday: async () => "friday-notification-1",
         cancel: async () => undefined,
         list: async () => [],
       },

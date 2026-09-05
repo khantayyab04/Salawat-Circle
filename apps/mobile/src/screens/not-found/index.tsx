@@ -1,4 +1,4 @@
-import { AppButton, AppScreen, AppText } from "@/components";
+import { AppButton, AppScreen, AppText } from "@/ui";
 import { useTranslation } from "@/localization";
 import { useRouter } from "expo-router";
 export function NotFoundScreen() {

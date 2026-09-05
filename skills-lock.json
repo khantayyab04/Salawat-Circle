@@ -1,0 +1,210 @@
+{
+  "version": 1,
+  "skills": {
+    "brainstorming": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/superpowers-main",
+      "sourceType": "local",
+      "computedHash": "b58d55b64742ecd37923985ec7bdfbe678ffbcb9895562abd28c0a32dcacd7fb"
+    },
+    "dispatching-parallel-agents": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/superpowers-main",
+      "sourceType": "local",
+      "computedHash": "b011107f17188e0b2898bb1856b5bac8b49537cc86e737c82126558a235bd62a"
+    },
+    "eas-app-stores": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "4092e637ac0db1ac728accd9621f0e92d25934dabdc326ea119ec0c7437be519"
+    },
+    "eas-hosting": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "4d24f5471371668a0ee5a859a2c1a145fa0d4b2b30e8347f2ba06b001a1ace12"
+    },
+    "eas-observe": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "ee5f33e5de29ca3131763f68c83efa7e4fb6e9ce43b4d9565ab4e6765799c4e0"
+    },
+    "eas-simulator": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "772c471d1144b1d0665c00a36d6cfb16ee499c2c42d13913ae513b72380715b5"
+    },
+    "eas-update-insights": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "d5d79f243bfaab0324e87581016cae7ad7b6392439134418827b4408863c0b12"
+    },
+    "eas-workflows": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "40c39c7c73597ce263e35f2e6bbc6e534321b5365f70beb772085e9adbc3ec5c"
+    },
+    "executing-plans": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/superpowers-main",
+      "sourceType": "local",
+      "computedHash": "78a07800ee99a5861ae10be59d79fad085fdca10444e8aaeb2691597e357cff8"
+    },
+    "expo-animation": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "55d68c0a4507340b9f1da38337884ab2958c1b051197600e628151fb3cceb077"
+    },
+    "expo-app-clip": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "6fb608b7dace828f2f85ed16e7a71314260042c57307e657cb0d8a660257266c"
+    },
+    "expo-brownfield": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "07ce124e416f89a24c21c57402c03960a16e573675752be6a89735fba073b9d4"
+    },
+    "expo-data-fetching": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "422197195d96fd32036f92001cebd1590caf6445ba338aabc0c0b0cff5fa8977"
+    },
+    "expo-design-system": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "926d79a5c2246a6dd57400089b4a72d2c67c1dd49c5a1cfe6cab807a49cd1aba"
+    },
+    "expo-dev-client": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "41496a5bb64bb753640c3a7de9d58fce81330fbba61f822dabbc04b5f1d7447d"
+    },
+    "expo-dom": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "9841a2ee168b41e1d1377b20a1c041aa89843b5d507db73b43693d058ea32a27"
+    },
+    "expo-examples": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "1d525c773458f166590f40cd3575d6fca440786fc99fdf58d4704af77d1495df"
+    },
+    "expo-migrate-module": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "dda77f2d6afbbe70e8d6bdb399265e4bb0dc03858aff4d6778f598c1f7e6d5ca"
+    },
+    "expo-module": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "9c968a5bcb153ccdac1edbe014145ae37d6e6dac06846bfad7b2faaf890d88f0"
+    },
+    "expo-native-ui": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "3bebacbb5882f72f89322391b2b82f643cea15c0e2b3e27c39659969a6addd75"
+    },
+    "expo-overview": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "266daf319fc497e4f65ec7fc2d03d9f1331b0ca87aff446103cd3f938bdcdc0c"
+    },
+    "expo-project-structure": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "00fd1404bb984f058c97296d28dce87c701ea4213b30c864babe24ed6cf12dc0"
+    },
+    "expo-router": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "b5baa66d0024536b1410136b05e83d749fb5a1c8b72326b5096193c03523361c"
+    },
+    "expo-skill-eval": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "01213c423623d6f4ceb3f610c05ec3e69f772675c329144c35465162f7794152"
+    },
+    "expo-skill-feedback": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "7964b0683a81a9e2932151d5f1ddda27f60f22932e38c1687e60f754fdb45277"
+    },
+    "expo-tailwind-setup": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "fe7cb21735243b2701a3a1e35be6fbfd7cff6a146447200d4b14d225b619a46d"
+    },
+    "expo-ui": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "0e3b343c6e60acab6f4fd4ae6364973f3641ee6de609f3e469bf0347302ead9e"
+    },
+    "expo-upgrade": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "77aea7026b8cfc732fd09587a9ee612d4abe5c7c82d00b0370f1079b9f3c59ce"
+    },
+    "expo-web-to-native": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/skills-main",
+      "sourceType": "local",
+      "computedHash": "8b438fca8004ae91514c9ad8e2fd34566cef0866065451a6e89279c52992a966"
+    },
+    "finishing-a-development-branch": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/superpowers-main",
+      "sourceType": "local",
+      "computedHash": "4f571e7befb8b0946d9d7770232c818812412e9ab1dfb811f847edfba1fc6275"
+    },
+    "make-interfaces-feel-better": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/make-interfaces-feel-better-main",
+      "sourceType": "local",
+      "computedHash": "c8b15b529e088a318b2d3c17f0a97e15a7b1ce9ddab8bbdf9209e6ab7315cbde"
+    },
+    "receiving-code-review": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/superpowers-main",
+      "sourceType": "local",
+      "computedHash": "59361179fc9225173e0c145ffd9bafbf9fdbf8b43ce3dc308497a0b4f83a6063"
+    },
+    "requesting-code-review": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/superpowers-main",
+      "sourceType": "local",
+      "computedHash": "004f340ae65811095d6a9bb0a759c87d0a8085c5e705dbb019b011626293d2e9"
+    },
+    "subagent-driven-development": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/superpowers-main",
+      "sourceType": "local",
+      "computedHash": "367cc1d3216d6672b947c8c6583dbd6440ea407beb6da75a97d3a8ee1a23640a"
+    },
+    "systematic-debugging": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/superpowers-main",
+      "sourceType": "local",
+      "computedHash": "a2750dfbaed1690da73b120254892c4f926b4576cb82eb16fc877783941fe39b"
+    },
+    "test-driven-development": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/superpowers-main",
+      "sourceType": "local",
+      "computedHash": "a4126a9c5f17be3c228aa9e5755898ade283448b86099f56f40852e8c14532be"
+    },
+    "using-git-worktrees": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/superpowers-main",
+      "sourceType": "local",
+      "computedHash": "48c8a1040e378e0cb7208107294e3afa9067b9370c3f33b49a443eb6b7528b0d"
+    },
+    "using-superpowers": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/superpowers-main",
+      "sourceType": "local",
+      "computedHash": "c7abe8bdc2099bbe4f245454d32c7563ccd2bb41dcc218b02b461c2acc3c6ae6"
+    },
+    "verification-before-completion": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/superpowers-main",
+      "sourceType": "local",
+      "computedHash": "b529822bdac4b197b180fe12225cff86b930b65910435103c10622df7f041651"
+    },
+    "writing-plans": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/superpowers-main",
+      "sourceType": "local",
+      "computedHash": "27c75044e444a4fc68798c3f799dc23eaff3a6bfabff32e6ad75bb20f881c094"
+    },
+    "writing-skills": {
+      "source": "../../../../var/folders/tl/gh1q6ym11d9gyjvp4lm0yztw0000gn/T/tmp.51CWdtVY2c/superpowers-main",
+      "sourceType": "local",
+      "computedHash": "e5dfc1a942f56dc757421b0d87ae1f38ab693ebc71138e65268fd408bb5c93d3"
+    }
+  }
+}

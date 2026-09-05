@@ -7,7 +7,7 @@ import {
   OfflineLoadErrorCard,
   OfflineRecoveryCard,
   StateFeedback,
-} from "@/components";
+} from "@/ui";
 import {
   getPersonalDate,
   isEntryDateAllowed,

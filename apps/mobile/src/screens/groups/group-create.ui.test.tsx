@@ -80,9 +80,11 @@ const copy: Record<string, string> = {
     "Andere Mitglieder sehen dann stabile Aliasnamen statt Anzeigenamen.",
   groupCreateAnonymousCaveat:
     "Hinweis: Wenn jemand die Rangliste vorher mit Anzeigenamen gesehen hat, wirkt die Anonymisierung nicht rückwirkend.",
+  groupCreateOptionsTitle: "Sichtbarkeit",
   groupCreateRulesLabel: "Ich akzeptiere die Nutzungsbedingungen und Gruppenregeln.",
   groupCreateRulesHint:
     "Mein Anzeigename und aggregierte Salawat-Werte werden mit aktiven Gruppenmitgliedern geteilt.",
+  groupCreateConsentTitle: "Bestätigung",
   groupCreateLegalAction: "Nutzungsbedingungen und Regeln öffnen",
   groupCreateLegalActionHint:
     "Öffnet die rechtlichen Hinweise und Nutzungsbedingungen.",
@@ -208,6 +210,13 @@ beforeEach(() => {
 });
 
 describe("MVP08 group create screen", () => {
+  it("separates visibility and consent into labeled sections", async () => {
+    const view = await render(<GroupCreateScreen />);
+
+    expect(view.getByText("Sichtbarkeit")).toBeTruthy();
+    expect(view.getByText("Bestätigung")).toBeTruthy();
+  });
+
   it("prefills timezone, validates input, and requires explicit rules acceptance", async () => {
     const view = await render(<GroupCreateScreen />);
 
@@ -239,7 +248,7 @@ describe("MVP08 group create screen", () => {
     fireEvent.press(
       view.getByRole("button", { name: "Nutzungsbedingungen und Regeln öffnen" }),
     );
-    expect(mockPush).toHaveBeenCalledWith("/settings/legal");
+    expect(mockPush).toHaveBeenCalledWith("/account/legal");
 
     expect(mockCreateGroup).not.toHaveBeenCalled();
   });
@@ -522,6 +531,6 @@ describe("MVP08 group create screen", () => {
       paddingHorizontal: 0,
     });
     fireEvent.press(legalButton);
-    expect(mockPush).toHaveBeenCalledWith("/settings/legal");
+    expect(mockPush).toHaveBeenCalledWith("/account/legal");
   });
 });
