@@ -120,6 +120,36 @@ describe("TodayScreen recording", () => {
     expect(view.getByTestId("staged-amount").props.children).toBe("0");
   });
 
+  it("adds an arbitrary whole-number amount through the custom amount sheet", async () => {
+    const view = await render(<TodayScreen />);
+
+    await fireEvent.press(
+      view.getByRole("button", { name: "todayCustomAmount" }),
+    );
+    await fireEvent.changeText(view.getByTestId("custom-amount-input"), "313");
+    await fireEvent.press(
+      view.getByRole("button", { name: "todayApplyCustom" }),
+    );
+
+    expect(view.getByTestId("staged-amount").props.children).toBe("313");
+    expect(view.queryByTestId("custom-amount-input")).toBeNull();
+  });
+
+  it("does not stage an invalid custom amount", async () => {
+    const view = await render(<TodayScreen />);
+
+    await fireEvent.press(
+      view.getByRole("button", { name: "todayCustomAmount" }),
+    );
+    await fireEvent.changeText(view.getByTestId("custom-amount-input"), "0");
+
+    expect(
+      view.getByRole("button", { name: "todayApplyCustom" }).props
+        .accessibilityState.disabled,
+    ).toBe(true);
+    expect(view.getByTestId("staged-amount").props.children).toBe("0");
+  });
+
   it("cannot record while nothing is staged", async () => {
     const view = await render(<TodayScreen />);
 

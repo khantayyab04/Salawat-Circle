@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(13);
+select plan(15);
 
 -- Owner of the series under test.
 insert into auth.users (
@@ -144,6 +144,37 @@ select is(
   (public.get_progress_series('UTC', 'all')->>'longest_streak')::integer,
   2,
   'the longest streak is reported alongside the current one'
+);
+
+-- Streaks deliberately span the chart's selected range. This 35-day run
+-- crosses the start of the current month, so calculating against the month
+-- buckets alone would truncate it to the days after the month began.
+set local role postgres;
+
+insert into public.salawat_entries (
+  id, user_id, amount, entry_date, timezone, recorded_at_client
+)
+select
+  gen_random_uuid(),
+  '33333333-3333-4333-8333-333333333331',
+  1,
+  (now() at time zone 'UTC')::date - day_offset,
+  'UTC',
+  now() - make_interval(days => day_offset)
+from generate_series(0, 34) as day_offset;
+
+set local role authenticated;
+
+select is(
+  (public.get_progress_series('UTC', 'month')->>'current_streak')::integer,
+  35,
+  'the active streak continues before the selected chart range'
+);
+
+select is(
+  (public.get_progress_series('UTC', 'month')->>'longest_streak')::integer,
+  35,
+  'the longest streak is not truncated by the selected chart range'
 );
 
 -- Goal accounting -----------------------------------------------------------

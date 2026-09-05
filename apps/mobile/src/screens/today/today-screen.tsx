@@ -1,7 +1,9 @@
 import {
   AmountChip,
   AmountText,
+  AppButton,
   AppScreen,
+  AppSheet,
   GoalSheet,
   OfflineLoadErrorCard,
   OfflineRecoveryCard,
@@ -30,7 +32,13 @@ import Pencil from "lucide-react-native/icons/pencil";
 import Plus from "lucide-react-native/icons/plus";
 import X from "lucide-react-native/icons/x";
 import { useState } from "react";
-import { Pressable, Text, View, useWindowDimensions } from "react-native";
+import {
+  Pressable,
+  Text,
+  TextInput,
+  View,
+  useWindowDimensions,
+} from "react-native";
 
 const quickAmounts = [100, 200, 500, 1000] as const;
 
@@ -44,6 +52,8 @@ export function TodayScreen() {
   const [saveFailed, setSaveFailed] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
   const [goalFailed, setGoalFailed] = useState(false);
+  const [customAmountOpen, setCustomAmountOpen] = useState(false);
+  const [customAmount, setCustomAmount] = useState("");
 
   if (entries.offlineLoadErrorCode === "INVALID_OFFLINE_STATE") {
     return (
@@ -95,6 +105,11 @@ export function TodayScreen() {
   });
 
   const stagedText = number(String(tally.amount));
+  const parsedCustomAmount = Number(customAmount);
+  const isCustomAmountValid =
+    /^\d+$/.test(customAmount) &&
+    parsedCustomAmount >= 1 &&
+    parsedCustomAmount <= 10_000_000;
 
   const sync = describeSyncState(entries.syncState, t);
 
@@ -122,6 +137,13 @@ export function TodayScreen() {
       // have to tap it together again.
       setSaveFailed(true);
     }
+  };
+
+  const addCustomAmount = () => {
+    if (!isCustomAmountValid) return;
+    setTally((current) => addTallyAmount(current, parsedCustomAmount));
+    setCustomAmount("");
+    setCustomAmountOpen(false);
   };
 
   return (
@@ -267,6 +289,7 @@ export function TodayScreen() {
                 <Pressable
                   accessibilityLabel={t("todayCustomAmount")}
                   accessibilityRole="button"
+                  onPress={() => setCustomAmountOpen(true)}
                   style={{
                     minHeight: 44,
                     minWidth: 44,
@@ -370,6 +393,42 @@ export function TodayScreen() {
         onSave={(amount) => void saveGoal(amount)}
         visible={goalOpen}
       />
+
+      <AppSheet
+        closeLabel={t("commonCancel")}
+        onClose={() => setCustomAmountOpen(false)}
+        subtitle={t("todayAddHint")}
+        title={t("todayCustomAmount")}
+        visible={customAmountOpen}
+      >
+        <TextInput
+          accessibilityLabel={t("todayCustomAmount")}
+          inputMode="numeric"
+          keyboardType="number-pad"
+          maxLength={8}
+          onChangeText={(value) => setCustomAmount(value.replace(/[^\d]/g, ""))}
+          placeholder="0"
+          placeholderTextColor={colors.textDisabled}
+          style={[
+            typography.display,
+            {
+              color: colors.textPrimary,
+              textAlign: "center",
+              padding: spacing.lg,
+              borderRadius: radius.xl,
+              borderCurve: "continuous",
+              backgroundColor: colors.surfaceMuted,
+            },
+          ]}
+          testID="custom-amount-input"
+          value={customAmount}
+        />
+        <AppButton
+          disabled={!isCustomAmountValid}
+          label={t("todayApplyCustom")}
+          onPress={addCustomAmount}
+        />
+      </AppSheet>
     </AppScreen>
   );
 }
