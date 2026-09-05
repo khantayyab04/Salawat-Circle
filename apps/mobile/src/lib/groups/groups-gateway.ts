@@ -32,7 +32,9 @@ import type {
   PreviewInviteResponse,
   RevokeInviteResponse,
   SetLeaderboardAnonymityResponse,
+  SetGroupGoalResponse,
 } from "./types";
+import { parseGroupInsights, type GroupInsights } from "@/lib/group-insights";
 
 export type GroupsGateway = {
   listMyGroups(): Promise<ListMyGroupsResponse>;
@@ -49,11 +51,18 @@ export type GroupsGateway = {
     cursor: GroupLeaderboardCursor | null,
     limit: number,
   ): Promise<GroupLeaderboardResponse>;
+  getInsights?(groupId: string): Promise<GroupInsights>;
   setLeaderboardAnonymity(
     groupId: string,
     anonymous: boolean,
     expectedRevision: number,
   ): Promise<SetLeaderboardAnonymityResponse>;
+  setGroupGoal?(
+    groupId: string,
+    period: "week" | "month",
+    amount: number,
+    expectedRevision: number,
+  ): Promise<SetGroupGoalResponse>;
   createInvite(
     groupId: string,
     options?: CreateInviteOptions,
@@ -500,6 +509,19 @@ function parseSetLeaderboardAnonymityResponse(
   };
 }
 
+function parseSetGroupGoalResponse(dataValue: unknown): SetGroupGoalResponse {
+  const data = readRecord(dataValue);
+  const period = readString(data, "period");
+  if (period !== "week" && period !== "month") asInvalidResponse();
+  return {
+    groupId: readString(data, "group_id"),
+    period,
+    effectiveFrom: readString(data, "effective_from"),
+    amount: readNumericString(data, "amount"),
+    revision: readInteger(data, "revision"),
+  };
+}
+
 function parseUpdateGroupNameResponse(dataValue: unknown): UpdateGroupNameResponse {
   const data = readRecord(dataValue);
   return { group: parseGroupSnapshot(data.group) };
@@ -636,6 +658,13 @@ export function createSupabaseGroupsGateway(
       return parseGroupLeaderboardResponse(data);
     },
 
+    async getInsights(groupId) {
+      const data = await callRpc(client, "get_group_insights", {
+        p_group_id: groupId,
+      });
+      return parseGroupInsights(data);
+    },
+
     async setLeaderboardAnonymity(groupId, anonymous, expectedRevision) {
       const data = await callRpc(client, "set_group_leaderboard_anonymity", {
         p_group_id: groupId,
@@ -643,6 +672,16 @@ export function createSupabaseGroupsGateway(
         p_expected_revision: expectedRevision,
       });
       return parseSetLeaderboardAnonymityResponse(data);
+    },
+
+    async setGroupGoal(groupId, period, amount, expectedRevision) {
+      const data = await callRpc(client, "set_group_goal", {
+        p_group_id: groupId,
+        p_period: period,
+        p_amount: amount,
+        p_expected_revision: expectedRevision,
+      });
+      return parseSetGroupGoalResponse(data);
     },
 
     async updateGroupName(groupId, name, expectedRevision) {

@@ -4,6 +4,7 @@ import type { EntriesGateway, Entry, EntrySummary } from "./entries-gateway";
 import { addTotal, subtractTotal } from "./totals";
 import type { OfflineController } from "@/lib/offline/controller";
 import type { EntryConflict, OfflineEntry } from "@/lib/offline/types";
+import type { ProgressOverview } from "@/lib/progress-overview";
 
 export type EntriesViewState = "loading" | "content" | "empty" | "error";
 export type EntriesSyncState =
@@ -42,6 +43,8 @@ export class EntriesStore {
     conflictEntryId: null as string | null,
     conflict: null as EntryConflict | null,
     conflicts: [] as EntryConflict[],
+    progressOverview: null as ProgressOverview | null,
+    progressLoading: false,
   };
 
   private readonly listeners = new Set<() => void>();
@@ -185,6 +188,21 @@ export class EntriesStore {
     }
     this.notify();
     if (this.offline && this.snapshot.online) void this.syncPending();
+  }
+
+  async loadProgressOverview(days = 35) {
+    if (!this.gateway.getProgressOverview || !this.snapshot.timeZone) return;
+    this.snapshot.progressLoading = true;
+    this.notify();
+    try {
+      this.snapshot.progressOverview = await this.gateway.getProgressOverview(
+        this.snapshot.timeZone,
+        days,
+      );
+    } finally {
+      this.snapshot.progressLoading = false;
+      this.notify();
+    }
   }
 
   private applyAmount(entry: Entry, amount: string, direction: "add" | "subtract") {

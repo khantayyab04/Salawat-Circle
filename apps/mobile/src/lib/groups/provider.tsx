@@ -32,9 +32,11 @@ import type {
   RemoveGroupMemberResponse,
   RevokeInviteResponse,
   SetLeaderboardAnonymityResponse,
+  SetGroupGoalResponse,
   TransferGroupOwnershipResponse,
   UpdateGroupNameResponse,
 } from "./types";
+import type { GroupInsights } from "@/lib/group-insights";
 
 type GroupsContextValue = ReturnType<GroupsStore["getSnapshot"]> & {
   revision: number;
@@ -50,11 +52,18 @@ type GroupsContextValue = ReturnType<GroupsStore["getSnapshot"]> & {
     period: LeaderboardPeriod,
     options?: LoadLeaderboardOptions,
   ): Promise<void>;
+  loadInsights(groupId: string): Promise<GroupInsights>;
   setAnonymity(
     groupId: string,
     anonymous: boolean,
     expectedRevision?: number,
   ): Promise<SetLeaderboardAnonymityResponse>;
+  setGroupGoal(
+    groupId: string,
+    period: "week" | "month",
+    amount: number,
+    expectedRevision?: number,
+  ): Promise<SetGroupGoalResponse>;
   loadInvites(groupId: string): Promise<void>;
   loadMembers(
     groupId: string,
@@ -120,7 +129,9 @@ function unavailableGateway(): GroupsGateway {
     listMyGroups: unavailable,
     createGroup: unavailable,
     getLeaderboard: unavailable,
+    getInsights: unavailable,
     setLeaderboardAnonymity: unavailable,
+    setGroupGoal: unavailable,
     createInvite: unavailable,
     listInvites: unavailable,
     revokeInvite: unavailable,
@@ -239,9 +250,22 @@ export function GroupsProvider({
     ) => controller.loadLeaderboard(groupId, period, options),
     [controller],
   );
+  const loadInsights = useCallback(
+    (groupId: string) => controller.loadInsights(groupId),
+    [controller],
+  );
   const setAnonymity = useCallback(
     (groupId: string, anonymous: boolean, expectedRevision?: number) =>
       controller.setAnonymity(groupId, anonymous, expectedRevision),
+    [controller],
+  );
+  const setGroupGoal = useCallback(
+    (
+      groupId: string,
+      period: "week" | "month",
+      amount: number,
+      expectedRevision?: number,
+    ) => controller.setGroupGoal(groupId, period, amount, expectedRevision),
     [controller],
   );
   const loadInvites = useCallback(
@@ -303,7 +327,9 @@ export function GroupsProvider({
       refreshGroups,
       createGroup,
       loadLeaderboard,
+      loadInsights,
       setAnonymity,
+      setGroupGoal,
       loadInvites,
       loadMembers,
       createInvite,
@@ -323,11 +349,13 @@ export function GroupsProvider({
       loadInvites,
       loadMembers,
       loadLeaderboard,
+      loadInsights,
       previewInvite,
       refreshGroups,
       revision,
       revokeInvite,
       setAnonymity,
+      setGroupGoal,
       updateGroupName,
       removeMember,
       leaveGroup,

@@ -137,6 +137,14 @@ export type SetLeaderboardAnonymityResponse = {
   group: GroupSnapshot;
 };
 
+export type SetGroupGoalResponse = {
+  groupId: string;
+  period: "week" | "month";
+  effectiveFrom: string;
+  amount: string;
+  revision: number;
+};
+
 export type GroupInviteStatus = "active" | "expired" | "exhausted" | "revoked";
 
 export type GroupInvite = {

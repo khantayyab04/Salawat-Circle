@@ -8,6 +8,7 @@ import {
   type GroupsSnapshot,
   type GroupsStore,
 } from "./groups-store";
+import type { GroupInsights } from "@/lib/group-insights";
 import type {
   AppLocale,
   CreateInviteOptions,
@@ -384,6 +385,53 @@ export class GroupsController {
       }
       return response;
     });
+  }
+
+  async setGroupGoal(
+    groupId: string,
+    period: "week" | "month",
+    amount: number,
+    expectedRevision?: number,
+  ) {
+    this.requireAccountId();
+    if (!this.gateway.setGroupGoal) {
+      throw new Error("INTERNAL");
+    }
+
+    const resolvedRevision =
+      expectedRevision ?? this.resolveExpectedRevision(groupId);
+
+    return this.runMutation("set_group_goal", async (session) => {
+      await this.requireOnline();
+      const response = await this.gateway.setGroupGoal!(
+        groupId,
+        period,
+        amount,
+        resolvedRevision,
+      );
+      if (!this.isSessionCurrent(session)) return response;
+      this.store.update((state) => {
+        state.groups.items = state.groups.items.map((group) =>
+          group.id === groupId
+            ? { ...group, revision: response.revision }
+            : group,
+        );
+      });
+      return response;
+    });
+  }
+
+  async loadInsights(groupId: string): Promise<GroupInsights> {
+    this.requireAccountId();
+    if (!this.gateway.getInsights) {
+      throw new Error("INTERNAL");
+    }
+    await this.requireOnline();
+    const insights = await this.gateway.getInsights(groupId);
+    this.store.update((state) => {
+      state.insightsByGroup[groupId] = insights;
+    });
+    return insights;
   }
 
   async loadInvites(groupId: string) {

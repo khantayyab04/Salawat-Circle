@@ -18,6 +18,7 @@ function setup({
     getPermission: vi.fn(async () => permission),
     requestPermission: vi.fn(async () => permission),
     scheduleDaily: vi.fn(async () => "notification-1"),
+    scheduleFriday: vi.fn(async () => "friday-notification"),
     cancel: vi.fn(async () => undefined),
     list: vi.fn<() => Promise<{ identifier: string }[]>>(async () => []),
   };
@@ -55,6 +56,170 @@ describe("ReminderController", () => {
       notificationId: "notification-1",
     });
     expect(controller.snapshot.enabled).toBe(true);
+  });
+
+  it("schedules the Friday reminder only after the user actively enables it", async () => {
+    const { controller, scheduler, store } = setup({ permission: "not_asked" });
+    scheduler.requestPermission.mockResolvedValue("granted");
+    await controller.initialize("account-1");
+
+    await controller.enableJumuah();
+
+    expect(scheduler.scheduleFriday).toHaveBeenCalledWith(
+      { hour: 12, minute: 0 },
+      {
+        title: "Salawat Circle",
+        body: "Zeit für deine heutige Salawat.",
+      },
+    );
+    expect(store.save).toHaveBeenLastCalledWith("account-1", {
+      hour: 20,
+      minute: 0,
+      enabled: false,
+      notificationId: null,
+      jumuah: {
+        hour: 12,
+        minute: 0,
+        enabled: true,
+        notificationId: "friday-notification",
+      },
+    });
+    expect(controller.snapshot.jumuah.enabled).toBe(true);
+  });
+
+  it("reschedules an enabled Friday reminder when its selected time changes", async () => {
+    const { controller, scheduler, store } = setup();
+    store.load
+      .mockResolvedValueOnce({
+        hour: 7,
+        minute: 5,
+        enabled: false,
+        notificationId: null,
+        jumuah: {
+          hour: 12,
+          minute: 0,
+          enabled: true,
+          notificationId: "friday-notification-1",
+        },
+      })
+      .mockResolvedValueOnce({
+        hour: 7,
+        minute: 5,
+        enabled: false,
+        notificationId: null,
+        jumuah: {
+          hour: 12,
+          minute: 0,
+          enabled: true,
+          notificationId: "friday-notification-1",
+        },
+      });
+    scheduler.list.mockResolvedValue([{ identifier: "friday-notification-1" }]);
+    scheduler.scheduleFriday.mockResolvedValue("friday-notification-2");
+    await controller.initialize("account-1");
+
+    await controller.setJumuahTime({ hour: 13, minute: 15 });
+
+    expect(scheduler.cancel).toHaveBeenCalledWith("friday-notification-1");
+    expect(scheduler.scheduleFriday).toHaveBeenCalledWith(
+      { hour: 13, minute: 15 },
+      {
+        title: "Salawat Circle",
+        body: "Zeit für deine heutige Salawat.",
+      },
+    );
+    expect(store.save).toHaveBeenLastCalledWith("account-1", {
+      hour: 7,
+      minute: 5,
+      enabled: false,
+      notificationId: null,
+      jumuah: {
+        hour: 13,
+        minute: 15,
+        enabled: true,
+        notificationId: "friday-notification-2",
+      },
+    });
+  });
+
+  it("disables the Friday reminder without discarding its selected time", async () => {
+    const { controller, scheduler, store } = setup();
+    store.load
+      .mockResolvedValueOnce({
+        hour: 7,
+        minute: 5,
+        enabled: false,
+        notificationId: null,
+        jumuah: {
+          hour: 12,
+          minute: 0,
+          enabled: true,
+          notificationId: "friday-notification-1",
+        },
+      })
+      .mockResolvedValueOnce({
+        hour: 7,
+        minute: 5,
+        enabled: false,
+        notificationId: null,
+        jumuah: {
+          hour: 12,
+          minute: 0,
+          enabled: true,
+          notificationId: "friday-notification-1",
+        },
+      });
+    scheduler.list.mockResolvedValue([{ identifier: "friday-notification-1" }]);
+    await controller.initialize("account-1");
+
+    await controller.disableJumuah();
+
+    expect(scheduler.cancel).toHaveBeenCalledWith("friday-notification-1");
+    expect(store.save).toHaveBeenLastCalledWith("account-1", {
+      hour: 7,
+      minute: 5,
+      enabled: false,
+      notificationId: null,
+      jumuah: {
+        hour: 12,
+        minute: 0,
+        enabled: false,
+        notificationId: null,
+      },
+    });
+  });
+
+  it("restores missing daily and Friday schedules without overwriting either identifier", async () => {
+    const { controller, scheduler, store } = setup();
+    store.load.mockResolvedValue({
+      hour: 7,
+      minute: 5,
+      enabled: true,
+      notificationId: "missing-daily-notification",
+      jumuah: {
+        hour: 12,
+        minute: 0,
+        enabled: true,
+        notificationId: "missing-friday-notification",
+      },
+    });
+    scheduler.scheduleDaily.mockResolvedValue("daily-notification-2");
+    scheduler.scheduleFriday.mockResolvedValue("friday-notification-2");
+
+    await controller.initialize("account-1");
+
+    expect(store.save).toHaveBeenLastCalledWith("account-1", {
+      hour: 7,
+      minute: 5,
+      enabled: true,
+      notificationId: "daily-notification-2",
+      jumuah: {
+        hour: 12,
+        minute: 0,
+        enabled: true,
+        notificationId: "friday-notification-2",
+      },
+    });
   });
 
   it("uses the latest localized copy when scheduling a reminder", async () => {

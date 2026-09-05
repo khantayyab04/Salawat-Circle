@@ -24,10 +24,17 @@ type ReminderContextValue = {
   permission: ReminderPermission;
   enabled: boolean;
   time: ReminderTime;
+  jumuah: {
+    enabled: boolean;
+    time: ReminderTime;
+  };
   busy: boolean;
   enable(): Promise<void>;
   disable(): Promise<void>;
   setTime(time: ReminderTime): Promise<void>;
+  enableJumuah(): Promise<void>;
+  disableJumuah(): Promise<void>;
+  setJumuahTime(time: ReminderTime): Promise<void>;
 };
 
 const Context = createContext<ReminderContextValue | null>(null);
@@ -116,10 +123,20 @@ export function ReminderProvider({
       permission: controller.snapshot.permission,
       enabled: controller.snapshot.enabled,
       time: controller.snapshot.time,
+      jumuah: {
+        enabled: controller.snapshot.jumuah.enabled,
+        time: {
+          hour: controller.snapshot.jumuah.hour,
+          minute: controller.snapshot.jumuah.minute,
+        },
+      },
       busy: controller.snapshot.busy,
       enable: () => run(() => controller.enable()),
       disable: () => run(() => controller.disable()),
       setTime: (time) => run(() => controller.setTime(time)),
+      enableJumuah: () => run(() => controller.enableJumuah()),
+      disableJumuah: () => run(() => controller.disableJumuah()),
+      setJumuahTime: (time) => run(() => controller.setJumuahTime(time)),
     }),
     [controller, revision, run],
   );
