@@ -1404,3 +1404,79 @@ describe("EntriesStore", () => {
     expect(store.snapshot.summary.todayGoal).toBe("100");
   });
 });
+
+describe("progress series", () => {
+  const series = {
+    range: "week" as const,
+    periodStart: "2026-08-31",
+    periodEnd: "2026-09-06",
+    today: "2026-09-05",
+    total: "5450",
+    activeDays: "5",
+    goalDays: "7",
+    achievedGoalDays: "4",
+    currentStreak: 6,
+    longestStreak: 12,
+    buckets: [],
+  };
+
+  async function readyStore(overrides: Partial<EntriesGateway> = {}) {
+    const store = new EntriesStore(
+      gateway(overrides),
+      "Europe/Berlin",
+      () => new Date("2026-09-05T10:00:00.000Z"),
+      () => "00000000-0000-4000-8000-000000000009",
+    );
+    await store.load();
+    return store;
+  }
+
+  it("keeps the requested range so the screen can restore it", async () => {
+    const getProgressSeries = vi.fn().mockResolvedValue(series);
+    const store = await readyStore({ getProgressSeries });
+
+    await store.loadProgressSeries("week");
+
+    expect(getProgressSeries).toHaveBeenCalledWith("Europe/Berlin", "week");
+    expect(store.snapshot.progressRange).toBe("week");
+    expect(store.snapshot.progressSeries?.longestStreak).toBe(12);
+  });
+
+  it("switches range without leaving the previous one selected", async () => {
+    const getProgressSeries = vi
+      .fn()
+      .mockResolvedValue({ ...series, range: "year" });
+    const store = await readyStore({ getProgressSeries });
+
+    await store.loadProgressSeries("year");
+
+    expect(store.snapshot.progressRange).toBe("year");
+  });
+
+  it("clears the loading flag when the request fails", async () => {
+    const getProgressSeries = vi.fn().mockRejectedValue(new Error("OFFLINE"));
+    const store = await readyStore({ getProgressSeries });
+
+    await expect(store.loadProgressSeries("week")).rejects.toThrow("OFFLINE");
+    expect(store.snapshot.progressLoading).toBe(false);
+  });
+
+  it("keeps the previous series visible when a refresh fails", async () => {
+    const getProgressSeries = vi
+      .fn()
+      .mockResolvedValueOnce(series)
+      .mockRejectedValueOnce(new Error("OFFLINE"));
+    const store = await readyStore({ getProgressSeries });
+
+    await store.loadProgressSeries("week");
+    await expect(store.loadProgressSeries("month")).rejects.toThrow("OFFLINE");
+
+    expect(store.snapshot.progressSeries?.total).toBe("5450");
+  });
+
+  it("does nothing when the gateway cannot provide a series", async () => {
+    const store = await readyStore();
+    await store.loadProgressSeries("week");
+    expect(store.snapshot.progressSeries).toBeNull();
+  });
+});

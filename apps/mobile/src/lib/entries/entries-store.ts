@@ -5,6 +5,10 @@ import { addTotal, subtractTotal } from "./totals";
 import type { OfflineController } from "@/lib/offline/controller";
 import type { EntryConflict, OfflineEntry } from "@/lib/offline/types";
 import type { ProgressOverview } from "@/lib/progress-overview";
+import type {
+  ProgressRange,
+  ProgressSeries,
+} from "@/lib/progress-series";
 
 export type EntriesViewState = "loading" | "content" | "empty" | "error";
 export type EntriesSyncState =
@@ -44,7 +48,10 @@ export class EntriesStore {
     conflict: null as EntryConflict | null,
     conflicts: [] as EntryConflict[],
     progressOverview: null as ProgressOverview | null,
+    progressSeries: null as ProgressSeries | null,
+    progressRange: "week" as ProgressRange,
     progressLoading: false,
+    progressFailed: false,
   };
 
   private readonly listeners = new Set<() => void>();
@@ -199,6 +206,33 @@ export class EntriesStore {
         this.snapshot.timeZone,
         days,
       );
+    } finally {
+      this.snapshot.progressLoading = false;
+      this.notify();
+    }
+  }
+
+  /**
+   * Loads the bucketed series for one range.
+   *
+   * A failed refresh keeps the previously loaded series on screen: showing a
+   * stale but complete chart is better than blanking it out, and the caller
+   * still sees the error so it can surface a retry.
+   */
+  async loadProgressSeries(range: ProgressRange) {
+    if (!this.gateway.getProgressSeries || !this.snapshot.timeZone) return;
+    this.snapshot.progressRange = range;
+    this.snapshot.progressLoading = true;
+    this.snapshot.progressFailed = false;
+    this.notify();
+    try {
+      this.snapshot.progressSeries = await this.gateway.getProgressSeries(
+        this.snapshot.timeZone,
+        range,
+      );
+    } catch (error) {
+      this.snapshot.progressFailed = true;
+      throw error;
     } finally {
       this.snapshot.progressLoading = false;
       this.notify();

@@ -10,6 +10,7 @@ import { useFonts } from "expo-font";
 import { useRouter } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { StatusBar } from "expo-status-bar";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useCallback } from "react";
 
 function RootNavigator() {
@@ -57,12 +58,14 @@ export default function RootLayout() {
   if (!ready) return null;
 
   return (
-    <I18nProvider>
-      <AppThemeProvider>
-        <AuthProvider>
-          <RootNavigator />
-        </AuthProvider>
-      </AppThemeProvider>
-    </I18nProvider>
+    <SafeAreaProvider>
+      <I18nProvider>
+        <AppThemeProvider>
+          <AuthProvider>
+            <RootNavigator />
+          </AuthProvider>
+        </AppThemeProvider>
+      </I18nProvider>
+    </SafeAreaProvider>
   );
 }

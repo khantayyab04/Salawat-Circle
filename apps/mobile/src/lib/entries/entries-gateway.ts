@@ -5,6 +5,11 @@ import {
   parseProgressOverview,
   type ProgressOverview,
 } from "@/lib/progress-overview";
+import {
+  parseProgressSeries,
+  type ProgressRange,
+  type ProgressSeries,
+} from "@/lib/progress-series";
 
 export type Entry = {
   id: string;
@@ -58,6 +63,10 @@ export type EntriesGateway = {
     timezone: string,
     days: number,
   ): Promise<ProgressOverview>;
+  getProgressSeries?(
+    timezone: string,
+    range: ProgressRange,
+  ): Promise<ProgressSeries>;
   list(cursor: EntryCursor | null, limit: number): Promise<{
     items: Entry[];
     nextCursor: EntryCursor | null;
@@ -165,6 +174,15 @@ export function createSupabaseEntriesGateway(
       });
       ensureSuccess(error, status);
       return parseProgressOverview(data);
+    },
+
+    async getProgressSeries(timezone, range) {
+      const { data, error, status } = await client.rpc("get_progress_series", {
+        p_timezone: timezone,
+        p_range: range,
+      });
+      ensureSuccess(error, status);
+      return parseProgressSeries(data);
     },
 
     async list(cursor, limit) {

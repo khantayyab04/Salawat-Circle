@@ -19,6 +19,10 @@ module.exports = {
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1",
   },
+  setupFilesAfterEnv: [
+    ...(preset.setupFilesAfterEnv ?? []),
+    "<rootDir>/jest.setup.js",
+  ],
   transform: {
     ...preset.transform,
     "\\.mjs$": scriptTransform,

@@ -16,6 +16,7 @@ import {
   type EntriesGateway,
 } from "./entries-gateway";
 import { EntriesStore } from "./entries-store";
+import type { ProgressRange } from "@/lib/progress-series";
 
 type EntriesContextValue = EntriesStore["snapshot"] & {
   revision: number;
@@ -31,6 +32,7 @@ type EntriesContextValue = EntriesStore["snapshot"] & {
   keepServerVersion(entryId?: string): Promise<void>;
   reapplyConflict(entryId?: string): Promise<void>;
   loadProgressOverview(days?: number): Promise<void>;
+  loadProgressSeries(range: ProgressRange): Promise<void>;
 };
 
 const EntriesContext = createContext<EntriesContextValue | null>(null);
@@ -191,6 +193,7 @@ export function EntriesProvider({
     keepServerVersion: (entryId) => store.keepServerVersion(entryId),
     reapplyConflict: (entryId) => store.reapplyConflict(entryId),
     loadProgressOverview: (days) => store.loadProgressOverview(days),
+    loadProgressSeries: (range) => store.loadProgressSeries(range),
   };
 
   return (
