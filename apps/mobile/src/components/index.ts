@@ -21,4 +21,5 @@ export {
 export { StatCard } from "./stat-card";
 export { StateFeedback, type ViewState } from "./state-feedback";
 export { StatusBanner } from "./status-banner";
+export { SyncNotice, type SyncTone } from "./sync-notice";
 export { Surface } from "./surface";
