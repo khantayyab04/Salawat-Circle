@@ -11,6 +11,7 @@ import type {
   LeaderboardPeriod,
   PreviewInviteResponse,
 } from "./types";
+import type { GroupInsights } from "@/lib/group-insights";
 
 export type GroupsLoadStatus = "idle" | "loading" | "ready" | "error";
 
@@ -70,6 +71,7 @@ export type GroupsInvitePreviewState = {
 export type GroupsMutationKind =
   | "create_group"
   | "set_anonymity"
+  | "set_group_goal"
   | "create_invite"
   | "revoke_invite"
   | "accept_invite"
@@ -98,6 +100,7 @@ export type GroupsSnapshot = {
   invites: GroupsInvitesState;
   members: GroupsMembersState;
   invitePreview: GroupsInvitePreviewState;
+  insightsByGroup: Record<string, GroupInsights | null>;
   mutation: GroupsMutationState;
 };
 
@@ -158,6 +161,7 @@ export function createGroupsSnapshot(
       data: null,
       errorCode: null,
     },
+    insightsByGroup: {},
     mutation: {
       pending: false,
       kind: null,

@@ -28,6 +28,7 @@ export type ReminderSchedulerBackend = {
     };
     trigger: {
       type: string;
+      weekday?: number;
       hour: number;
       minute: number;
       channelId: string;
@@ -69,7 +70,7 @@ export function createReminderScheduler(backend: ReminderSchedulerBackend) {
     ) {
       const time = parseReminderTime(value);
       await backend.setNotificationChannelAsync("salawat-daily", {
-        name: "Salawat Circle",
+        name: content.title,
         importance: 3,
       });
       return backend.scheduleNotificationAsync({
@@ -83,6 +84,33 @@ export function createReminderScheduler(backend: ReminderSchedulerBackend) {
           hour: time.hour,
           minute: time.minute,
           channelId: "salawat-daily",
+        },
+      });
+    },
+    async scheduleFriday(
+      value: ReminderTime,
+      content: ReminderNotificationContent = {
+        title: "Salawat Circle",
+        body: "Zeit für deine heutige Salawat.",
+      },
+    ) {
+      const time = parseReminderTime(value);
+      await backend.setNotificationChannelAsync("salawat-friday", {
+        name: content.title,
+        importance: 3,
+      });
+      return backend.scheduleNotificationAsync({
+        content: {
+          title: content.title,
+          body: content.body,
+          data: { url: "salawat-circle://today" },
+        },
+        trigger: {
+          type: "weekly",
+          weekday: 6,
+          hour: time.hour,
+          minute: time.minute,
+          channelId: "salawat-friday",
         },
       });
     },

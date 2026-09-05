@@ -33,6 +33,9 @@ export function resolveLocaleTag(
 }
 
 export function formatAppNumber(value: number | bigint, localeTag: string) {
+  if (typeof value === "bigint") {
+    return formatBigInt(value.toString(), localeTag);
+  }
   const cached = numberFormatterCache.get(localeTag);
   if (cached) {
     return cached.format(value);
@@ -42,6 +45,13 @@ export function formatAppNumber(value: number | bigint, localeTag: string) {
   });
   numberFormatterCache.set(localeTag, formatter);
   return formatter.format(value);
+}
+
+export function formatBigInt(value: string, localeTag: string) {
+  const sign = value.startsWith("-") ? "-" : "";
+  const digits = sign ? value.slice(1) : value;
+  const separator = localeTag.toLowerCase().startsWith("de") ? "." : ",";
+  return `${sign}${digits.replace(/\B(?=(\d{3})+(?!\d))/gu, separator)}`;
 }
 
 export function formatAppDate(

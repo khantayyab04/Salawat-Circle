@@ -1,6 +1,10 @@
 import type { Database } from "@salawat-circle/shared-types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getEntriesErrorCode } from "./errors";
+import {
+  parseProgressOverview,
+  type ProgressOverview,
+} from "@/lib/progress-overview";
 
 export type Entry = {
   id: string;
@@ -50,6 +54,10 @@ export type CreateEntryInput = {
 export type EntriesGateway = {
   getTimeZone(fallback: string): Promise<string>;
   getSummary(timezone: string): Promise<EntrySummary>;
+  getProgressOverview?(
+    timezone: string,
+    days: number,
+  ): Promise<ProgressOverview>;
   list(cursor: EntryCursor | null, limit: number): Promise<{
     items: Entry[];
     nextCursor: EntryCursor | null;
@@ -148,6 +156,15 @@ export function createSupabaseEntriesGateway(
         achievedDays: summary.achieved_days,
         eligibleGoalDays: summary.eligible_goal_days,
       };
+    },
+
+    async getProgressOverview(timezone, days) {
+      const { data, error, status } = await client.rpc("get_progress_overview", {
+        p_timezone: timezone,
+        p_days: days,
+      });
+      ensureSuccess(error, status);
+      return parseProgressOverview(data);
     },
 
     async list(cursor, limit) {

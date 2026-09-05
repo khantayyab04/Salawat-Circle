@@ -3,7 +3,7 @@ import { createExpoReminderScheduler } from "./expo-scheduler";
 
 const notifications = vi.hoisted(() => ({
   AndroidImportance: { DEFAULT: 3 },
-  SchedulableTriggerInputTypes: { DAILY: "daily" },
+  SchedulableTriggerInputTypes: { DAILY: "daily", WEEKLY: "weekly" },
   getPermissionsAsync: vi.fn(async () => ({
     status: "granted",
     canAskAgain: true,
@@ -55,6 +55,27 @@ describe("Expo reminder scheduler", () => {
       },
     });
 
+  });
+
+  it("uses Expo's weekly Friday trigger", async () => {
+    const scheduler = createExpoReminderScheduler();
+
+    await scheduler.scheduleFriday({ hour: 12, minute: 30 });
+
+    expect(notifications.scheduleNotificationAsync).toHaveBeenCalledWith({
+      content: {
+        title: "Salawat Circle",
+        body: "Zeit für deine heutige Salawat.",
+        data: { url: "salawat-circle://today" },
+      },
+      trigger: {
+        type: "weekly",
+        weekday: 6,
+        hour: 12,
+        minute: 30,
+        channelId: "salawat-friday",
+      },
+    });
   });
 
   it("routes only this app's reminder notification responses to today", async () => {

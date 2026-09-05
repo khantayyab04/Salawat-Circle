@@ -34,6 +34,38 @@ describe("reminder store", () => {
     });
   });
 
+  it("preserves the separately configured Friday reminder", async () => {
+    const storage = backend();
+    const store = createReminderStore(storage);
+
+    await store.activate("account-a");
+    await store.save("account-a", {
+      hour: 7,
+      minute: 5,
+      enabled: false,
+      notificationId: null,
+      jumuah: {
+        hour: 12,
+        minute: 30,
+        enabled: true,
+        notificationId: "friday-notification",
+      },
+    });
+
+    await expect(store.load("account-a")).resolves.toEqual({
+      hour: 7,
+      minute: 5,
+      enabled: false,
+      notificationId: null,
+      jumuah: {
+        hour: 12,
+        minute: 30,
+        enabled: true,
+        notificationId: "friday-notification",
+      },
+    });
+  });
+
   it("clears the previous account's reminder data on an account switch", async () => {
     const storage = backend();
     const store = createReminderStore(storage);

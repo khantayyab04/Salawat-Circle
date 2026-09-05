@@ -9,6 +9,12 @@ export type ReminderStorageBackend = {
 export type StoredReminder = ReminderTime & {
   enabled: boolean;
   notificationId: string | null;
+  jumuah?: StoredJumuahReminder;
+};
+
+export type StoredJumuahReminder = ReminderTime & {
+  enabled: boolean;
+  notificationId: string | null;
 };
 
 const ACTIVE_ACCOUNT_KEY = "salawat.reminder.active-account";
@@ -31,14 +37,35 @@ function parseStoredReminder(value: string): StoredReminder | null {
     ) {
       return null;
     }
-    return {
+    const reminder = {
       ...parseReminderTime(parsed),
       enabled: parsed.enabled,
       notificationId: parsed.notificationId,
     };
+    if (!("jumuah" in parsed)) return reminder;
+    const jumuah = parseStoredJumuahReminder(parsed.jumuah);
+    return { ...reminder, jumuah };
   } catch {
     return null;
   }
+}
+
+function parseStoredJumuahReminder(value: unknown): StoredJumuahReminder {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("enabled" in value) ||
+    !("notificationId" in value) ||
+    typeof value.enabled !== "boolean" ||
+    (value.notificationId !== null && typeof value.notificationId !== "string")
+  ) {
+    throw new Error("INVALID_REMINDER_STATE");
+  }
+  return {
+    ...parseReminderTime(value),
+    enabled: value.enabled,
+    notificationId: value.notificationId,
+  };
 }
 
 export function createReminderStore(backend: ReminderStorageBackend) {
@@ -58,9 +85,17 @@ export function createReminderStore(backend: ReminderStorageBackend) {
       ) {
         throw new Error("INVALID_REMINDER_STATE");
       }
+      const jumuah = value.jumuah
+        ? parseStoredJumuahReminder(value.jumuah)
+        : undefined;
       await backend.setItemAsync(
         storageKey(accountId),
-        JSON.stringify({ ...time, enabled: value.enabled, notificationId: value.notificationId }),
+        JSON.stringify({
+          ...time,
+          enabled: value.enabled,
+          notificationId: value.notificationId,
+          ...(jumuah ? { jumuah } : {}),
+        }),
       );
     },
     async load(accountId: string) {
