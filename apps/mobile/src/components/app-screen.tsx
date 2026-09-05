@@ -9,7 +9,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /** Height of the floating tab bar plus the gap the design leaves under it. */
-const FLOATING_BAR_CLEARANCE = 92;
+const FLOATING_BAR_CLEARANCE = 120;
 
 export function AppScreen({
   children,

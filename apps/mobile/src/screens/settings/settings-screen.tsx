@@ -47,6 +47,7 @@ export function SettingsScreen({ gateway }: { gateway?: SettingsGateway } = {}) 
   const router = useRouter();
 
   const [profile, setProfile] = useState<SettingsProfile | null>(null);
+  const [profileFailed, setProfileFailed] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
 
@@ -60,7 +61,9 @@ export function SettingsScreen({ gateway }: { gateway?: SettingsGateway } = {}) 
         if (active) setProfile(loaded);
       })
       .catch(() => {
-        // The profile screen surfaces the load failure with its own retry.
+        // The profile screen owns the retry; here the card simply stops
+        // pretending to load so the rest of the account stays usable.
+        if (active) setProfileFailed(true);
       });
     return () => {
       active = false;
@@ -115,7 +118,9 @@ export function SettingsScreen({ gateway }: { gateway?: SettingsGateway } = {}) 
           <Text
             style={[typography.displayNumber, { color: colors.textOnPrimary }]}
           >
-            {(profile?.displayName ?? "·").slice(0, 1).toUpperCase()}
+            {profile?.displayName
+              ? profile.displayName.slice(0, 1).toUpperCase()
+              : "?"}
           </Text>
         </View>
         <View style={{ flex: 1, gap: spacing.xs }}>
@@ -123,11 +128,15 @@ export function SettingsScreen({ gateway }: { gateway?: SettingsGateway } = {}) 
             numberOfLines={2}
             style={[typography.title, { color: colors.textPrimary }]}
           >
-            {profile?.displayName ?? t("stateLoadingTitle")}
+            {profile?.displayName ??
+              (profileFailed ? t("settingsProfile") : t("stateLoadingTitle"))}
           </Text>
-          {profile ? (
-            <SectionLabel tone="gold">{profile.timeZone}</SectionLabel>
-          ) : null}
+          <SectionLabel tone="gold">
+            {profile?.timeZone ??
+              (profileFailed
+                ? t("settingsProfileLoadFailed")
+                : t("stateLoadingBody"))}
+          </SectionLabel>
         </View>
       </Surface>
 

@@ -82,8 +82,8 @@ export function TodayScreen() {
     Math.min(width, 720) - spacing.lg * 2 - cardPadding * 2,
   );
   const ringSize = Math.min(
-    available,
-    pickBySize(sizeClass, { compact: 210, regular: 232, wide: 248 }),
+    available * 0.82,
+    pickBySize(sizeClass, { compact: 190, regular: 208, wide: 220 }),
   );
 
   const totalText = number(todayTotal);
@@ -235,7 +235,7 @@ export function TodayScreen() {
             >
               <View style={{ flex: 1, gap: spacing.xxs }}>
                 <SectionLabel size="small" tone="gold">
-                  {t("todayStageAmount", { amount: "" }).replace(/\s*$/, "")}
+                  {t("todayStagedLabel")}
                 </SectionLabel>
                 <Text
                   adjustsFontSizeToFit

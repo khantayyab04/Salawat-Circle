@@ -51,6 +51,7 @@ export const de = {
   todayHeading: "Heute erfasst",
   todayTitle: "Heute",
   todayStageAmount: "%{amount} vormerken",
+  todayStagedLabel: "Vorgemerkt",
   todayCommit: "%{amount} eintragen",
   todayCustomAmount: "Eigener Wert",
   todayApplyCustom: "Wert übernehmen",

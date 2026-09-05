@@ -50,6 +50,7 @@ export const en = {
   todayHeading: "Recorded today",
   todayTitle: "Today",
   todayStageAmount: "Stage %{amount}",
+  todayStagedLabel: "Staged",
   todayCommit: "Record %{amount}",
   todayCustomAmount: "Custom amount",
   todayApplyCustom: "Use amount",

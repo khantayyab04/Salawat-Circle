@@ -6,7 +6,7 @@ export default function SettingsLayout() {
     <Stack screenOptions={{ headerBackButtonDisplayMode: "minimal" }}>
       <Stack.Screen
         name="index"
-        options={{ title: t("tabsSettings"), headerLargeTitle: true }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen name="profile" options={{ title: t("settingsProfile") }} />
       <Stack.Screen name="reminder" options={{ title: t("reminderTitle") }} />
