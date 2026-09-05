@@ -19,6 +19,7 @@ export function StatCard({
   tone = "default",
   align = "start",
   testID,
+  accessibilityLabel,
   style,
   ...props
 }: ViewProps & {
@@ -28,11 +29,15 @@ export function StatCard({
   tone?: "default" | "gold";
   align?: "start" | "center";
   testID?: string;
+  /** Overrides the generated "caption: value" name, for shortened values. */
+  accessibilityLabel?: string;
 }) {
   const centered = align === "center";
   const { colors } = useAppTheme();
   return (
     <Surface
+      accessible
+      accessibilityLabel={accessibilityLabel ?? `${caption}: ${value}`}
       style={[
         {
           flex: 1,

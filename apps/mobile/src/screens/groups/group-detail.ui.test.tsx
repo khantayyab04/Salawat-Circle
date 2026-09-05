@@ -299,7 +299,11 @@ describe("Task 14 group detail screen", () => {
     // calculation time are shown as labelled figures in the insights panel.
     expect(view.getByText("Alpha Circle")).toBeTruthy();
     expect(view.getByText("5")).toBeTruthy();
-    expect(view.getByText("date:2026-08-31 time:20:05")).toBeTruthy();
+    // The tile shows a short relative age; the exact timestamp stays available
+    // to assistive technology.
+    expect(
+      view.getByLabelText(/date:2026-08-31 time:20:05/),
+    ).toBeTruthy();
   });
 
   it("uses a neutral stack title while details are still loading", async () => {

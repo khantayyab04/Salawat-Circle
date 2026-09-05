@@ -243,6 +243,10 @@ export const de = {
   groupDetailYouPerDay: "Du brauchst (Ø pro Tag)",
   groupDetailActiveMembersShort: "Aktive Mitglieder",
   groupDetailUpdatedShort: "Aktualisiert",
+  relativeJustNow: "gerade eben",
+  relativeMinutes: "vor %{count} Min.",
+  relativeHours: "vor %{count} Std.",
+  relativeDays: "vor %{count} T.",
   groupDetailInsightsFailed:
     "Die Gruppenwerte konnten nicht geladen werden. Du siehst den zuletzt geladenen Stand.",
   groupDetailRankingTitle: "Rangliste",

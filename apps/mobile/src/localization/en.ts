@@ -239,6 +239,10 @@ export const en = {
   groupDetailYouPerDay: "You need (avg per day)",
   groupDetailActiveMembersShort: "Active members",
   groupDetailUpdatedShort: "Updated",
+  relativeJustNow: "just now",
+  relativeMinutes: "%{count}m ago",
+  relativeHours: "%{count}h ago",
+  relativeDays: "%{count}d ago",
   groupDetailInsightsFailed:
     "The circle figures could not be loaded. You are seeing the last loaded state.",
   groupDetailRankingTitle: "Ranking",

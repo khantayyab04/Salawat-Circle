@@ -4,11 +4,13 @@ import {
   AppText,
   FormField,
   GroupInsightsPanel,
+  SectionLabel,
   SegmentedControl,
   StatusBanner,
   SyncNotice,
 } from "@/components";
 import { AppHeader } from "@/components/app-header";
+import { formatRelativeTime } from "@/lib/relative-time";
 import {
   GROUP_PERIODS,
   leaderboardPeriodFor,
@@ -331,6 +333,17 @@ export function GroupDetailScreen() {
   const calculatedAt = groupPeriodState.calculatedAt ?? listGroup?.calculatedAt ?? null;
 
   const memberCountText = formatNumeric(memberCount, localeTag);
+  // The tile is small, so a full timestamp would shrink into unreadability.
+  // The exact value stays available through the accessibility hint below.
+  const relativeCalculated = calculatedAt
+    ? formatRelativeTime(calculatedAt, new Date(), {
+        justNow: t("relativeJustNow"),
+        minutes: t("relativeMinutes"),
+        hours: t("relativeHours"),
+        days: t("relativeDays"),
+      })
+    : null;
+
   const calculatedText = formatTimestamp(
     calculatedAt,
     localeTag,
@@ -589,9 +602,16 @@ export function GroupDetailScreen() {
             ? formatNumeric(insights.totalMembers, localeTag)
             : null
         }
-        updatedLabel={calculatedText}
+        updatedHint={calculatedText}
+        updatedLabel={relativeCalculated ?? calculatedText}
       />
+    </View>
+  );
 
+  // The design puts the management actions below the ranking, so they
+  // live in the list footer rather than in its header.
+  const listFooter = (
+    <View style={{ gap: spacing.lg }}>
       <AppCard style={{ gap: spacing.sm }}>
         <AppButton
           label={t("groupMembers")}
@@ -812,18 +832,21 @@ export function GroupDetailScreen() {
           ) : null
         }
         ListFooterComponent={
-          groupPeriodState.hasMore ? (
-            <AppButton
-              label={t("groupDetailLoadMore")}
-              loading={groupPeriodState.loadingMore}
-              variant="secondary"
-              onPress={() => {
-                void loadMore();
-              }}
-            />
-          ) : groupPeriodState.items.length > 0 ? (
-            <AppText variant="caption">{t("groupDetailEnd")}</AppText>
-          ) : null
+          <View style={{ gap: spacing.lg }}>
+            {groupPeriodState.hasMore ? (
+              <AppButton
+                label={t("groupDetailLoadMore")}
+                loading={groupPeriodState.loadingMore}
+                onPress={() => {
+                  void loadMore();
+                }}
+                variant="secondary"
+              />
+            ) : groupPeriodState.items.length > 0 ? (
+              <SectionLabel>{t("groupDetailEnd")}</SectionLabel>
+            ) : null}
+            {listFooter}
+          </View>
         }
         ListHeaderComponent={listHeader}
         onEndReached={() => {

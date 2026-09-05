@@ -33,6 +33,7 @@ export function GroupInsightsPanel({
   activeMembers,
   totalMembers,
   updatedLabel,
+  updatedHint,
   goalPercent,
 }: {
   copy: GroupInsightsCopy;
@@ -45,6 +46,8 @@ export function GroupInsightsPanel({
   activeMembers: string;
   totalMembers: string | null;
   updatedLabel: string;
+  /** The exact timestamp, kept available for assistive technology. */
+  updatedHint?: string;
   /**
    * Progress towards the goal from 0 to 100, or null when there is no goal.
    * It is passed in rather than derived here because every value this
@@ -128,7 +131,12 @@ export function GroupInsightsPanel({
               : `${activeMembers} / ${totalMembers}`
           }
         />
-        <StatCard align="center" caption={copy.updated} value={updatedLabel} />
+        <StatCard
+          accessibilityLabel={`${copy.updated}: ${updatedHint ?? updatedLabel}`}
+          align="center"
+          caption={copy.updated}
+          value={updatedLabel}
+        />
       </View>
     </View>
   );
