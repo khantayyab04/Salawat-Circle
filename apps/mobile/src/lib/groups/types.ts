@@ -1,5 +1,5 @@
 export type GroupRole = "owner" | "member";
-export type LeaderboardPeriod = "week" | "all_time";
+export type LeaderboardPeriod = "week" | "month" | "all_time";
 export type InviteKind = "token" | "code";
 export type AppLocale = "de" | "en";
 

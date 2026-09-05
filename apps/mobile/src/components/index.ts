@@ -19,6 +19,10 @@ export {
   type SegmentedOption,
 } from "./segmented-control";
 export { GroupCard } from "./group-card";
+export {
+  GroupInsightsPanel,
+  type GroupInsightsCopy,
+} from "./group-insights-panel";
 export { StatCard } from "./stat-card";
 export { StateCard } from "./state-card";
 export { StateFeedback, type ViewState } from "./state-feedback";

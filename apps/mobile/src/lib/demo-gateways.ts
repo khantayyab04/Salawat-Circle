@@ -165,17 +165,40 @@ export function createDemoGroupsGateway(): GroupsGateway {
         calculatedAt: now,
       };
     },
-    async getInsights(groupId: string) {
+    async getInsights(
+      groupId: string,
+      period: "week" | "month" | "all" = "week",
+    ) {
+      const byPeriod = {
+        week: { total: "24500", goal: "31000", days: 4 },
+        month: { total: "84000", goal: "120000", days: 12 },
+        all: { total: "340000", goal: "500000", days: 1 },
+      } as const;
+      const selected = byPeriod[period];
+      const remaining = String(
+        Math.max(0, Number(selected.goal) - Number(selected.total)),
+      );
+      const activeMembers = 6;
       return {
         groupId,
-        weekTotal: "24500",
-        activeMembers: "6",
-        weeklyAverage: "4083",
-        goalAmount: "31000",
-        remaining: "6500",
-        daysRemaining: 4,
-        perPersonRemaining: "1084",
-        perPersonPerDay: "271",
+        period,
+        periodTotal: selected.total,
+        weekTotal: byPeriod.week.total,
+        activeMembers: String(activeMembers),
+        totalMembers: "9",
+        weeklyAverage: String(
+          Math.floor(Number(selected.total) / activeMembers),
+        ),
+        goalAmount: selected.goal,
+        remaining,
+        daysRemaining: selected.days,
+        groupPerDay: String(Math.ceil(Number(remaining) / selected.days)),
+        perPersonRemaining: String(
+          Math.ceil(Number(remaining) / activeMembers),
+        ),
+        perPersonPerDay: String(
+          Math.ceil(Number(remaining) / (activeMembers * selected.days)),
+        ),
       };
     },
     createGroup: unsupported,

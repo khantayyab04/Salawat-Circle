@@ -9,6 +9,7 @@ import {
   type GroupsStore,
 } from "./groups-store";
 import type { GroupInsights } from "@/lib/group-insights";
+import type { GroupPeriod } from "./periods";
 import type {
   AppLocale,
   CreateInviteOptions,
@@ -421,17 +422,30 @@ export class GroupsController {
     });
   }
 
-  async loadInsights(groupId: string): Promise<GroupInsights> {
+  async loadInsights(
+    groupId: string,
+    period: GroupPeriod = "week",
+  ): Promise<GroupInsights> {
     this.requireAccountId();
     if (!this.gateway.getInsights) {
       throw new Error("INTERNAL");
     }
     await this.requireOnline();
-    const insights = await this.gateway.getInsights(groupId);
-    this.store.update((state) => {
-      state.insightsByGroup[groupId] = insights;
-    });
-    return insights;
+    try {
+      const insights = await this.gateway.getInsights(groupId, period);
+      this.store.update((state) => {
+        state.insightsByGroup[groupId] = insights;
+        state.insightsFailed = false;
+      });
+      return insights;
+    } catch (error) {
+      // The previously loaded figures stay on screen; the flag lets the screen
+      // explain that they may be out of date.
+      this.store.update((state) => {
+        state.insightsFailed = true;
+      });
+      throw error;
+    }
   }
 
   async loadInvites(groupId: string) {

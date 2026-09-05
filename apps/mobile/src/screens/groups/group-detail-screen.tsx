@@ -3,8 +3,17 @@ import {
   AppCard,
   AppText,
   FormField,
+  GroupInsightsPanel,
+  SegmentedControl,
   StatusBanner,
+  SyncNotice,
 } from "@/components";
+import { AppHeader } from "@/components/app-header";
+import {
+  GROUP_PERIODS,
+  leaderboardPeriodFor,
+  type GroupPeriod,
+} from "@/lib/groups/periods";
 import {
   useGroups,
   type GroupsLeaderboardPeriodState,
@@ -19,7 +28,7 @@ import {
   type TranslationKey,
   useTranslation,
 } from "@/localization";
-import { radius, spacing, useAppTheme } from "@/theme";
+import { spacing, useAppTheme } from "@/theme";
 import { Host, Switch } from "@expo/ui";
 import {
   Stack,
@@ -38,7 +47,6 @@ import {
 import {
   AppState,
   FlatList,
-  Pressable,
   RefreshControl,
   View,
   useWindowDimensions,
@@ -198,46 +206,6 @@ function StateCard({
   );
 }
 
-const PeriodButton = memo(function PeriodButton({
-  label,
-  selected,
-  onPress,
-  testID,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-  testID: string;
-}) {
-  const { colors } = useAppTheme();
-
-  return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        minHeight: 44,
-        minWidth: 44,
-        flex: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        borderRadius: radius.pill,
-        borderCurve: "continuous",
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.sm,
-        backgroundColor: selected ? colors.accentMuted : colors.surface,
-        borderColor: selected ? colors.accent : colors.borderSubtle,
-        borderWidth: 1,
-        opacity: pressed ? 0.8 : 1,
-      })}
-    >
-      <AppText variant={selected ? "bodyStrong" : "body"}>{label}</AppText>
-    </Pressable>
-  );
-});
-
 const LeaderboardRow = memo(function LeaderboardRow({
   row,
   localeTag,
@@ -306,6 +274,9 @@ export function GroupDetailScreen() {
     updateGroupName,
     leaveGroup,
     deleteGroup,
+    loadInsights,
+    insightsByGroup,
+    insightsFailed,
   } = useGroups();
 
   const groupId = readGroupId(id);
@@ -325,6 +296,24 @@ export function GroupDetailScreen() {
     if (!groupId) return null;
     return groups.items.find((group) => group.id === groupId) ?? null;
   }, [groupId, groups.items]);
+
+  const screenPeriod: GroupPeriod = period === "all_time" ? "all" : period;
+  const insights = groupId ? (insightsByGroup?.[groupId] ?? null) : null;
+
+  // Insights are period specific, so they are refetched whenever the period
+  // changes. A failure is recorded by the store, which keeps the previously
+  // loaded figures visible instead of blanking the panel.
+  useEffect(() => {
+    if (!groupId || !loadInsights) return;
+    void loadInsights(groupId, screenPeriod).catch(() => {});
+  }, [groupId, loadInsights, screenPeriod]);
+
+  const goalPercent = useMemo(() => {
+    if (!insights?.goalAmount) return null;
+    const goal = Number(insights.goalAmount);
+    if (!Number.isFinite(goal) || goal <= 0) return null;
+    return (Number(insights.periodTotal) / goal) * 100;
+  }, [insights]);
 
   const fallbackPeriodState = useMemo(() => getFallbackPeriodState(period), [period]);
   const groupPeriodState: GroupsLeaderboardPeriodState =
@@ -534,39 +523,74 @@ export function GroupDetailScreen() {
 
   const listHeader = (
     <View style={{ gap: spacing.lg }}>
-      <Stack.Screen options={{ title: groupName }} />
-      <AppCard>
-        <AppText variant="bodyStrong">{groupName}</AppText>
-        <AppText style={tabularNumberStyle}>{`${memberCountText} ${t(
-          "groupDetailMembersLabel",
-        )}`}</AppText>
-        <AppText variant="caption" style={tabularNumberStyle}>{`${t(
-          "groupDetailCalculatedLabel",
-        )}: ${calculatedText}`}</AppText>
-      </AppCard>
+      <Stack.Screen options={{ headerShown: false, title: groupName }} />
 
-      <AppCard style={{ gap: spacing.sm }}>
-        <View
-          accessibilityRole="tablist"
-          style={{
-            flexDirection: "row",
-            gap: spacing.sm,
-          }}
-        >
-          <PeriodButton
-            testID="group-detail-period-week"
-            label={t("groupDetailWeek")}
-            selected={period === "week"}
-            onPress={() => switchPeriod("week")}
-          />
-          <PeriodButton
-            testID="group-detail-period-all-time"
-            label={t("groupDetailAllTime")}
-            selected={period === "all_time"}
-            onPress={() => switchPeriod("all_time")}
-          />
-        </View>
-      </AppCard>
+      <SegmentedControl
+        onChange={(next) => switchPeriod(leaderboardPeriodFor(next))}
+        options={GROUP_PERIODS.map((value) => ({
+          value,
+          label: t(
+            value === "week"
+              ? "groupDetailWeek"
+              : value === "month"
+                ? "groupDetailMonth"
+                : "groupDetailAllTime",
+          ),
+        }))}
+        value={screenPeriod}
+      />
+
+      {insightsFailed ? (
+        <SyncNotice
+          body={t("groupDetailInsightsFailed")}
+          title={t("statePartialErrorTitle")}
+          tone="error"
+        />
+      ) : null}
+
+      <GroupInsightsPanel
+        activeMembers={formatNumeric(
+          insights?.activeMembers ?? memberCountText,
+          localeTag,
+        )}
+        copy={{
+          goalPrefix: t("groupDetailGoalPrefix"),
+          remaining: t("groupDetailRemaining"),
+          noGoal: t("groupDetailNoGoal"),
+          groupPerDay: t("groupDetailGroupPerDay"),
+          youPerDay: t("groupDetailYouPerDay"),
+          activeMembers: t("groupDetailActiveMembersShort"),
+          updated: t("groupDetailUpdatedShort"),
+        }}
+        goalAmount={
+          insights?.goalAmount
+            ? formatNumeric(insights.goalAmount, localeTag)
+            : null
+        }
+        goalPercent={goalPercent}
+        groupPerDay={
+          insights?.groupPerDay
+            ? formatNumeric(insights.groupPerDay, localeTag)
+            : null
+        }
+        perPersonPerDay={
+          insights?.perPersonPerDay
+            ? formatNumeric(insights.perPersonPerDay, localeTag)
+            : null
+        }
+        periodTotal={formatNumeric(insights?.periodTotal ?? "0", localeTag)}
+        remaining={
+          insights?.remaining
+            ? formatNumeric(insights.remaining, localeTag)
+            : null
+        }
+        totalMembers={
+          insights?.totalMembers
+            ? formatNumeric(insights.totalMembers, localeTag)
+            : null
+        }
+        updatedLabel={calculatedText}
+      />
 
       <AppCard style={{ gap: spacing.sm }}>
         <AppButton
@@ -745,6 +769,12 @@ export function GroupDetailScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <AppHeader
+        backLabel={t("commonBack")}
+        onBack={() => replace("/groups")}
+        subtitle={groupName}
+        title={t("appName")}
+      />
       <FlatList
         testID="group-detail-list"
         contentInsetAdjustmentBehavior="automatic"
