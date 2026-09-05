@@ -18,6 +18,7 @@ export {
   SegmentedControl,
   type SegmentedOption,
 } from "./segmented-control";
+export { GoalSheet, type GoalSheetCopy } from "./goal-sheet";
 export { GroupCard } from "./group-card";
 export {
   GroupInsightsPanel,

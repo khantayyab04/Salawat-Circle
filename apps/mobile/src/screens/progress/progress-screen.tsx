@@ -2,6 +2,7 @@ import {
   ActivityChart,
   AmountText,
   AppScreen,
+  GoalSheet,
   SectionLabel,
   SegmentedControl,
   StatCard,
@@ -48,6 +49,8 @@ export function ProgressScreen() {
   const entries = useEntries();
 
   const [range, setRange] = useState<ProgressRange>("week");
+  const [goalOpen, setGoalOpen] = useState(false);
+  const [goalFailed, setGoalFailed] = useState(false);
 
   const series = entries.progressSeries;
   const failed = entries.progressFailed;
@@ -61,6 +64,18 @@ export function ProgressScreen() {
 
   // Totals travel as strings so lifetime sums stay exact; BigInt keeps that
   // exactness all the way into the formatter.
+  const saveGoal = async (amount: number | null) => {
+    setGoalFailed(false);
+    try {
+      await (amount === null ? entries.clearGoal() : entries.setGoal(amount));
+      setGoalOpen(false);
+      // The goal changes which days count as achieved, so the series is stale.
+      void loadSeries(range).catch(() => {});
+    } catch {
+      setGoalFailed(true);
+    }
+  };
+
   const number = (value: string) => formatAppNumber(BigInt(value), localeTag);
   const hasGoalDays = Boolean(series && series.goalDays !== "0");
 
@@ -84,6 +99,7 @@ export function ProgressScreen() {
         <Pressable
           accessibilityLabel={t("progressEditGoal")}
           accessibilityRole="button"
+          onPress={() => setGoalOpen(true)}
           style={{
             minHeight: 44,
             minWidth: 44,
@@ -247,6 +263,26 @@ export function ProgressScreen() {
             </View>
           ))}
       </Surface>
+
+      <GoalSheet
+        busy={entries.busy}
+        copy={{
+          title: t("goalTitle"),
+          subtitle: t("goalSubtitle"),
+          enableLabel: t("goalEnableLabel"),
+          enableHint: t("goalEnableHint"),
+          unit: t("goalUnit"),
+          save: t("goalSave"),
+          close: t("commonCancel"),
+          invalid: t("entryAmountInvalid"),
+          failed: t("goalSaveFailed"),
+        }}
+        currentGoal={entries.summary.todayGoal}
+        failed={goalFailed}
+        onClose={() => setGoalOpen(false)}
+        onSave={(amount) => void saveGoal(amount)}
+        visible={goalOpen}
+      />
     </AppScreen>
   );
 }

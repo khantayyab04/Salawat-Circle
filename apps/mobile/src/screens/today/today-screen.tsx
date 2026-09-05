@@ -2,6 +2,7 @@ import {
   AmountChip,
   AmountText,
   AppScreen,
+  GoalSheet,
   OfflineLoadErrorCard,
   OfflineRecoveryCard,
   ProgressRing,
@@ -41,6 +42,8 @@ export function TodayScreen() {
 
   const [tally, setTally] = useState(createTally());
   const [saveFailed, setSaveFailed] = useState(false);
+  const [goalOpen, setGoalOpen] = useState(false);
+  const [goalFailed, setGoalFailed] = useState(false);
 
   if (entries.offlineLoadErrorCode === "INVALID_OFFLINE_STATE") {
     return (
@@ -95,6 +98,17 @@ export function TodayScreen() {
 
   const sync = describeSyncState(entries.syncState, t);
 
+  const saveGoal = async (amount: number | null) => {
+    setGoalFailed(false);
+    try {
+      await (amount === null ? entries.clearGoal() : entries.setGoal(amount));
+      setGoalOpen(false);
+    } catch {
+      // The sheet stays open with the entered value so nothing is lost.
+      setGoalFailed(true);
+    }
+  };
+
   const commit = async () => {
     if (tally.amount <= 0) return;
     setSaveFailed(false);
@@ -148,7 +162,9 @@ export function TodayScreen() {
             />
             {goal ? (
               <Pressable
+                accessibilityLabel={t("progressEditGoal")}
                 accessibilityRole="button"
+                onPress={() => setGoalOpen(true)}
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
@@ -164,6 +180,7 @@ export function TodayScreen() {
               <Pressable
                 accessibilityLabel={t("todayNoGoal")}
                 accessibilityRole="button"
+                onPress={() => setGoalOpen(true)}
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
@@ -333,6 +350,26 @@ export function TodayScreen() {
       ) : null}
 
       <JumuahCard />
+
+      <GoalSheet
+        busy={entries.busy}
+        copy={{
+          title: t("goalTitle"),
+          subtitle: t("goalSubtitle"),
+          enableLabel: t("goalEnableLabel"),
+          enableHint: t("goalEnableHint"),
+          unit: t("goalUnit"),
+          save: t("goalSave"),
+          close: t("commonCancel"),
+          invalid: t("entryAmountInvalid"),
+          failed: t("goalSaveFailed"),
+        }}
+        currentGoal={goal}
+        failed={goalFailed}
+        onClose={() => setGoalOpen(false)}
+        onSave={(amount) => void saveGoal(amount)}
+        visible={goalOpen}
+      />
     </AppScreen>
   );
 }
