@@ -324,7 +324,7 @@ select is(
   'all-time leaderboard keeps post-join values while excluding pre-join values'
 );
 select throws_ok(
-  $$ select public.get_group_leaderboard('7a7a7a7a-7a7a-47a7-87a7-7a7a7a7a7a70', 'month') $$,
+  $$ select public.get_group_leaderboard('7a7a7a7a-7a7a-47a7-87a7-7a7a7a7a7a70', 'decade') $$,
   'P0001',
   'INVALID_INPUT',
   'leaderboard rejects unsupported periods'

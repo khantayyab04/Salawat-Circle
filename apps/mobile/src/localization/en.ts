@@ -9,6 +9,11 @@ export const en = {
   tabsGroups: "Groups",
   tabsSettings: "Settings",
   accountTitle: "Account",
+  headerTodayEyebrow: "Daily record",
+  headerProgressEyebrow: "Your journey",
+  headerGroupsEyebrow: "Shared circles",
+  headerAccountEyebrow: "Account",
+  commonBack: "Back",
   welcomeEyebrow: "Private and data-minimizing",
   welcomeTitle: "Record Salawat mindfully",
   welcomeBody:

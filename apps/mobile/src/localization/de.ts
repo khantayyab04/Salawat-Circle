@@ -8,6 +8,11 @@ export const de = {
   tabsGroups: "Gruppen",
   tabsSettings: "Einstellungen",
   accountTitle: "Konto",
+  headerTodayEyebrow: "Heutiger Eintrag",
+  headerProgressEyebrow: "Dein Verlauf",
+  headerGroupsEyebrow: "Geteilte Kreise",
+  headerAccountEyebrow: "Konto",
+  commonBack: "Zurück",
   welcomeEyebrow: "Privat und datensparsam",
   welcomeTitle: "Salawat bewusst festhalten",
   welcomeBody:

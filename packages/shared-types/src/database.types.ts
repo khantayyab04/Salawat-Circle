@@ -310,7 +310,10 @@ export type Database = {
         Returns: Json
       }
       get_entry: { Args: { p_id: string }; Returns: Json }
-      get_group_insights: { Args: { p_group_id: string }; Returns: Json }
+      get_group_insights: {
+        Args: { p_group_id: string; p_period?: string }
+        Returns: Json
+      }
       get_group_leaderboard: {
         Args: {
           p_cursor_membership_id?: string
@@ -326,6 +329,10 @@ export type Database = {
       get_onboarding_state: { Args: never; Returns: Json }
       get_progress_overview: {
         Args: { p_days?: number; p_timezone: string }
+        Returns: Json
+      }
+      get_progress_series: {
+        Args: { p_range?: string; p_timezone: string }
         Returns: Json
       }
       grant_core_consent: { Args: { p_locale: string }; Returns: Json }
