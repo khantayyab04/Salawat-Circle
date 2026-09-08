@@ -15,7 +15,8 @@ import {
   useGroups,
 } from "@/lib/groups";
 import { formatAppNumber, type TranslationKey, useTranslation } from "@/localization";
-import { spacing } from "@/theme";
+import { spacing, typography, useAppTheme } from "@/theme";
+import Users from "lucide-react-native/icons/users";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Alert, View, type TextStyle, type ViewStyle } from "react-native";
@@ -87,6 +88,7 @@ export function JoinScreen({
   invalidRouteSecret?: boolean;
 }) {
   const { replace } = useRouter();
+  const { colors } = useAppTheme();
   const { locale, localeTag, t } = useTranslation();
   const { clearPendingInvite, peekPendingInvite } = useAuth();
   const { invitePreview, mutation, previewInvite, acceptInvite } = useGroups();
@@ -224,6 +226,7 @@ export function JoinScreen({
           <AppText variant="title">{t("joinManualCodeTitle")}</AppText>
           <AppText>{t("joinBody")}</AppText>
           <FormField
+            style={[typography.statNumber, { textAlign: "center", letterSpacing: 2, backgroundColor: colors.surfaceSubtle }]}
             autoCapitalize="characters"
             autoCorrect={false}
             label={t("joinManualCodeLabel")}
@@ -240,6 +243,7 @@ export function JoinScreen({
           />
           <AppButton
             label={t("joinManualCodeSubmit")}
+            icon={<Users size={18} color={colors.textOnPrimary} />}
             disabled={!manualCodeNormalized}
             loading={invitePreview.status === "loading" && activeSecretKind === "code"}
             onPress={handlePreviewSubmit}
@@ -286,6 +290,7 @@ export function JoinScreen({
       {previewData ? (
         <>
           <AppCard style={{ gap: spacing.sm }}>
+            <Users size={32} color={colors.goldText} />
             <AppText variant="title">{t("joinPreviewHeading")}</AppText>
             <AppText variant="bodyStrong">{previewData.group.name}</AppText>
             <AppText style={tabularNumberStyle}>{`${memberCountLabel} ${t(

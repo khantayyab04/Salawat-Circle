@@ -32,6 +32,18 @@ jest.mock("@/theme", () => {
 });
 
 describe("EntryRow", () => {
+  it("shows synchronization labels only for pending, failed, or conflicted entries", async () => {
+    const entry = {
+      id: "entry-1", amount: "42", entryDate: "2026-08-31", timezone: "Europe/Berlin",
+      recordedAtClient: "2026-08-31T10:00:00.000Z", createdAt: "2026-08-31T10:00:00.000Z",
+      updatedAt: "2026-08-31T10:00:00.000Z", revision: 1,
+    };
+    const props = { onDelete: jest.fn(), onEdit: jest.fn(), showTime: false };
+    const view = await render(<EntryRow {...props} entry={{ ...entry, localState: "synced" }} />);
+    expect(view.queryByText("Synchronisiert")).toBeNull();
+    await view.rerender(<EntryRow {...props} entry={{ ...entry, localState: "failed" }} />);
+    expect(view.getByText("Synchronisierung fehlgeschlagen")).toBeTruthy();
+  });
   it("offers edit and confirmed delete actions for an entry", async () => {
     const onEdit = jest.fn();
     const onDelete = jest.fn();

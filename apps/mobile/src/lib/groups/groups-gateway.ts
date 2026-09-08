@@ -2,6 +2,7 @@ import type { Database } from "@salawat-circle/shared-types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { GroupsError, getGroupsErrorCode } from "./errors";
 import type {
+  GroupCampaignSelection,
   AcceptInviteResponse,
   AppLocale,
   CreateGroupResponse,
@@ -35,6 +36,7 @@ import type {
   SetGroupGoalResponse,
 } from "./types";
 import { parseGroupInsights, type GroupInsights } from "@/lib/group-insights";
+import type { GroupPeriod } from "./periods";
 
 export type GroupsGateway = {
   listMyGroups(): Promise<ListMyGroupsResponse>;
@@ -51,7 +53,7 @@ export type GroupsGateway = {
     cursor: GroupLeaderboardCursor | null,
     limit: number,
   ): Promise<GroupLeaderboardResponse>;
-  getInsights?(groupId: string): Promise<GroupInsights>;
+  getInsights?(groupId: string, period?: GroupPeriod): Promise<GroupInsights>;
   setLeaderboardAnonymity(
     groupId: string,
     anonymous: boolean,
@@ -59,9 +61,10 @@ export type GroupsGateway = {
   ): Promise<SetLeaderboardAnonymityResponse>;
   setGroupGoal?(
     groupId: string,
-    period: "week" | "month",
-    amount: number,
+    period: GroupPeriod,
+    amount: number | null,
     expectedRevision: number,
+    campaign?: GroupCampaignSelection,
   ): Promise<SetGroupGoalResponse>;
   createInvite(
     groupId: string,
@@ -210,7 +213,7 @@ function readLeaderboardPeriod(
   key: string,
 ): LeaderboardPeriod {
   const field = value[key];
-  if (field !== "week" && field !== "all_time") {
+  if (field !== "week" && field !== "month" && field !== "all_time") {
     asInvalidResponse();
   }
 
@@ -512,12 +515,12 @@ function parseSetLeaderboardAnonymityResponse(
 function parseSetGroupGoalResponse(dataValue: unknown): SetGroupGoalResponse {
   const data = readRecord(dataValue);
   const period = readString(data, "period");
-  if (period !== "week" && period !== "month") asInvalidResponse();
+  if (period !== "week" && period !== "month" && period !== "all") asInvalidResponse();
   return {
     groupId: readString(data, "group_id"),
     period,
     effectiveFrom: readString(data, "effective_from"),
-    amount: readNumericString(data, "amount"),
+    amount: data.amount === null ? null : readNumericString(data, "amount"),
     revision: readInteger(data, "revision"),
   };
 }
@@ -658,9 +661,10 @@ export function createSupabaseGroupsGateway(
       return parseGroupLeaderboardResponse(data);
     },
 
-    async getInsights(groupId) {
+    async getInsights(groupId, period = "week") {
       const data = await callRpc(client, "get_group_insights", {
         p_group_id: groupId,
+        p_period: period,
       });
       return parseGroupInsights(data);
     },
@@ -674,12 +678,13 @@ export function createSupabaseGroupsGateway(
       return parseSetLeaderboardAnonymityResponse(data);
     },
 
-    async setGroupGoal(groupId, period, amount, expectedRevision) {
+    async setGroupGoal(groupId, period, amount, expectedRevision, campaign) {
       const data = await callRpc(client, "set_group_goal", {
         p_group_id: groupId,
         p_period: period,
         p_amount: amount,
         p_expected_revision: expectedRevision,
+        ...(campaign ? { p_campaign_mode: campaign.mode, p_start_date: campaign.startDate } : {}),
       });
       return parseSetGroupGoalResponse(data);
     },

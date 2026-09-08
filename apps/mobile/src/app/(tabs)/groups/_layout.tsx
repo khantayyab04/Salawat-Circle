@@ -1,12 +1,14 @@
 import { useTranslation } from "@/localization";
 import { Stack } from "expo-router/stack";
+
+export const unstable_settings = { initialRouteName: "index" };
 export default function GroupsLayout() {
   const { t } = useTranslation();
   return (
     <Stack screenOptions={{ headerBackButtonDisplayMode: "minimal" }}>
       <Stack.Screen
         name="index"
-        options={{ title: t("tabsGroups"), headerLargeTitle: true }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen name="create" options={{ title: t("groupCreateTitle") }} />
       <Stack.Screen name="[id]/index" options={{ title: t("groupTitle") }} />

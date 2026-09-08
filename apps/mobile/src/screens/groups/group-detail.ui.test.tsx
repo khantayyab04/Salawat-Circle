@@ -45,11 +45,14 @@ jest.mock("@/lib/groups", () => ({
 }));
 
 jest.mock("@expo/ui", () => {
-  const { Pressable, Text } = jest.requireActual<typeof import("react-native")>(
+  const { Pressable, Text, View } = jest.requireActual<typeof import("react-native")>(
     "react-native",
   );
 
+  const Picker = ({ children, ...props }: { children: React.ReactNode }) => <View {...props}>{children}</View>;
+  Picker.Item = function PickerItem() { return null; };
   return {
+    Picker,
     Host: ({ children }: { children: React.ReactNode }) => children,
     Switch: ({
       value,
@@ -231,6 +234,13 @@ function createGroupsState(overrides: Record<string, unknown> = {}) {
       kind: null,
       errorCode: null,
     },
+    insightsByGroup: {
+      "group-1": {
+        week: { groupId: "group-1", period: "week", periodTotal: "1234", weekTotal: "1234", activeMembers: "5", totalMembers: null, weeklyAverage: null, goalAmount: null, remaining: null, daysRemaining: 2, groupPerDay: null, perPersonRemaining: null, perPersonPerDay: null },
+      },
+    },
+    insightsStatusByGroup: { "group-1": { week: { loading: false, errorCode: null } } },
+    loadInsights: jest.fn<() => Promise<unknown>>().mockResolvedValue(undefined),
     refreshGroups: mockRefreshGroups,
     createGroup: jest.fn(),
     loadLeaderboard: mockLoadLeaderboard,
@@ -262,8 +272,56 @@ const errorCases: ["OFFLINE" | "RATE_LIMITED" | "NOT_FOUND" | "INTERNAL", string
 ];
 
 describe("Task 14 group detail screen", () => {
+  it("does not offer a misleading clear action for a derived weekly goal", async () => {
+    const state = createGroupsState();
+    Object.assign(state.insightsByGroup["group-1"].week, { goalAmount: "500", goalSource: "campaign" });
+    mockUseGroups.mockReturnValue(state);
+    const view = await render(<GroupDetailRoute />);
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupDetailGoalEdit" })));
+    expect(view.queryByRole("button", { name: "groupDetailGoalClear" })).toBeNull();
+  });
+
+  it("offers native campaign date selection and sends the selected campaign with the monthly goal", async () => {
+    const setGroupGoal = jest.fn<(...args: unknown[]) => Promise<unknown>>().mockResolvedValue({});
+    const state = createGroupsState({ setGroupGoal });
+    Object.assign(state.leaderboard.byGroup["group-1"], { month: createPeriodState("week") });
+    mockUseGroups.mockReturnValue(state);
+    const view = await render(<GroupDetailRoute />);
+    await act(async () => fireEvent.press(view.getByRole("tab", { name: "groupDetailMonth" })));
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupDetailGoalEdit" })));
+    await act(async () => fireEvent(view.getByTestId("group-campaign-mode"), "onValueChange", "custom"));
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupCampaignStart" })));
+    await act(async () => fireEvent(view.getByTestId("calendar-date-picker"), "onValueChange", { type: "set" }, new Date("2026-09-17T00:00:00Z")));
+    await act(async () => fireEvent.changeText(view.getByTestId("group-goal-amount"), "3000"));
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupDetailGoalSave" })));
+    expect(setGroupGoal).toHaveBeenCalledWith("group-1", "month", 3000, 7, { mode: "custom", startDate: "2026-09-17" });
+  });
+
+  it("allows a lone owner to confirm leaving and explains automatic group deletion", async () => {
+    const leaveGroup = jest.fn<() => Promise<unknown>>().mockResolvedValue({});
+    const state = createGroupsState({ leaveGroup });
+    state.leaderboard.byGroup["group-1"].week.group.memberCount = "1";
+    mockUseGroups.mockReturnValue(state);
+    const view = await render(<GroupDetailRoute />);
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupDetailSettingsAction" })));
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupDetailLeaveAction" })));
+    expect(view.getByText("groupOwnerLeaveLast")).toBeTruthy();
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupDetailLeaveConfirmAction" })));
+    expect(leaveGroup).toHaveBeenCalledWith("group-1");
+  });
+
+  it("shows the localized self name once even when the server sends a foreign self label", async () => {
+    const state = createGroupsState();
+    state.leaderboard.byGroup["group-1"].week.items = [{ rowId: "self", displayName: "You", isSelf: true, rank: 1, total: "50" }] as never[];
+    mockUseGroups.mockReturnValue(state);
+    const view = await render(<GroupDetailRoute />);
+    expect(view.queryByText("You")).toBeNull();
+    expect(view.getAllByText("Du")).toHaveLength(1);
+  });
+
   it("links the group detail to member management for an owner", async () => {
     const view = await render(<GroupDetailRoute />);
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupDetailSettingsAction" })));
 
     await waitFor(() =>
       expect(view.getByRole("button", { name: "Mitglieder verwalten" })).toBeTruthy(),
@@ -277,6 +335,7 @@ describe("Task 14 group detail screen", () => {
 
   it("opens the owner rename form from the detail screen", async () => {
     const view = await render(<GroupDetailRoute />);
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupDetailSettingsAction" })));
 
     await act(async () => {
       fireEvent.press(view.getByRole("button", { name: "Gruppe umbenennen" }));
@@ -295,10 +354,14 @@ describe("Task 14 group detail screen", () => {
     expect(mockLoadLeaderboard).toHaveBeenCalledTimes(1);
 
     expect(view.queryByText("Private Gruppe")).toBeNull();
+    // The circle name now sits in the header, and the member count and the
+    // calculation time are shown as labelled figures in the insights panel.
     expect(view.getByText("Alpha Circle")).toBeTruthy();
-    expect(view.getByText("5 aktive Mitglieder")).toBeTruthy();
+    expect(view.getByText("5")).toBeTruthy();
+    // The tile shows a short relative age; the exact timestamp stays available
+    // to assistive technology.
     expect(
-      view.getByText("Zuletzt berechnet: date:2026-08-31 time:20:05"),
+      view.getByLabelText(/date:2026-08-31 time:20:05/),
     ).toBeTruthy();
   });
 
@@ -383,8 +446,8 @@ describe("Task 14 group detail screen", () => {
   it("supports accessible week/all-time switching and resets each period", async () => {
     const view = await render(<GroupDetailRoute />);
 
-    const weekButton = view.getByRole("button", { name: "Woche" });
-    const allTimeButton = view.getByRole("button", { name: "Gesamt" });
+    const weekButton = view.getByRole("tab", { name: "Woche" });
+    const allTimeButton = view.getByRole("tab", { name: "Gesamt" });
 
     expect(weekButton.props.accessibilityState.selected).toBe(true);
     expect(allTimeButton.props.accessibilityState.selected).toBe(false);
@@ -485,6 +548,7 @@ describe("Task 14 group detail screen", () => {
     );
 
     const view = await render(<GroupDetailRoute />);
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupDetailSettingsAction" })));
 
     expect(view.getByRole("switch", { name: "Rangliste anonym anzeigen" })).toBeTruthy();
     expect(
@@ -542,6 +606,7 @@ describe("Task 14 group detail screen", () => {
     );
 
     const view = await render(<GroupDetailRoute />);
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupDetailSettingsAction" })));
 
     expect(view.queryByRole("switch")).toBeNull();
     expect(view.getByText("Anonyme Rangliste ist aktiv.")).toBeTruthy();
@@ -586,6 +651,7 @@ describe("Task 14 group detail screen", () => {
     );
 
     const view = await render(<GroupDetailRoute />);
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupDetailSettingsAction" })));
 
     await act(async () => {
       fireEvent.press(view.getByRole("switch", { name: "Rangliste anonym anzeigen" }));
@@ -604,6 +670,7 @@ describe("Task 14 group detail screen", () => {
     mockSetAnonymity.mockRejectedValueOnce(new GroupsError("ENTRY_VERSION_CONFLICT"));
 
     const view = await render(<GroupDetailRoute />);
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupDetailSettingsAction" })));
 
     await act(async () => {
       fireEvent.press(view.getByRole("switch", { name: "Rangliste anonym anzeigen" }));
@@ -625,6 +692,7 @@ describe("Task 14 group detail screen", () => {
   it("shows actionable offline copy when owner anonymity toggle fails offline", async () => {
     mockSetAnonymity.mockRejectedValueOnce(new GroupsError("OFFLINE"));
     const view = await render(<GroupDetailRoute />);
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupDetailSettingsAction" })));
 
     await act(async () => {
       fireEvent.press(view.getByRole("switch", { name: "Rangliste anonym anzeigen" }));

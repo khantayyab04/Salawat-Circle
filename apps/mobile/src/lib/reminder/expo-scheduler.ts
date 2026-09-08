@@ -1,7 +1,20 @@
-import * as Notifications from "expo-notifications";
+import * as ExpoNotifications from "expo-notifications";
 import { createReminderScheduler } from "./scheduler";
 
+type NotificationsModule = typeof ExpoNotifications;
+
+/**
+ * Indirection over `expo-notifications` so the module can be swapped in tests
+ * and, more importantly, so a runtime that cannot provide notifications does
+ * not take the rest of the app down with it: the auth provider imports this
+ * module transitively, so an unguarded failure here would break every route.
+ */
+function notifications(): NotificationsModule {
+  return ExpoNotifications;
+}
+
 export function createExpoReminderScheduler() {
+  const Notifications = notifications();
   return createReminderScheduler({
     getPermissionsAsync: () => Notifications.getPermissionsAsync(),
     requestPermissionsAsync: () => Notifications.requestPermissionsAsync(),
@@ -37,6 +50,7 @@ export function createExpoReminderScheduler() {
 }
 
 export function subscribeToReminderResponses(onOpenToday: () => void) {
+  const Notifications = notifications();
   return Notifications.addNotificationResponseReceivedListener((response) => {
     const url = response.notification.request.content.data?.url;
     if (url === "salawat-circle://today") onOpenToday();
@@ -44,6 +58,7 @@ export function subscribeToReminderResponses(onOpenToday: () => void) {
 }
 
 export async function wasOpenedFromReminder() {
+  const Notifications = notifications();
   const response = await Notifications.getLastNotificationResponseAsync();
   if (!response) return false;
   await Notifications.clearLastNotificationResponseAsync();

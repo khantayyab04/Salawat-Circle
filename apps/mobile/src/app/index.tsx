@@ -17,6 +17,17 @@ type PendingInviteLookup =
       status: "error";
     };
 
+/**
+ * Local preview of the signed-in screens without a backend. Gated on a
+ * development build AND an explicit flag, so a release can never reach it.
+ */
+function isLocalPreview() {
+  return (
+    process.env.NODE_ENV !== "production" &&
+    process.env.EXPO_PUBLIC_LOCAL_DEMO === "true"
+  );
+}
+
 export default function IndexRoute() {
   const { t } = useTranslation();
   const { status, userId, peekPendingInvite } = useAuth();
@@ -62,6 +73,7 @@ export default function IndexRoute() {
       ? inviteLookup
       : null;
 
+  if (isLocalPreview()) return <Redirect href="/today" />;
   if (status === "loading") {
     return (
       <AppScreen contentContainerStyle={{ justifyContent: "center" }}>

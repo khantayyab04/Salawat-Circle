@@ -1,18 +1,4 @@
-import {
-  AppButton,
-  AppScreen,
-  StateFeedback,
-} from "@/components";
-import { useTranslation } from "@/localization";
-import { View } from "react-native";
+import { Redirect } from "expo-router";
 export function GroupMembersScreen() {
-  const { t } = useTranslation();
-  return (
-    <AppScreen>
-      <StateFeedback state="empty">
-        <View />
-      </StateFeedback>
-      <AppButton disabled label={t("commonUnavailable")} variant="secondary" />
-    </AppScreen>
-  );
+  return <Redirect href="/groups" />;
 }

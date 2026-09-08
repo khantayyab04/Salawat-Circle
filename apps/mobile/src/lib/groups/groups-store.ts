@@ -12,6 +12,7 @@ import type {
   PreviewInviteResponse,
 } from "./types";
 import type { GroupInsights } from "@/lib/group-insights";
+import type { GroupPeriod } from "./periods";
 
 export type GroupsLoadStatus = "idle" | "loading" | "ready" | "error";
 
@@ -41,6 +42,7 @@ export type GroupsLeaderboardByGroup = Record<
   string,
   {
     week: GroupsLeaderboardPeriodState;
+    month: GroupsLeaderboardPeriodState;
     all_time: GroupsLeaderboardPeriodState;
   }
 >;
@@ -100,7 +102,14 @@ export type GroupsSnapshot = {
   invites: GroupsInvitesState;
   members: GroupsMembersState;
   invitePreview: GroupsInvitePreviewState;
-  insightsByGroup: Record<string, GroupInsights | null>;
+  insightsByGroup: Record<
+    string,
+    Partial<Record<GroupPeriod, GroupInsights | null>>
+  >;
+  insightsStatusByGroup: Record<string, Partial<Record<GroupPeriod, {
+    loading: boolean;
+    errorCode: GroupsErrorCode | null;
+  }>>>;
   mutation: GroupsMutationState;
 };
 
@@ -162,6 +171,7 @@ export function createGroupsSnapshot(
       errorCode: null,
     },
     insightsByGroup: {},
+    insightsStatusByGroup: {},
     mutation: {
       pending: false,
       kind: null,
@@ -178,6 +188,7 @@ export function ensureLeaderboardState(
   if (!snapshot.leaderboard.byGroup[groupId]) {
     snapshot.leaderboard.byGroup[groupId] = {
       week: createEmptyLeaderboardState("week"),
+      month: createEmptyLeaderboardState("month"),
       all_time: createEmptyLeaderboardState("all_time"),
     };
   }

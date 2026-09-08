@@ -3,133 +3,86 @@ import {
   AppCard,
   AppScreen,
   AppText,
+  SectionLabel,
 } from "@/components";
-import { useAuth } from "@/lib/auth";
-import { useTranslation, type LanguagePreference } from "@/localization";
+import { useTranslation } from "@/localization";
 import { spacing } from "@/theme";
-import Constants from "expo-constants";
-import { Host, List, ListItem, Picker } from "@expo/ui";
 import { useRouter } from "expo-router";
-import { Alert } from "react-native";
 
-export function SettingsScreen() {
-  const { t, preference, setPreference } = useTranslation();
-  const auth = useAuth();
-  const router = useRouter();
-  const handleSignOut = async () => {
-    try {
-      await auth.signOut();
-      router.replace("/welcome");
-    } catch {
-      // The provider still performs local cleanup and exposes a stable error.
-    }
-  };
-  const confirmSignOutEverywhere = () => {
-    Alert.alert(
-      t("settingsSignOutEverywhereConfirmTitle"),
-      t("settingsSignOutEverywhereConfirmBody"),
-      [
-        { text: t("commonCancel"), style: "cancel" },
-        {
-          text: t("settingsSignOutEverywhere"),
-          style: "destructive",
-          onPress: () => {
-            void auth.signOutEverywhere().then(() => router.replace("/welcome")).catch(() => {
-              // The provider exposes a stable localized error.
-            });
-          },
-        },
-      ],
-    );
-  };
-  return (
-    <AppScreen>
-      <AppCard>
-        <AppText variant="bodyStrong">{t("settingsLanguage")}</AppText>
-        <AppText variant="caption">{t("settingsLanguageHint")}</AppText>
-        <Host matchContents>
-          <Picker<LanguagePreference>
-            appearance="menu"
-            selectedValue={preference}
-            onValueChange={setPreference}
-            testID="language-picker"
-          >
-            <Picker.Item label={t("settingsLanguageSystem")} value="system" />
-            <Picker.Item label={t("settingsLanguageGerman")} value="de" />
-            <Picker.Item label={t("settingsLanguageEnglish")} value="en" />
-          </Picker>
-        </Host>
-      </AppCard>
-      <Host matchContents>
-        <List>
-          <ListItem onPress={() => router.push("/settings/profile")}>
-            {t("settingsProfile")}
-          </ListItem>
-          <ListItem onPress={() => router.push("/settings/reminder")}>
-            {t("settingsReminder")}
-          </ListItem>
-          <ListItem onPress={() => router.push("/settings/privacy")}>
-            {t("settingsPrivacy")}
-          </ListItem>
-          <ListItem onPress={() => router.push("/settings/legal")}>
-            {t("settingsLegal")}
-          </ListItem>
-          <ListItem onPress={() => router.push("/settings/support")}>
-            {t("settingsSupport")}
-          </ListItem>
-        </List>
-      </Host>
-      {auth.errorCode === "SIGN_OUT_FAILED" ? (
-        <AppText accessibilityLiveRegion="polite">
-          {t("settingsSignOutFailed")}
-        </AppText>
-      ) : null}
-      <AppButton
-        label={t("settingsSignOutEverywhere")}
-        loading={auth.busy}
-        variant="secondary"
-        onPress={confirmSignOutEverywhere}
-      />
-      <AppButton
-        label={t("settingsSignOut")}
-        loading={auth.busy}
-        variant="destructive"
-        onPress={() => void handleSignOut()}
-      />
-      <AppText variant="caption">{`${t("settingsVersion")}: ${
-        Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? "0.1.0"
-      }`}</AppText>
-    </AppScreen>
-  );
-}
+export { SettingsScreen } from "./settings-screen";
 
 export function PrivacyScreen() {
   const { t } = useTranslation();
   return (
     <AppScreen>
-      <AppButton disabled label={t("privacyExport")} variant="secondary" />
-      <AppButton disabled label={t("privacyDelete")} variant="destructive" />
-    </AppScreen>
-  );
-}
-export function LegalScreen() {
-  const { t } = useTranslation();
-  return (
-    <AppScreen>
-      <AppCard style={{ gap: spacing.lg }}>
-        <AppText>{t("legalPrivacy")}</AppText>
-        <AppText>{t("legalTerms")}</AppText>
-        <AppText>{t("legalImprint")}</AppText>
+      <AppCard style={{ gap: spacing.md }}>
+        <SectionLabel tone="gold">{t("privacyOverviewEyebrow")}</SectionLabel>
+        <AppText variant="cardTitle">{t("privacyOverviewTitle")}</AppText>
+        <AppText>{t("privacyOverviewBody")}</AppText>
+      </AppCard>
+      <AppCard style={{ gap: spacing.md }}>
+        <AppText variant="bodyStrong">{t("privacyGroupsTitle")}</AppText>
+        <AppText>{t("privacyGroupsBody")}</AppText>
+        <AppText variant="bodyStrong">{t("privacyReminderTitle")}</AppText>
+        <AppText>{t("privacyReminderBody")}</AppText>
       </AppCard>
     </AppScreen>
   );
 }
-export function SupportScreen() {
+
+export function LegalScreen() {
   const { t } = useTranslation();
   return (
     <AppScreen>
-      <AppCard>
+      <AppCard style={{ gap: spacing.md }}>
+        <SectionLabel tone="gold">{t("legalGroupRulesEyebrow")}</SectionLabel>
+        <AppText variant="cardTitle">{t("legalGroupRulesTitle")}</AppText>
+        <AppText>{t("legalGroupRulesBody")}</AppText>
+      </AppCard>
+      <AppCard style={{ gap: spacing.md }}>
+        <AppText variant="bodyStrong">{t("legalProductInfoTitle")}</AppText>
+        <AppText>{t("legalProductInfoBody")}</AppText>
+      </AppCard>
+    </AppScreen>
+  );
+}
+
+export function SupportScreen() {
+  const { t } = useTranslation();
+  const router = useRouter();
+  return (
+    <AppScreen>
+      <AppCard style={{ gap: spacing.md }}>
+        <SectionLabel tone="gold">{t("supportSelfHelpEyebrow")}</SectionLabel>
+        <AppText variant="cardTitle">{t("supportTitle")}</AppText>
         <AppText>{t("supportBody")}</AppText>
+      </AppCard>
+      <AppCard style={{ gap: spacing.md }}>
+        <AppText variant="bodyStrong">{t("supportEntriesTitle")}</AppText>
+        <AppText>{t("supportEntriesBody")}</AppText>
+        <AppButton
+          label={t("supportEntriesAction")}
+          onPress={() => router.push("/today")}
+          variant="secondary"
+        />
+      </AppCard>
+      <AppCard style={{ gap: spacing.md }}>
+        <AppText variant="bodyStrong">{t("supportGroupsTitle")}</AppText>
+        <AppText>{t("supportGroupsBody")}</AppText>
+        <AppButton
+          label={t("supportGroupsAction")}
+          onPress={() => router.push("/groups")}
+          variant="secondary"
+        />
+      </AppCard>
+      <AppCard style={{ gap: spacing.md }}>
+        <AppText variant="bodyStrong">{t("supportReminderTitle")}</AppText>
+        <AppText>{t("supportReminderBody")}</AppText>
+        <AppButton
+          label={t("supportReminderAction")}
+          onPress={() => router.push("/settings/reminder")}
+          variant="secondary"
+        />
       </AppCard>
     </AppScreen>
   );

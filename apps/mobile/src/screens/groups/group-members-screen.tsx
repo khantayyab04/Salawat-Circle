@@ -1,3 +1,4 @@
+import Crown from "lucide-react-native/icons/crown";
 import {
   AppButton,
   AppCard,
@@ -15,7 +16,8 @@ import {
   type TranslationKey,
   useTranslation,
 } from "@/localization";
-import { spacing, useAppTheme } from "@/theme";
+import { radius, spacing, useAppTheme } from "@/theme";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Stack,
   useFocusEffect,
@@ -77,10 +79,11 @@ function MemberRow({
       <View style={{ flexDirection: "row", justifyContent: "space-between", gap: spacing.sm }}>
         <View style={{ flex: 1, gap: spacing.xs }}>
           <AppText variant="bodyStrong">{member.displayName}</AppText>
-          <AppText variant="caption">
-            {member.role === "owner" ? t("groupMembersOwner") : t("groupMembersMember")}
-            {member.isSelf ? ` · ${t("groupDetailSelfLabel")}` : ""}
-          </AppText>
+          {member.role === "owner" ? <View accessible accessibilityLabel={t("groupMembersOwner")} style={{ flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.pill, backgroundColor: colors.accentMuted }}>
+            <Crown size={14} color={colors.goldText} />
+            <AppText variant="caption" style={{ color: colors.goldText }}>{t("groupMembersOwner")}</AppText>
+          </View> : <AppText variant="caption">{t("groupMembersMember")}</AppText>}
+          {member.isSelf ? <AppText variant="caption">{t("groupDetailSelfLabel")}</AppText> : null}
         </View>
         <AppText selectable variant="caption" style={{ color: colors.textSecondary }}>
           {t("groupMembersJoined", { date: joined })}
@@ -107,6 +110,7 @@ function MemberRow({
 }
 
 export function GroupMembersScreen() {
+  const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const { colors } = useAppTheme();
   const { width } = useWindowDimensions();
@@ -127,7 +131,9 @@ export function GroupMembersScreen() {
     () => groups.items.find((item) => item.id === groupId) ?? members.group,
     [groupId, groups.items, members.group],
   );
-  const isOwner = groups.items.find((item) => item.id === groupId)?.role === "owner";
+  const isOwner = members.groupId === groupId && members.status === "ready"
+    ? members.items.some((item) => item.isSelf && item.role === "owner")
+    : groups.items.find((item) => item.id === groupId)?.role === "owner";
   const isActiveGroup = members.groupId === groupId;
   const items = isActiveGroup ? members.items : [];
   const errorCode = actionError ?? (isActiveGroup ? members.errorCode : null);
@@ -220,6 +226,7 @@ export function GroupMembersScreen() {
           gap: spacing.lg,
           paddingHorizontal: spacing.lg,
           paddingVertical: spacing.xl,
+          paddingBottom: 120 + insets.bottom,
           width: "100%",
           maxWidth: width > 760 ? 720 : undefined,
           alignSelf: "center",

@@ -40,6 +40,9 @@ jest.mock("@/localization", () => ({
         profileTimezoneLabel: "Zeitzone",
         profileTimezoneHint: "Zeitzone auswählen",
         settingsProfileSave: "Profil speichern",
+        settingsProfileRetry: "Profil erneut laden",
+        settingsProfileLoadFailed:
+          "Dein Profil konnte nicht geladen werden. Prüfe die Verbindung und versuche es erneut.",
         profileSaveFailed: "Das Profil konnte nicht gespeichert werden.",
       })[key] ?? key,
   }),
@@ -52,6 +55,34 @@ beforeEach(() => {
 });
 
 describe("ProfileSettingsScreen", () => {
+  it("retries a failed profile load without leaving the screen", async () => {
+    const loadProfile = jest
+      .fn<() => Promise<{ displayName: string; timeZone: string }>>()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({
+        displayName: "Amina Example",
+        timeZone: "Europe/Berlin",
+      });
+    const view = await render(
+      <ProfileSettingsScreen gateway={{ loadProfile }} />,
+    );
+
+    await waitFor(() =>
+      expect(view.getByText("Dein Profil konnte nicht geladen werden. Prüfe die Verbindung und versuche es erneut.")).toBeTruthy(),
+    );
+    expect(view.queryByLabelText("Anzeigename")).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(
+        view.getByRole("button", { name: "Profil erneut laden" }),
+      );
+    });
+
+    await waitFor(() =>
+      expect(view.getByDisplayValue("Amina Example")).toBeTruthy(),
+    );
+  });
+
   it("loads the saved profile and submits an edited display name", async () => {
     const view = await render(
       <ProfileSettingsScreen

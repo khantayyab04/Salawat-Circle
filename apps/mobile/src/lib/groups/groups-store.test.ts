@@ -3,6 +3,7 @@ import { GroupsError } from "./errors";
 import type { GroupsGateway } from "./groups-gateway";
 import { GroupsController } from "./groups-controller";
 import { GroupsStore } from "./groups-store";
+import type { GroupInsights } from "@/lib/group-insights";
 import type {
   AcceptInviteResponse,
   CreateInviteResponse,
@@ -305,7 +306,245 @@ function setup({
   return { store, controller, gateway };
 }
 
+function groupInsights(
+  period: GroupInsights["period"],
+  periodTotal: string,
+): GroupInsights {
+  return {
+    groupId: baseGroup.id,
+    period,
+    periodTotal,
+    weekTotal: period === "week" ? periodTotal : "100",
+    activeMembers: "2",
+    totalMembers: "2",
+    weeklyAverage: "100",
+    goalAmount: null,
+    remaining: null,
+    daysRemaining: 1,
+    groupPerDay: null,
+    perPersonRemaining: null,
+    perPersonPerDay: null,
+  };
+}
+
 describe("GroupsController / GroupsStore", () => {
+  it("does not reuse an old leaderboard request after leaving and rejoining", async () => {
+    const old = deferred<GroupLeaderboardResponse>();
+    const page = leaderboardPage("week", [], { hasMore: false, nextCursor: null });
+    const getLeaderboard = vi.fn<GroupsGateway["getLeaderboard"]>()
+      .mockImplementationOnce(() => old.promise).mockResolvedValueOnce(page);
+    const { controller, store } = setup({ gateway: createGateway({ getLeaderboard }) });
+    await controller.initialize("account-1");
+    const previous = controller.loadLeaderboard(baseGroup.id, "week");
+    await vi.waitFor(() => expect(getLeaderboard).toHaveBeenCalledTimes(1));
+    await controller.leaveGroup(baseGroup.id);
+    await controller.refreshGroups();
+    const current = controller.loadLeaderboard(baseGroup.id, "week");
+    await vi.waitFor(() => expect(getLeaderboard).toHaveBeenCalledTimes(2));
+    await current;
+    old.resolve({ ...page, ownAlias: "OLD MEMBERSHIP" });
+    await previous;
+    expect(store.getSnapshot().leaderboard.byGroup[baseGroup.id].week.ownAlias).not.toBe("OLD MEMBERSHIP");
+  });
+
+  it("does not resurrect an old membership insight after leaving and rejoining", async () => {
+    const old = deferred<GroupInsights>();
+    const getInsights = vi.fn<NonNullable<GroupsGateway["getInsights"]>>()
+      .mockImplementationOnce(() => old.promise)
+      .mockResolvedValueOnce(groupInsights("week", "0"));
+    const { controller, store } = setup({ gateway: createGateway({ getInsights }) });
+    await controller.initialize("account-1");
+    const previousMembership = controller.loadInsights(baseGroup.id, "week");
+    await vi.waitFor(() => expect(getInsights).toHaveBeenCalledTimes(1));
+    await controller.leaveGroup(baseGroup.id);
+    await controller.refreshGroups();
+    await controller.loadInsights(baseGroup.id, "week");
+    old.resolve(groupInsights("week", "900"));
+    await previousMembership;
+    expect(store.getSnapshot().insightsByGroup[baseGroup.id]?.week?.periodTotal).toBe("0");
+  });
+
+  it.each(["leaderboard", "groups"])("purges insights when %s confirms membership was removed", async (source) => {
+    const gateway = createGateway({ getInsights: async () => groupInsights("week", "100") });
+    const { controller, store } = setup({ gateway });
+    await controller.initialize("account-1");
+    await controller.loadInsights(baseGroup.id, "week");
+    if (source === "groups") {
+      vi.mocked(gateway.listMyGroups).mockResolvedValueOnce({ items: [] });
+      await controller.refreshGroups();
+    } else {
+      vi.mocked(gateway.getLeaderboard).mockRejectedValueOnce(new GroupsError("NOT_FOUND"));
+      await expect(controller.loadLeaderboard(baseGroup.id, "week")).rejects.toMatchObject({ code: "NOT_FOUND" });
+    }
+    expect(store.getSnapshot().insightsByGroup[baseGroup.id]).toBeUndefined();
+    expect(store.getSnapshot().groups.items).toEqual([]);
+  });
+
+  it("refreshes weekly derived target after the owner changes the monthly campaign", async () => {
+    let amount = "100";
+    const { controller, store } = setup({ gateway: createGateway({
+      getInsights: async (_group, period = "week") => ({ ...groupInsights(period, "0"), goalAmount: amount }),
+      setGroupGoal: async (_group, period, value) => {
+        amount = "700";
+        return { groupId: baseGroup.id, period, amount: String(value), revision: 4, effectiveFrom: "2026-09-01" };
+      },
+    }) });
+    await controller.initialize("account-1");
+    await controller.loadInsights(baseGroup.id, "week");
+    await controller.setGroupGoal(baseGroup.id, "month", 3000, 3);
+    expect(store.getSnapshot().insightsByGroup[baseGroup.id]?.week?.goalAmount).toBe("700");
+  });
+
+  it("refreshes goal insights and all cached revisions after a goal change", async () => {
+    let amount = "1000";
+    const { controller, store } = setup({ gateway: createGateway({
+      getInsights: async (_group, period = "week") => ({ ...groupInsights(period, "100"), goalAmount: amount }),
+      setGroupGoal: async (_group, period, value) => {
+        amount = String(value);
+        return { groupId: baseGroup.id, period, amount, revision: 4, effectiveFrom: "2026-09-01" };
+      },
+    }) });
+    await controller.initialize("account-1");
+    await controller.loadLeaderboard(baseGroup.id, "week");
+    await controller.loadInsights(baseGroup.id, "week");
+    await controller.setGroupGoal(baseGroup.id, "week", 2000, 3);
+    expect(store.getSnapshot().insightsByGroup[baseGroup.id]?.week?.goalAmount).toBe("2000");
+    expect(store.getSnapshot().leaderboard.byGroup[baseGroup.id].week.group?.revision).toBe(4);
+  });
+
+  it("invalidates cached monthly names when alias mode changes", async () => {
+    const { controller, store } = setup();
+    await controller.initialize("account-1");
+    await controller.loadLeaderboard(baseGroup.id, "month");
+    await controller.loadLeaderboard(baseGroup.id, "week");
+    await controller.setAnonymity(baseGroup.id, true, 3);
+    expect(store.getSnapshot().leaderboard.byGroup[baseGroup.id].month.items).toEqual([]);
+  });
+
+  it("removes cached private group data when server membership access is lost", async () => {
+    const getInsights = vi.fn<NonNullable<GroupsGateway["getInsights"]>>()
+      .mockResolvedValueOnce(groupInsights("week", "100"))
+      .mockRejectedValueOnce(new GroupsError("NOT_FOUND"));
+    const { controller, store } = setup({ gateway: createGateway({ getInsights }) });
+    await controller.initialize("account-1");
+    await controller.loadLeaderboard(baseGroup.id, "week");
+    await controller.loadInsights(baseGroup.id, "week");
+    await expect(controller.loadInsights(baseGroup.id, "week")).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(store.getSnapshot().insightsByGroup[baseGroup.id]).toBeUndefined();
+    expect(store.getSnapshot().leaderboard.byGroup[baseGroup.id]).toBeUndefined();
+    expect(store.getSnapshot().groups.items).toEqual([]);
+  });
+
+  it("purges group insights on leave and ignores a pending response", async () => {
+    const late = deferred<GroupInsights>();
+    const getInsights = vi.fn<NonNullable<GroupsGateway["getInsights"]>>()
+      .mockResolvedValueOnce(groupInsights("week", "100"))
+      .mockImplementationOnce(() => late.promise);
+    const { controller, store } = setup({ gateway: createGateway({ getInsights }) });
+    await controller.initialize("account-1");
+    await controller.loadInsights(baseGroup.id, "week");
+    const pending = controller.loadInsights(baseGroup.id, "month");
+    await vi.waitFor(() => expect(getInsights).toHaveBeenCalledTimes(2));
+    await controller.leaveGroup(baseGroup.id);
+    late.resolve(groupInsights("month", "400"));
+    await pending;
+    expect(store.getSnapshot().insightsByGroup).toEqual({});
+    expect(store.getSnapshot().insightsStatusByGroup).toEqual({});
+  });
+
+  it("updates the visible leaderboard name and revision after rename", async () => {
+    const { controller, store } = setup();
+    await controller.initialize("account-1");
+    await controller.loadLeaderboard(baseGroup.id, "week");
+    await controller.updateGroupName(baseGroup.id, "Renamed Circle", 3);
+    expect(store.getSnapshot().leaderboard.byGroup[baseGroup.id].week.group).toMatchObject({ name: "Renamed Circle", revision: 4 });
+  });
+
+  it("rejects insights that do not match the requested group and period", async () => {
+    const { controller, store } = setup({ gateway: createGateway({
+      getInsights: vi.fn().mockResolvedValue(groupInsights("week", "100")),
+    }) });
+    await controller.initialize("account-1");
+    await expect(controller.loadInsights(secondaryGroup.id, "month")).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+    expect(store.getSnapshot().insightsByGroup[secondaryGroup.id]).toBeUndefined();
+  });
+
+  it("tracks loading and failure for only the requested insight period", async () => {
+    const pending = deferred<GroupInsights>();
+    const getInsights = vi.fn<NonNullable<GroupsGateway["getInsights"]>>()
+      .mockResolvedValueOnce(groupInsights("week", "100"))
+      .mockImplementationOnce(() => pending.promise);
+    const { controller, store } = setup({ gateway: createGateway({ getInsights }) });
+    await controller.initialize("account-1");
+    await controller.loadInsights(baseGroup.id, "week");
+    const load = controller.loadInsights(baseGroup.id, "month");
+    const failure = expect(load).rejects.toMatchObject({ code: "OFFLINE" });
+    await vi.waitFor(() => expect(getInsights).toHaveBeenCalledTimes(2));
+    const duringLoad = store.getSnapshot().insightsStatusByGroup?.[baseGroup.id]?.month;
+    pending.reject(new GroupsError("OFFLINE"));
+    await failure;
+    expect(duringLoad).toMatchObject({ loading: true, errorCode: null });
+    expect(store.getSnapshot().insightsStatusByGroup[baseGroup.id]).toMatchObject({
+      week: { loading: false, errorCode: null },
+      month: { loading: false, errorCode: "OFFLINE" },
+    });
+    expect(store.getSnapshot().insightsByGroup[baseGroup.id]?.week?.periodTotal).toBe("100");
+  });
+
+  it("keeps the newest insight result when an older refresh finishes last", async () => {
+    const old = deferred<GroupInsights>();
+    const getInsights = vi.fn<NonNullable<GroupsGateway["getInsights"]>>()
+      .mockImplementationOnce(() => old.promise)
+      .mockResolvedValueOnce(groupInsights("week", "200"));
+    const { controller, store } = setup({ gateway: createGateway({ getInsights }) });
+    await controller.initialize("account-1");
+    const oldLoad = controller.loadInsights(baseGroup.id, "week");
+    await vi.waitFor(() => expect(getInsights).toHaveBeenCalledTimes(1));
+    await controller.loadInsights(baseGroup.id, "week");
+    old.resolve(groupInsights("week", "100"));
+    await oldLoad;
+    expect(store.getSnapshot().insightsByGroup[baseGroup.id]?.week?.periodTotal).toBe("200");
+  });
+
+  it("keeps insight results isolated by group period", async () => {
+    const getInsights = vi
+      .fn<NonNullable<GroupsGateway["getInsights"]>>()
+      .mockResolvedValueOnce(groupInsights("week", "100"))
+      .mockResolvedValueOnce(groupInsights("month", "400"));
+    const { controller, store } = setup({
+      gateway: createGateway({ getInsights }),
+    });
+    await controller.initialize("account-1");
+
+    await controller.loadInsights(baseGroup.id, "week");
+    await controller.loadInsights(baseGroup.id, "month");
+
+    expect(store.getSnapshot().insightsByGroup[baseGroup.id]).toMatchObject({
+      week: { period: "week", periodTotal: "100" },
+      month: { period: "month", periodTotal: "400" },
+    });
+  });
+
+  it("ignores insight responses from a previous account session", async () => {
+    const staleInsights = deferred<GroupInsights>();
+    const getInsights = vi
+      .fn<NonNullable<GroupsGateway["getInsights"]>>()
+      .mockImplementation(() => staleInsights.promise);
+    const { controller, store } = setup({
+      gateway: createGateway({ getInsights }),
+    });
+    await controller.initialize("account-1");
+
+    const staleLoad = controller.loadInsights(baseGroup.id, "week");
+    await vi.waitFor(() => expect(getInsights).toHaveBeenCalledTimes(1));
+    await controller.initialize("account-2");
+    staleInsights.resolve(groupInsights("week", "100"));
+    await staleLoad;
+
+    expect(store.getSnapshot().accountId).toBe("account-2");
+    expect(store.getSnapshot().insightsByGroup).toEqual({});
+  });
+
   it("publishes a new root snapshot after every update", () => {
     const store = new GroupsStore("account-1");
     const before = store.getSnapshot();

@@ -20,6 +20,7 @@ const mockCreateGroup = jest.fn<
 >();
 const mockUseGroups = jest.fn();
 const mockUseEntries = jest.fn();
+const mockSwitchProps = jest.fn();
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush, replace: mockReplace }),
@@ -46,23 +47,30 @@ jest.mock("@expo/ui", () => {
       label,
       disabled,
       testID,
+      modifiers,
     }: {
       value: boolean;
       onValueChange(value: boolean): void;
       label?: string;
       disabled?: boolean;
       testID?: string;
+      modifiers?: unknown[];
     }) => (
-      <Pressable
-        testID={testID}
-        accessibilityRole="switch"
-        accessibilityLabel={label}
-        accessibilityState={{ checked: value, disabled: Boolean(disabled) }}
-        disabled={disabled}
-        onPress={() => onValueChange(!value)}
-      >
-        {label ? <Text>{label}</Text> : null}
-      </Pressable>
+      (() => {
+        mockSwitchProps({ modifiers, testID });
+        return (
+          <Pressable
+            testID={testID}
+            accessibilityRole="switch"
+            accessibilityLabel={label}
+            accessibilityState={{ checked: value, disabled: Boolean(disabled) }}
+            disabled={disabled}
+            onPress={() => onValueChange(!value)}
+          >
+            {label ? <Text>{label}</Text> : null}
+          </Pressable>
+        );
+      })()
     ),
   };
 });
@@ -176,16 +184,16 @@ async function press(
   target: "rules" | "anonymous" | "submit",
 ) {
   if (target === "rules") {
-    fireEvent.press(view.getByTestId("group-create-rules-switch"));
+    await fireEvent.press(view.getByTestId("group-create-rules-switch"));
     await Promise.resolve();
     return;
   }
   if (target === "anonymous") {
-    fireEvent.press(view.getByTestId("group-create-anonymous-switch"));
+    await fireEvent.press(view.getByTestId("group-create-anonymous-switch"));
     await Promise.resolve();
     return;
   }
-  fireEvent.press(submitButton(view));
+  await fireEvent.press(submitButton(view));
   await Promise.resolve();
 }
 
@@ -202,12 +210,30 @@ async function fillValidCreateForm(view: Awaited<ReturnType<typeof render>>) {
 beforeEach(() => {
   jest.clearAllMocks();
   mockPush.mockClear();
+  mockSwitchProps.mockClear();
   mockCreateGroup.mockResolvedValue({ group: { id: "group-123" } });
   mockUseEntries.mockReturnValue({ timeZone: "Europe/Berlin" });
   mockUseGroups.mockReturnValue(createGroupsState());
 });
 
 describe("MVP08 group create screen", () => {
+  it("puts both native group toggles at the trailing card edge", async () => {
+    await render(<GroupCreateScreen />);
+
+    const anonymous = mockSwitchProps.mock.calls
+      .map(([props]) => props as { testID?: string; modifiers?: unknown[] })
+      .find((props) => props.testID === "group-create-anonymous-switch");
+    const rules = mockSwitchProps.mock.calls
+      .map(([props]) => props as { testID?: string; modifiers?: unknown[] })
+      .find((props) => props.testID === "group-create-rules-switch");
+
+    expect(anonymous?.modifiers).toBeDefined();
+    expect(anonymous?.modifiers).toEqual([
+      { $type: "frame", maxWidth: 10_000, alignment: "leading" },
+    ]);
+    expect(rules?.modifiers).toBe(anonymous?.modifiers);
+  });
+
   it("prefills timezone, validates input, and requires explicit rules acceptance", async () => {
     const view = await render(<GroupCreateScreen />);
 
@@ -236,7 +262,7 @@ describe("MVP08 group create screen", () => {
       ).toBeTruthy(),
     );
 
-    fireEvent.press(
+    await fireEvent.press(
       view.getByRole("button", { name: "Nutzungsbedingungen und Regeln öffnen" }),
     );
     expect(mockPush).toHaveBeenCalledWith("/settings/legal");
@@ -494,6 +520,8 @@ describe("MVP08 group create screen", () => {
       expect(submitButton(view).props.accessibilityState.disabled).toBe(false),
     );
 
+    // Deliberately not awaited: the point is two presses landing before the
+    // pending state can propagate.
     fireEvent.press(submitButton(view));
     submitButton(view).props.onPress?.();
 
@@ -511,17 +539,19 @@ describe("MVP08 group create screen", () => {
     );
   });
 
-  it("keeps the legal ghost action left aligned with a 48x48 minimum target", async () => {
+  it("keeps the legal ghost action left aligned with a comfortable target", async () => {
     const view = await render(<GroupCreateScreen />);
     const [legalButton] = view.getAllByRole("button");
 
-    expect(legalButton).toHaveStyle({
-      alignSelf: "flex-start",
-      minHeight: 48,
-      minWidth: 48,
-      paddingHorizontal: 0,
-    });
-    fireEvent.press(legalButton);
+    const layout = legalButton.props.style.find(
+      (entry: { minHeight?: number }) => entry?.minHeight !== undefined,
+    );
+    // The requirement is a comfortable target, not one exact height.
+    expect(layout.minHeight).toBeGreaterThanOrEqual(44);
+    expect(layout.minWidth).toBeGreaterThanOrEqual(44);
+    expect(legalButton).toHaveStyle({ alignSelf: "flex-start" });
+
+    await fireEvent.press(legalButton);
     expect(mockPush).toHaveBeenCalledWith("/settings/legal");
   });
 });

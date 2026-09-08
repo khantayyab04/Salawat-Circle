@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
 import { GroupsScreen } from "@/screens/groups";
+import * as ReactNative from "react-native";
 
 const mockPush = jest.fn();
 const mockRefreshGroups = jest.fn<() => Promise<void>>();
@@ -119,6 +120,19 @@ beforeEach(() => {
 });
 
 describe("MVP08 groups list screen", () => {
+  it("stacks full-width group actions on compact or enlarged-text screens", async () => {
+    const original = ReactNative.Dimensions.get("window");
+    ReactNative.Dimensions.set({ window: { width: 393, height: 852, scale: 3, fontScale: 1 } });
+    const view = await render(<GroupsScreen />);
+    expect(view.getByTestId("group-actions")).toHaveStyle({ flexDirection: "column" });
+    await act(async () => { ReactNative.Dimensions.set({ window: { width: 900, height: 1024, scale: 2, fontScale: 1 } }); });
+    expect(view.getByTestId("group-actions")).toHaveStyle({ flexDirection: "row" });
+    await act(async () => { ReactNative.Dimensions.set({ window: { width: 900, height: 1024, scale: 2, fontScale: 2 } }); });
+    expect(view.getByTestId("group-actions")).toHaveStyle({ flexDirection: "column" });
+    await fireEvent.press(view.getByRole("button", { name: "Einladungscode eingeben" }));
+    expect(mockPush).toHaveBeenCalledWith("/join");
+    await act(async () => { ReactNative.Dimensions.set({ window: original }); });
+  });
   it("shows the empty list state", async () => {
     const view = await render(<GroupsScreen />);
     expect(view.getByText("Noch keine Gruppe")).toBeTruthy();

@@ -8,6 +8,8 @@
 **Zielplattformen:** iOS und Android  
 **Primärmarkt:** Deutschland und Europäische Union
 
+**Beauftragte Ergänzung vom 8. September 2026:** Für den Freitagsbereich ist optionaler Geräte-Standort nach ausdrücklicher Aktivierung und Betriebssystem-Berechtigung erlaubt. Koordinaten bleiben im Arbeitsspeicher und werden weder gespeichert noch an das Backend übertragen; Hintergrundortung bleibt ausgeschlossen. Ohne verfügbaren Standort gilt der Kalenderfreitag. Der Zielregler reicht bis 30.000. Gruppenziele unterstützen feste gregorianische, berechnete islamische oder frei beginnende 30-Tage-Kampagnen mit anteiligem Wochenziel. Ein alleiniger Inhaber darf austreten; dabei wird die Gruppe atomar gelöscht. Diese ausdrücklich beauftragten Änderungen haben Vorrang vor den entsprechenden älteren Aussagen unten. Details und Prüfstand: [Redesign-Ergänzungen](docs/product/redesign-polish-2026-09-08.md), [Gruppenkampagnen](docs/product/group-campaigns.md).
+
 ## 1. Zweck und Verbindlichkeit
 
 Dieses Dokument ist der verbindliche Bau-, Prüf- und Abnahmevertrag für eine bewusst kleine Salawat App. Es beschreibt nicht nur sichtbare Funktionen, sondern auch Datenmodell, Backendverhalten, Berechtigungen, Offlinebetrieb, Sicherheit, Datenschutz, Moderation, Betrieb, Deployment, Tests und Store Veröffentlichung.

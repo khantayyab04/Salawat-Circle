@@ -1,12 +1,14 @@
 import { useTranslation } from "@/localization";
 import { Stack } from "expo-router/stack";
+
+export const unstable_settings = { initialRouteName: "index" };
 export default function SettingsLayout() {
   const { t } = useTranslation();
   return (
     <Stack screenOptions={{ headerBackButtonDisplayMode: "minimal" }}>
       <Stack.Screen
         name="index"
-        options={{ title: t("tabsSettings"), headerLargeTitle: true }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen name="profile" options={{ title: t("settingsProfile") }} />
       <Stack.Screen name="reminder" options={{ title: t("reminderTitle") }} />

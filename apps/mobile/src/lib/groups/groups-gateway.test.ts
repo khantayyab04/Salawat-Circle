@@ -9,6 +9,22 @@ function createGateway(rpc: SupabaseClient<Database>["rpc"]) {
 }
 
 describe("Supabase groups gateway", () => {
+  it("sends a campaign mode and local calendar date without converting to an instant", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: { group_id: "g", period: "month", effective_from: "2026-09-17", amount: "3000", revision: 5 }, error: null });
+    const gateway = createGateway(rpc as SupabaseClient<Database>["rpc"]);
+    await gateway.setGroupGoal!("g", "month", 3000, 4, { mode: "custom", startDate: "2026-09-17" });
+    expect(rpc).toHaveBeenCalledWith("set_group_goal", { p_group_id: "g", p_period: "month", p_amount: 3000, p_expected_revision: 4, p_campaign_mode: "custom", p_start_date: "2026-09-17" });
+  });
+
+  it.each(["all", "week", "month"] as const)("accepts a cleared %s group goal at the runtime boundary", async (period) => {
+    const rpc = vi.fn().mockResolvedValue({ data: {
+      group_id: "group-1", period, effective_from: "2026-09-01", amount: null, revision: 5,
+    }, error: null });
+    const gateway = createGateway(rpc as SupabaseClient<Database>["rpc"]);
+    await expect(gateway.setGroupGoal!("group-1", period, null, 4)).resolves.toMatchObject({ period, amount: null, revision: 5 });
+    expect(rpc).toHaveBeenCalledWith("set_group_goal", { p_group_id: "group-1", p_period: period, p_amount: null, p_expected_revision: 4 });
+  });
+
   it("lists caller groups and normalizes count totals as strings", async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: {
@@ -223,6 +239,48 @@ describe("Supabase groups gateway", () => {
       p_cursor_normalized_name: "ruhiger garten",
       p_cursor_membership_id: "11111111-1111-4111-8111-111111111111",
       p_limit: 20,
+    });
+  });
+
+  it("accepts month leaderboard responses from the runtime boundary", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: {
+        group: {
+          id: "7a7a7a7a-7a7a-47a7-87a7-7a7a7a7a7a70",
+          name: "Monthly Circle",
+          timezone: "Europe/Berlin",
+          leaderboard_anonymous: false,
+          member_count: "2",
+          role: "owner",
+          is_owner: true,
+          revision: 4,
+        },
+        period: "month",
+        period_start: "2026-09-01",
+        period_end: "2026-09-30",
+        own_rank: 1,
+        own_alias: null,
+        items: [],
+        next_cursor: null,
+        has_more: false,
+        calculated_at: "2026-09-05T20:00:01.000Z",
+      },
+      error: null,
+      status: 200,
+    });
+    const gateway = createGateway(rpc as SupabaseClient<Database>["rpc"]);
+
+    await expect(
+      gateway.getLeaderboard(
+        "7a7a7a7a-7a7a-47a7-87a7-7a7a7a7a7a70",
+        "month",
+        null,
+        20,
+      ),
+    ).resolves.toMatchObject({
+      period: "month",
+      periodStart: "2026-09-01",
+      periodEnd: "2026-09-30",
     });
   });
 

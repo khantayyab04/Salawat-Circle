@@ -15,6 +15,7 @@ import type {
 } from "@/lib/groups";
 import { GroupsProvider } from "@/lib/groups";
 import { GroupDetailScreen } from "./group-detail-screen";
+import type { GroupInsights } from "@/lib/group-insights";
 
 const mockPush = jest.fn();
 let mockRouteGroupId: string | undefined = "group-1";
@@ -56,11 +57,14 @@ jest.mock("expo-router", () => ({
 }));
 
 jest.mock("@expo/ui", () => {
-  const { Pressable, Text } = jest.requireActual<typeof import("react-native")>(
+  const { Pressable, Text, View } = jest.requireActual<typeof import("react-native")>(
     "react-native",
   );
 
+  const Picker = ({ children, ...props }: { children: React.ReactNode }) => <View {...props}>{children}</View>;
+  Picker.Item = function PickerItem() { return null; };
   return {
+    Picker,
     Host: ({ children }: { children: React.ReactNode }) => children,
     Switch: ({
       value,
@@ -307,6 +311,108 @@ describe("Group detail with real GroupsProvider", () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it("opens group management from a settings action", async () => {
+    const view = await render(<GroupsProvider accountId="account-1" gateway={createGateway()} onlineCheck={async () => true}><GroupDetailScreen /></GroupsProvider>);
+    await waitFor(() => expect(view.getByText("Amina")).toBeTruthy());
+    expect(view.queryByRole("button", { name: "groupDetailDeleteAction" })).toBeNull();
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupDetailSettingsAction" })));
+    expect(view.getByRole("button", { name: "groupDetailDeleteAction" })).toBeTruthy();
+    expect(view.getByRole("switch", { name: "Rangliste anonym anzeigen" })).toBeTruthy();
+  });
+
+  it("lets an owner deactivate the current group goal", async () => {
+    let goal: string | null = "1500";
+    const gateway = createGateway({
+      getInsights: async (_id, period = "week") => ({
+        groupId: "group-1", period, periodTotal: "1234", weekTotal: "1234", activeMembers: "5", totalMembers: "5",
+        weeklyAverage: null, goalAmount: goal, remaining: null, daysRemaining: 2, groupPerDay: null, perPersonRemaining: null, perPersonPerDay: null,
+      }),
+      setGroupGoal: async (groupId, period, amount, revision) => {
+        if (period !== "week" || amount !== null || revision !== 7) throw new Error("WRONG_CLEAR_REQUEST");
+        goal = null;
+        return { groupId, period, amount: goal, revision: 8, effectiveFrom: "2026-09-01" };
+      },
+    });
+    const view = await render(<GroupsProvider accountId="account-1" gateway={gateway} onlineCheck={async () => true}><GroupDetailScreen /></GroupsProvider>);
+    await waitFor(() => expect(view.getByText("groupDetailGoalPrefix 1500")).toBeTruthy());
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupDetailGoalEdit" })));
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupDetailGoalClear" })));
+    await waitFor(() => expect(view.getByText("groupDetailNoGoal")).toBeTruthy());
+  });
+
+  it("lets an owner set an exact goal for the selected month", async () => {
+    let goal: string | null = null;
+    const gateway = createGateway({
+      getLeaderboard: async (_id, period) => createLeaderboardResponse({ period }),
+      getInsights: async (_id, period = "week") => ({
+        groupId: "group-1", period, periodTotal: "1234", weekTotal: "1234", activeMembers: "5", totalMembers: "5",
+        weeklyAverage: null, goalAmount: goal, remaining: null, daysRemaining: 2, groupPerDay: null, perPersonRemaining: null, perPersonPerDay: null,
+      }),
+      setGroupGoal: async (groupId, period, amount, revision) => {
+        if (period !== "month" || revision !== 7) throw new Error("WRONG_GOAL_REQUEST");
+        goal = amount === null ? null : String(amount);
+        return { groupId, period, amount: goal, revision: 8, effectiveFrom: "2026-09-01" };
+      },
+    });
+    const view = await render(
+      <GroupsProvider accountId="account-1" gateway={gateway} onlineCheck={async () => true}>
+        <GroupDetailScreen />
+      </GroupsProvider>,
+    );
+    await waitFor(() => expect(view.getByText("1234")).toBeTruthy());
+    await act(async () => fireEvent.press(view.getByRole("tab", { name: "groupDetailMonth" })));
+    await waitFor(() => expect(view.getByText("1234")).toBeTruthy());
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupDetailGoalEdit" })));
+    await act(async () => fireEvent.changeText(view.getByTestId("group-goal-amount"), "1500"));
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupDetailGoalSave" })));
+    await waitFor(() => expect(view.getByText("groupDetailGoalPrefix 1500")).toBeTruthy());
+  });
+
+  it.each(["focus", "foreground", "pull"])("refreshes visible insights on %s", async (trigger) => {
+    let total = "1234";
+    const gateway = createGateway({ getInsights: async () => ({
+      groupId: "group-1", period: "week", periodTotal: total, weekTotal: total,
+      activeMembers: "5", totalMembers: "5", weeklyAverage: null, goalAmount: null,
+      remaining: null, daysRemaining: 2, groupPerDay: null, perPersonRemaining: null, perPersonPerDay: null,
+    }) });
+    const view = await render(
+      <GroupsProvider accountId="account-1" gateway={gateway} onlineCheck={async () => true}>
+        <GroupDetailScreen />
+      </GroupsProvider>,
+    );
+    await waitFor(() => expect(view.getByText("1234")).toBeTruthy());
+    total = "5678";
+    await act(async () => {
+      if (trigger === "focus") { mockEmitBlur(); mockEmitFocus(); }
+      else if (trigger === "foreground") { mockAppStateListener?.("background"); mockAppStateListener?.("active"); }
+      else { await view.getByTestId("group-detail-list").props.refreshControl.props.onRefresh(); }
+    });
+    await waitFor(() => expect(view.getByText("5678")).toBeTruthy());
+  });
+
+  it("shows only insights belonging to the selected period", async () => {
+    const month = createDeferred<GroupInsights>();
+    const week: GroupInsights = {
+      groupId: "group-1", period: "week", periodTotal: "1234", weekTotal: "1234",
+      activeMembers: "5", totalMembers: "5", weeklyAverage: null,
+      goalAmount: null, remaining: null, daysRemaining: 2, groupPerDay: null,
+      perPersonRemaining: null, perPersonPerDay: null,
+    };
+    const getInsights = jest.fn<NonNullable<GroupsGateway["getInsights"]>>()
+      .mockResolvedValueOnce(week).mockImplementationOnce(() => month.promise);
+    const gateway = createGateway({ getInsights });
+    const view = await render(
+      <GroupsProvider accountId="account-1" gateway={gateway} onlineCheck={async () => true}>
+        <GroupDetailScreen />
+      </GroupsProvider>,
+    );
+    await waitFor(() => expect(view.getByText("1234")).toBeTruthy());
+    await act(async () => fireEvent.press(view.getByRole("tab", { name: "groupDetailMonth" })));
+    expect(view.queryByText("1234")).toBeNull();
+    await act(async () => month.resolve({ ...week, period: "month", periodTotal: "5678" }));
+    await waitFor(() => expect(view.getByText("5678")).toBeTruthy());
+  });
+
   it("performs exactly one initial leaderboard load and settles without maximum-depth warnings", async () => {
     const getLeaderboard = jest
       .fn<GroupsGateway["getLeaderboard"]>()
@@ -364,7 +470,7 @@ describe("Group detail with real GroupsProvider", () => {
     );
     await waitFor(() => expect(getLeaderboard).toHaveBeenCalledTimes(1));
 
-    fireEvent.press(view.getByRole("button", { name: "Gesamt" }));
+    fireEvent.press(view.getByRole("tab", { name: "Gesamt" }));
     await waitFor(() =>
       expect(getLeaderboard).toHaveBeenLastCalledWith(
         "group-1",
@@ -418,7 +524,7 @@ describe("Group detail with real GroupsProvider", () => {
     );
     await waitFor(() => expect(getLeaderboard).toHaveBeenCalledTimes(1));
 
-    fireEvent.press(view.getByRole("button", { name: "Gesamt" }));
+    fireEvent.press(view.getByRole("tab", { name: "Gesamt" }));
     await waitFor(() => expect(getLeaderboard).toHaveBeenCalledTimes(2));
 
     await act(async () => {
@@ -582,6 +688,7 @@ describe("Group detail with real GroupsProvider", () => {
         <GroupDetailScreen />
       </GroupsProvider>,
     );
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupDetailSettingsAction" })));
 
     await waitFor(() =>
       expect(view.getByRole("switch", { name: "Rangliste anonym anzeigen" })).toBeTruthy(),
@@ -642,6 +749,7 @@ describe("Group detail with real GroupsProvider", () => {
         <GroupDetailScreen />
       </GroupsProvider>,
     );
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "groupDetailSettingsAction" })));
 
     await waitFor(() =>
       expect(view.getByRole("switch", { name: "Rangliste anonym anzeigen" })).toBeTruthy(),

@@ -6,6 +6,7 @@ const mockUpdate = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
 const mockKeepServerVersion = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
 const mockReapplyConflict = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
 const mockUseEntries = jest.fn();
+const mockReplace = jest.fn();
 
 jest.mock("@/lib/entries", () => ({
   getPersonalDate: (_date: Date, timeZone: string) => {
@@ -18,7 +19,7 @@ jest.mock("@/lib/entries", () => ({
 }));
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ id: "entry-1" }),
-  useRouter: () => ({ back: jest.fn() }),
+  useRouter: () => ({ back: jest.fn(), canGoBack: () => false, replace: mockReplace }),
 }));
 jest.mock("@/localization", () => ({
   useTranslation: () => ({
@@ -54,6 +55,21 @@ jest.mock("@/theme", () => {
 });
 
 describe("EntryEditScreen", () => {
+  it("offers a route back to Today when the requested entry no longer exists", async () => {
+    mockUseEntries.mockReturnValue({
+      entries: [],
+      timeZone: "Europe/Berlin",
+      busy: false,
+      conflictEntryId: null,
+      conflicts: [],
+      update: mockUpdate,
+    });
+    const view = await render(<EntryEditScreen />);
+
+    await fireEvent.press(view.getByRole("button", { name: "commonBack" }));
+    expect(mockReplace).toHaveBeenCalledWith("/today");
+  });
+
   it("saves an edited amount with the selected valid date", async () => {
     mockUseEntries.mockReturnValue({
       entries: [
@@ -77,13 +93,18 @@ describe("EntryEditScreen", () => {
       fireEvent.changeText(view.getByLabelText("Betrag"), "99");
     });
     await act(async () => {
-      fireEvent.press(view.getByRole("button", { name: "Heute" }));
+      fireEvent.press(view.getByRole("button", { name: "Datum" }));
+    });
+    expect(view.queryByRole("button", { name: "Heute" })).toBeNull();
+    expect(view.queryByRole("button", { name: "Gestern" })).toBeNull();
+    await act(async () => {
+      fireEvent(view.getByTestId("calendar-date-picker"), "valueChange", {}, new Date("2026-08-30T00:00:00Z"));
     });
     await act(async () => {
       fireEvent.press(view.getByRole("button", { name: "Speichern" }));
     });
 
-    expect(mockUpdate).toHaveBeenCalledWith("entry-1", 99, "2026-08-31");
+    expect(mockUpdate).toHaveBeenCalledWith("entry-1", 99, "2026-08-30");
   });
 
   it("shows an error state instead of using an empty timezone before entries load", async () => {
@@ -280,4 +301,26 @@ describe("EntryEditScreen", () => {
     fireEvent.press(view.getByRole("button", { name: "Erneut laden" }));
     expect(retryOfflineLoad).toHaveBeenCalledTimes(1);
   });
+});
+it("keeps an unsaved edit when the server revision refreshes", async () => {
+  const entry = { id: "entry-1", amount: "42", entryDate: "2026-08-31", timezone: "UTC", revision: 1 };
+  const state = { entries: [entry], timeZone: "UTC", busy: false, conflicts: [], update: mockUpdate };
+  mockUseEntries.mockReturnValue(state);
+  const view = await render(<EntryEditScreen />);
+  await fireEvent.changeText(view.getByLabelText("Betrag"), "333");
+  mockUseEntries.mockReturnValue({ ...state, entries: [{ ...entry, amount: "55", revision: 2 }] });
+  await view.rerender(<EntryEditScreen />);
+  expect(view.getByLabelText("Betrag").props.value).toBe("333");
+});
+it("requires a decision before overwriting a refreshed server entry", async () => {
+  const entry = { id: "entry-1", amount: "42", entryDate: "2026-08-31", timezone: "UTC", revision: 1 };
+  const state = { entries: [entry], timeZone: "UTC", busy: false, conflicts: [], update: mockUpdate };
+  mockUseEntries.mockReturnValue(state);
+  const view = await render(<EntryEditScreen />);
+  await fireEvent.changeText(view.getByLabelText("Betrag"), "333");
+  mockUseEntries.mockReturnValue({ ...state, entries: [{ ...entry, amount: "55", revision: 2 }] });
+  await view.rerender(<EntryEditScreen />);
+  expect(view.getByRole("button", { name: "Speichern" }).props.accessibilityState.disabled).toBe(true);
+  await fireEvent.press(view.getByRole("button", { name: "entryUseLatest" }));
+  expect(view.getByLabelText("Betrag").props.value).toBe("55");
 });

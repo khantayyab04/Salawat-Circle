@@ -1,7 +1,16 @@
 import { describe, expect, it, jest } from "@jest/globals";
-import { act, fireEvent, render } from "@testing-library/react-native";
+import { fireEvent, render } from "@testing-library/react-native";
 import { Alert } from "react-native";
 import { TodayScreen } from "./index";
+
+const mockLocationPermission = jest.fn<() => Promise<{ granted: boolean }>>().mockResolvedValue({ granted: true });
+const mockGetLocation = jest.fn<() => Promise<{ coords: { latitude: number; longitude: number } }>>().mockResolvedValue({ coords: { latitude: 52.52, longitude: 13.405 } });
+jest.mock("expo-location", () => ({
+  requestForegroundPermissionsAsync: () => mockLocationPermission(),
+  getForegroundPermissionsAsync: async () => ({ granted: false }),
+  getCurrentPositionAsync: () => mockGetLocation(),
+  Accuracy: { Low: 2 },
+}));
 
 const mockCreate = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
 const mockEntries = jest.fn();
@@ -112,55 +121,43 @@ jest.mock("@/theme", () => {
 });
 
 describe("TodayScreen", () => {
-  it("submits one valid amount and renders live canonical totals", async () => {
-    mockEntries.mockReturnValue(entries());
-    const view = await render(<TodayScreen />);
-
-    await act(async () => {
-      fireEvent.changeText(view.getByLabelText("Salawat hinzufügen"), "42");
-    });
-    await act(async () => {
-      fireEvent.press(view.getByRole("button", { name: "Eintragen" }));
-    });
-
-    expect(mockCreate).toHaveBeenCalledWith(42);
-    expect(view.getByLabelText("42 Salawat")).toBeTruthy();
-    expect(view.getAllByText("100")).not.toHaveLength(0);
-    expect(view.getAllByText("42")).not.toHaveLength(0);
+  it("shows general Salawat blessings on a Monday instead of the Friday card", async () => {
+    jest.useFakeTimers({ now: new Date("2026-09-07T10:00:00Z") });
+    try {
+      mockEntries.mockReturnValue(entries());
+      const view = await render(<TodayScreen />);
+      expect(view.getByText("blessingsLabel")).toBeTruthy();
+      expect(view.queryByText("jumuahLabel")).toBeNull();
+    } finally { jest.useRealTimers(); }
   });
-
-  it("keeps a retry action visible when loading another page fails", async () => {
-    mockEntries.mockReturnValue(entries({ hasMore: true, paginationError: true }));
+  it("does not show zero totals or writable controls during initial loading", async () => {
+    mockEntries.mockReturnValue(entries({ viewState: "loading" }));
 
     const view = await render(<TodayScreen />);
 
-    expect(
-      view.getByText("Weitere Einträge konnten nicht geladen werden."),
-    ).toBeTruthy();
-    expect(
-      view.getByRole("button", { name: "Weitere Einträge laden" }),
-    ).toBeTruthy();
+    expect(view.getByText("stateLoadingTitle")).toBeTruthy();
+    expect(view.queryByTestId("today-total")).toBeNull();
+    expect(view.queryByRole("button", { name: "Eintragen" })).toBeNull();
   });
 
-  it("shows the server-calculated daily goal and weekly progress", async () => {
+  it("does not show zero totals or writable controls when the initial load fails", async () => {
     mockEntries.mockReturnValue(
-      entries({
-        summary: {
-          todayTotal: "42",
-          weekTotal: "42",
-          allTimeTotal: "100",
-          todayGoal: "100",
-          achievedDays: "2",
-          eligibleGoalDays: "4",
-        },
-      }),
+      entries({ viewState: "error", errorCode: "INTERNAL" }),
     );
 
     const view = await render(<TodayScreen />);
 
-    expect(view.getAllByText("100")).not.toHaveLength(0);
-    expect(view.getByText("2/4")).toBeTruthy();
-    expect(view.getByText("goal:100")).toBeTruthy();
+    expect(view.getByText("stateErrorTitle")).toBeTruthy();
+    expect(view.queryByTestId("today-total")).toBeNull();
+    expect(view.queryByRole("button", { name: "Eintragen" })).toBeNull();
+  });
+
+  it("retries the initial failed load", async () => {
+    const refresh = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    mockEntries.mockReturnValue(entries({ viewState: "error", refresh }));
+    const view = await render(<TodayScreen />);
+    await fireEvent.press(view.getByRole("button", { name: "commonRetry" }));
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 
   it("keeps failed offline changes visible and retryable", async () => {
@@ -172,7 +169,7 @@ describe("TodayScreen", () => {
     const view = await render(<TodayScreen />);
 
     expect(view.getByText("Synchronisierung fehlgeschlagen")).toBeTruthy();
-    fireEvent.press(view.getByRole("button", { name: "Erneut versuchen" }));
+    await fireEvent.press(view.getByRole("button", { name: "Erneut versuchen" }));
     expect(retrySync).toHaveBeenCalled();
   });
 
@@ -218,7 +215,7 @@ describe("TodayScreen", () => {
     );
     const view = await render(<TodayScreen />);
 
-    fireEvent.press(
+    await fireEvent.press(
       view.getByRole("button", { name: "Lokalen Speicher zurücksetzen" }),
     );
 
@@ -267,7 +264,7 @@ describe("TodayScreen", () => {
     expect(
       view.queryByRole("button", { name: "Eintragen" }),
     ).toBeNull();
-    fireEvent.press(view.getByRole("button", { name: "Erneut laden" }));
+    await fireEvent.press(view.getByRole("button", { name: "Erneut laden" }));
     expect(retryOfflineLoad).toHaveBeenCalledTimes(1);
   });
 });

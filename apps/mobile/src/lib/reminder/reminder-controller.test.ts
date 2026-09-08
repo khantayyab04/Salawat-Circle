@@ -26,6 +26,20 @@ function setup({
 }
 
 describe("ReminderController", () => {
+  it("retains the existing reminder and permits retry if a language change cannot be scheduled", async () => {
+    const { controller, scheduler, store } = setup();
+    store.load.mockResolvedValue({ hour: 7, minute: 5, enabled: true, notificationId: "notification-1" });
+    scheduler.list.mockResolvedValue([{ identifier: "notification-1" }]);
+    await controller.initialize("account-1");
+    scheduler.scheduleDaily.mockRejectedValueOnce(new Error("schedule failed"));
+    const copy = { title: "Salawat Circle", body: "Time for your Salawat today." };
+    await expect(controller.setNotificationContent(copy)).rejects.toThrow("schedule failed");
+    expect(scheduler.cancel).not.toHaveBeenCalledWith("notification-1");
+    expect(controller.snapshot.error).toBe(true);
+    await controller.setNotificationContent(copy);
+    expect(scheduler.scheduleDaily).toHaveBeenCalledTimes(2);
+    expect(controller.snapshot.error).toBe(false);
+  });
   it("does not request notification permission while loading the reminder", async () => {
     const { controller, scheduler } = setup({ permission: "not_asked" });
 
@@ -69,7 +83,7 @@ describe("ReminderController", () => {
       { hour: 12, minute: 0 },
       {
         title: "Salawat Circle",
-        body: "Zeit für deine heutige Salawat.",
+        body: "Freitag ist da – nimm dir Zeit für Salawat.",
       },
     );
     expect(store.save).toHaveBeenLastCalledWith("account-1", {
@@ -85,6 +99,22 @@ describe("ReminderController", () => {
       },
     });
     expect(controller.snapshot.jumuah.enabled).toBe(true);
+  });
+
+  it("uses Friday-specific copy for the Friday reminder", async () => {
+    const { controller, scheduler } = setup({ permission: "granted" });
+    await controller.initialize("account-1");
+    await controller.setNotificationContent(
+      { title: "Salawat Circle", body: "Time for your Salawat today." },
+      { title: "Salawat Circle", body: "Friday is here. Make time for Salawat." },
+    );
+
+    await controller.enableJumuah();
+
+    expect(scheduler.scheduleFriday).toHaveBeenCalledWith(
+      { hour: 12, minute: 0 },
+      { title: "Salawat Circle", body: "Friday is here. Make time for Salawat." },
+    );
   });
 
   it("reschedules an enabled Friday reminder when its selected time changes", async () => {
@@ -125,7 +155,7 @@ describe("ReminderController", () => {
       { hour: 13, minute: 15 },
       {
         title: "Salawat Circle",
-        body: "Zeit für deine heutige Salawat.",
+        body: "Freitag ist da – nimm dir Zeit für Salawat.",
       },
     );
     expect(store.save).toHaveBeenLastCalledWith("account-1", {
@@ -353,6 +383,85 @@ describe("ReminderController", () => {
       enabled: true,
       notificationId: "notification-2",
     });
+  });
+
+  it("keeps the current trigger recoverable when replacement scheduling fails", async () => {
+    const { controller, scheduler, store } = setup();
+    store.load.mockResolvedValue({
+      hour: 7,
+      minute: 5,
+      enabled: true,
+      notificationId: "notification-1",
+    });
+    scheduler.list.mockResolvedValue([{ identifier: "notification-1" }]);
+    scheduler.scheduleDaily.mockRejectedValueOnce(new Error("schedule failed"));
+    await controller.initialize("account-1");
+
+    await expect(
+      controller.setTime({ hour: 8, minute: 30 }),
+    ).rejects.toThrow("schedule failed");
+
+    expect(scheduler.cancel).not.toHaveBeenCalledWith("notification-1");
+    expect(controller.snapshot.time).toEqual({ hour: 7, minute: 5 });
+    expect(controller.snapshot.enabled).toBe(true);
+    expect(controller.snapshot.busy).toBe(false);
+    expect(controller.snapshot.error).toBe(true);
+  });
+
+  it("serializes rapid time changes and leaves only the latest trigger active", async () => {
+    let stored: StoredReminder = {
+      hour: 7,
+      minute: 5,
+      enabled: true,
+      notificationId: "notification-1",
+    };
+    const active = new Set(["notification-1"]);
+    let releaseFirst!: () => void;
+    const firstReplacement = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let replacement = 0;
+    const scheduler = {
+      getPermission: vi.fn(async () => "granted" as const),
+      requestPermission: vi.fn(async () => "granted" as const),
+      scheduleDaily: vi.fn(async () => {
+        replacement += 1;
+        const identifier = `notification-${replacement + 1}`;
+        if (replacement === 1) await firstReplacement;
+        active.add(identifier);
+        return identifier;
+      }),
+      scheduleFriday: vi.fn(async () => "friday-notification"),
+      cancel: vi.fn(async (identifier: string) => {
+        active.delete(identifier);
+      }),
+      list: vi.fn(async () => [...active].map((identifier) => ({ identifier }))),
+    };
+    const store = {
+      activate: vi.fn(async () => undefined),
+      load: vi.fn(async () => stored),
+      save: vi.fn(async (_accountId: string, value: StoredReminder) => {
+        stored = value;
+      }),
+      getActiveAccount: vi.fn(async () => null),
+    };
+    const controller = new ReminderController(store, scheduler);
+    await controller.initialize("account-1");
+
+    const first = controller.setTime({ hour: 8, minute: 30 });
+    const second = controller.setTime({ hour: 9, minute: 45 });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(scheduler.scheduleDaily).toHaveBeenCalledTimes(1);
+
+    releaseFirst();
+    await Promise.all([first, second]);
+
+    expect([...active]).toEqual(["notification-3"]);
+    expect(controller.snapshot.time).toEqual({ hour: 9, minute: 45 });
+    expect(controller.snapshot.busy).toBe(false);
   });
 
   it("disables a reminder without discarding its selected time", async () => {

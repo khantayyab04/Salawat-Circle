@@ -59,3 +59,9 @@ export type {
   TransferGroupOwnershipResponse,
   DeleteGroupResponse,
 } from "./types";
+export {
+  GROUP_PERIODS,
+  isGroupPeriod,
+  leaderboardPeriodFor,
+  type GroupPeriod,
+} from "./periods";

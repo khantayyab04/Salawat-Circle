@@ -85,6 +85,18 @@ describe("GroupMembersRoute", () => {
     });
   });
 
+  it("identifies the current owner accessibly and moves owner controls after refreshed ownership", async () => {
+    const state = mockUseGroups() as { members: { items: { role: string; isSelf: boolean }[] } };
+    state.members.items[0].role = "owner";
+    state.members.items[0].isSelf = true;
+    const view = await render(<GroupMembersRoute />);
+    expect(view.getByLabelText("Inhaber")).toBeTruthy();
+    expect(view.queryByRole("button", { name: "groupMembersTransferAction" })).toBeNull();
+    state.members.items[0].role = "member";
+    await view.rerender(<GroupMembersRoute />);
+    expect(view.queryByLabelText("Inhaber")).toBeNull();
+  });
+
   it("loads and renders active members instead of the unavailable placeholder", async () => {
     const view = await render(<GroupMembersRoute />);
 

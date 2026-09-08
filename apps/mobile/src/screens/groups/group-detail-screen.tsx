@@ -1,10 +1,25 @@
+import { CalendarDateField } from "@/components/calendar-date-field";
+import type { GroupCampaignSelection } from "@/lib/groups/types";
+import Crown from "lucide-react-native/icons/crown";
 import {
   AppButton,
   AppCard,
   AppText,
+  AppSheet,
   FormField,
+  GroupInsightsPanel,
+  SectionLabel,
+  SegmentedControl,
   StatusBanner,
+  SyncNotice,
 } from "@/components";
+import { AppHeader } from "@/components/app-header";
+import { formatRelativeTime } from "@/lib/relative-time";
+import {
+  GROUP_PERIODS,
+  leaderboardPeriodFor,
+  type GroupPeriod,
+} from "@/lib/groups/periods";
 import {
   useGroups,
   type GroupsLeaderboardPeriodState,
@@ -19,8 +34,12 @@ import {
   type TranslationKey,
   useTranslation,
 } from "@/localization";
-import { radius, spacing, useAppTheme } from "@/theme";
-import { Host, Switch } from "@expo/ui";
+import { radius, spacing, typography, useAppTheme } from "@/theme";
+import Settings from "lucide-react-native/icons/settings";
+import Users from "lucide-react-native/icons/users";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Host, Picker, Switch } from "@expo/ui";
+import { frame } from "@expo/ui/swift-ui/modifiers";
 import {
   Stack,
   useFocusEffect,
@@ -38,7 +57,6 @@ import {
 import {
   AppState,
   FlatList,
-  Pressable,
   RefreshControl,
   View,
   useWindowDimensions,
@@ -48,6 +66,9 @@ import {
 
 const tabularNumberStyle: TextStyle = { fontVariant: ["tabular-nums"] };
 const retryButtonStyle: ViewStyle = { alignSelf: "flex-start" };
+const fullWidthToggleModifiers = [
+  frame({ maxWidth: 10_000, alignment: "leading" }),
+];
 
 type LeaderboardErrorCopy = {
   title: string;
@@ -131,6 +152,8 @@ function resolveLeaderboardErrorCopy(
   t: (key: TranslationKey) => string,
 ): LeaderboardErrorCopy {
   switch (code) {
+    case "OWNER_MUST_TRANSFER":
+      return { title: t("groupDetailLeaveAction"), body: t("groupOwnerLeaveBlocked"), tone: "error" };
     case "OFFLINE":
       return {
         title: t("groupDetailOfflineTitle"),
@@ -198,46 +221,6 @@ function StateCard({
   );
 }
 
-const PeriodButton = memo(function PeriodButton({
-  label,
-  selected,
-  onPress,
-  testID,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-  testID: string;
-}) {
-  const { colors } = useAppTheme();
-
-  return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        minHeight: 44,
-        minWidth: 44,
-        flex: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        borderRadius: radius.pill,
-        borderCurve: "continuous",
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.sm,
-        backgroundColor: selected ? colors.accentMuted : colors.surface,
-        borderColor: selected ? colors.accent : colors.borderSubtle,
-        borderWidth: 1,
-        opacity: pressed ? 0.8 : 1,
-      })}
-    >
-      <AppText variant={selected ? "bodyStrong" : "body"}>{label}</AppText>
-    </Pressable>
-  );
-});
-
 const LeaderboardRow = memo(function LeaderboardRow({
   row,
   localeTag,
@@ -250,25 +233,23 @@ const LeaderboardRow = memo(function LeaderboardRow({
   const { colors } = useAppTheme();
   const totalText = formatNumeric(row.total, localeTag);
   const rankText = formatAppNumber(row.rank, localeTag);
-  const accessibilityLabel = `${rankText}. ${row.displayName}. ${totalText}.${
-    row.isSelf ? ` ${selfLabel}.` : ""
-  }`;
+  const displayName = row.isSelf && /^(du|you)$/i.test(row.displayName.trim()) ? selfLabel : row.displayName;
+  const showSelfCaption = row.isSelf && displayName !== selfLabel;
+  const accessibilityLabel = `${rankText}. ${displayName}. ${totalText}.${showSelfCaption ? ` ${selfLabel}.` : ""}`;
 
   return (
-    <AppCard
+    <View
       testID={`group-detail-row-${row.rowId}`}
       accessible
       accessibilityRole="text"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ selected: row.isSelf }}
-      style={
-        row.isSelf
-          ? {
-              borderColor: colors.accent,
-              backgroundColor: colors.accentMuted,
-            }
-          : undefined
-      }
+      style={{
+        padding: spacing.lg,
+        backgroundColor: row.isSelf ? colors.surfaceSubtle : colors.surface,
+        borderColor: colors.border,
+        borderBottomWidth: 1,
+      }}
     >
       <View
         style={{
@@ -278,19 +259,22 @@ const LeaderboardRow = memo(function LeaderboardRow({
           justifyContent: "space-between",
         }}
       >
-        <AppText style={[tabularNumberStyle, { minWidth: 32 }]}>{rankText}</AppText>
+        <View style={{ minWidth: 32, minHeight: 32, paddingHorizontal: spacing.xs, alignItems: "center", justifyContent: "center", borderRadius: radius.pill, backgroundColor: row.rank <= 3 ? colors.accentMuted : colors.surfaceMuted }}>
+          <AppText style={[tabularNumberStyle, { color: row.rank <= 3 ? colors.goldText : colors.textSecondary }]}>{rankText}</AppText>
+        </View>
         <AppText style={{ flex: 1 }} variant="bodyStrong">
-          {row.displayName}
+          {displayName}
         </AppText>
-        <AppText style={tabularNumberStyle}>{totalText}</AppText>
+        <AppText style={typography.amount}>{totalText}</AppText>
       </View>
-      {row.isSelf ? <AppText variant="caption">{selfLabel}</AppText> : null}
-    </AppCard>
+      {showSelfCaption ? <AppText variant="caption">{selfLabel}</AppText> : null}
+    </View>
   );
 });
 
 export function GroupDetailScreen() {
   const { colors } = useAppTheme();
+  const insets = useSafeAreaInsets();
   const { localeTag, t } = useTranslation();
   const { width } = useWindowDimensions();
   const { push, replace } = useRouter();
@@ -303,9 +287,13 @@ export function GroupDetailScreen() {
     loadLeaderboard,
     refreshGroups,
     setAnonymity,
+    setGroupGoal,
     updateGroupName,
     leaveGroup,
     deleteGroup,
+    loadInsights,
+    insightsByGroup,
+    insightsStatusByGroup,
   } = useGroups();
 
   const groupId = readGroupId(id);
@@ -315,8 +303,15 @@ export function GroupDetailScreen() {
   const [managementMode, setManagementMode] = useState<
     "rename" | "leave" | "delete" | null
   >(null);
+  const [managementOpen, setManagementOpen] = useState(false);
   const [nextGroupName, setNextGroupName] = useState("");
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [goalEditorOpen, setGoalEditorOpen] = useState(false);
+  const [goalInput, setGoalInput] = useState("");
+  const [campaignMode, setCampaignMode] = useState<GroupCampaignSelection["mode"]>("gregorian");
+  const [campaignStart, setCampaignStart] = useState("2026-01-01");
+  const [goalError, setGoalError] = useState<string | null>(null);
+  const goalSubmitGuard = useRef(false);
   const loadMoreGuardRef = useRef(false);
   const periodRef = useRef<LeaderboardPeriod>(period);
   const appStateRef = useRef(AppState.currentState);
@@ -325,6 +320,17 @@ export function GroupDetailScreen() {
     if (!groupId) return null;
     return groups.items.find((group) => group.id === groupId) ?? null;
   }, [groupId, groups.items]);
+
+  const screenPeriod: GroupPeriod = period === "all_time" ? "all" : period;
+  const insights = groupId ? (insightsByGroup?.[groupId]?.[screenPeriod] ?? null) : null;
+  const insightsStatus = groupId ? insightsStatusByGroup?.[groupId]?.[screenPeriod] : undefined;
+
+  const goalPercent = useMemo(() => {
+    if (!insights?.goalAmount) return null;
+    const goal = Number(insights.goalAmount);
+    if (!Number.isFinite(goal) || goal <= 0) return null;
+    return (Number(insights.periodTotal) / goal) * 100;
+  }, [insights]);
 
   const fallbackPeriodState = useMemo(() => getFallbackPeriodState(period), [period]);
   const groupPeriodState: GroupsLeaderboardPeriodState =
@@ -339,9 +345,21 @@ export function GroupDetailScreen() {
   const anonymityEnabled =
     groupMeta?.leaderboardAnonymous ?? listGroup?.leaderboardAnonymous ?? false;
   const isOwner = groupMeta?.isOwner ?? listGroup?.role === "owner";
+  const ownerLeaveBlocked = isOwner && memberCount !== "1";
   const calculatedAt = groupPeriodState.calculatedAt ?? listGroup?.calculatedAt ?? null;
 
   const memberCountText = formatNumeric(memberCount, localeTag);
+  // The tile is small, so a full timestamp would shrink into unreadability.
+  // The exact value stays available through the accessibility hint below.
+  const relativeCalculated = calculatedAt
+    ? formatRelativeTime(calculatedAt, new Date(), {
+        justNow: t("relativeJustNow"),
+        minutes: t("relativeMinutes"),
+        hours: t("relativeHours"),
+        days: t("relativeDays"),
+      })
+    : null;
+
   const calculatedText = formatTimestamp(
     calculatedAt,
     localeTag,
@@ -377,6 +395,28 @@ export function GroupDetailScreen() {
     ["update_group_name", "leave_group", "delete_group"].includes(
       mutation.kind ?? "",
     );
+  const goalPending = mutation.pending && mutation.kind === "set_group_goal";
+  const goalAmount = /^\d+$/.test(goalInput.trim()) ? Number(goalInput.trim()) : NaN;
+  const validGoal = Number.isSafeInteger(goalAmount) && goalAmount >= 1 && goalAmount <= 10_000_000;
+
+  const saveGoal = async (amount: number | null) => {
+    if (!groupId || !isOwner || typeof revision !== "number" || goalSubmitGuard.current) return;
+    goalSubmitGuard.current = true;
+    setGoalError(null);
+    try {
+      await setGroupGoal(groupId, screenPeriod, amount, revision,
+        screenPeriod === "month" ? { mode: campaignMode, startDate: campaignStart } : undefined);
+      setGoalEditorOpen(false);
+    } catch (error) {
+      const code = readErrorCode(error);
+      setGoalError(resolveLeaderboardErrorCopy(code, t).body);
+      if (SWITCH_ERROR_REFRESH_CODES.has(code)) {
+        await loadLeaderboard(groupId, period, { mode: "reset" }).catch(() => undefined);
+      }
+    } finally {
+      goalSubmitGuard.current = false;
+    }
+  };
 
   useEffect(() => {
     loadMoreGuardRef.current = false;
@@ -388,7 +428,8 @@ export function GroupDetailScreen() {
       void loadLeaderboard(groupId, periodRef.current, { mode: "reset" }).catch(
         () => undefined,
       );
-    }, [groupId, loadLeaderboard]),
+      void loadInsights?.(groupId, periodRef.current === "all_time" ? "all" : periodRef.current).catch(() => undefined);
+    }, [groupId, loadInsights, loadLeaderboard]),
   );
 
   useEffect(() => {
@@ -399,23 +440,27 @@ export function GroupDetailScreen() {
       void loadLeaderboard(groupId, periodRef.current, { mode: "reset" }).catch(
         () => undefined,
       );
+      void loadInsights?.(groupId, periodRef.current === "all_time" ? "all" : periodRef.current).catch(() => undefined);
     });
     return () => subscription.remove();
-  }, [groupId, loadLeaderboard]);
+  }, [groupId, loadInsights, loadLeaderboard]);
 
   const refreshCurrentPeriod = useCallback(async () => {
     if (!groupId) return;
     setRefreshing(true);
     setSwitchErrorMessage(null);
     try {
-      await refreshGroups();
-      await loadLeaderboard(groupId, period, { mode: "reset" });
+      await Promise.all([
+        refreshGroups(),
+        loadLeaderboard(groupId, period, { mode: "reset" }),
+        loadInsights?.(groupId, period === "all_time" ? "all" : period),
+      ]);
     } catch {
       // Error state is rendered from Groups store.
     } finally {
       setRefreshing(false);
     }
-  }, [groupId, loadLeaderboard, period, refreshGroups]);
+  }, [groupId, loadInsights, loadLeaderboard, period, refreshGroups]);
 
   const switchPeriod = useCallback(
     (nextPeriod: LeaderboardPeriod) => {
@@ -426,8 +471,9 @@ export function GroupDetailScreen() {
       void loadLeaderboard(groupId, nextPeriod, { mode: "reset" }).catch(
         () => undefined,
       );
+      void loadInsights?.(groupId, nextPeriod === "all_time" ? "all" : nextPeriod).catch(() => undefined);
     },
-    [groupId, loadLeaderboard],
+    [groupId, loadInsights, loadLeaderboard],
   );
 
   const loadMore = useCallback(async () => {
@@ -497,14 +543,14 @@ export function GroupDetailScreen() {
   }, [groupId, isOwner, nextGroupName, revision, t, updateGroupName]);
 
   const confirmLeave = useCallback(async () => {
-    if (!groupId || isOwner) return;
+    if (!groupId || ownerLeaveBlocked) return;
     try {
       await leaveGroup(groupId);
       replace("/groups");
     } catch (error) {
       setSwitchErrorMessage(resolveLeaderboardErrorCopy(readErrorCode(error), t).body);
     }
-  }, [groupId, isOwner, leaveGroup, replace, t]);
+  }, [groupId, ownerLeaveBlocked, leaveGroup, replace, t]);
 
   const confirmDelete = useCallback(async () => {
     if (
@@ -534,46 +580,142 @@ export function GroupDetailScreen() {
 
   const listHeader = (
     <View style={{ gap: spacing.lg }}>
-      <Stack.Screen options={{ title: groupName }} />
-      <AppCard>
-        <AppText variant="bodyStrong">{groupName}</AppText>
-        <AppText style={tabularNumberStyle}>{`${memberCountText} ${t(
-          "groupDetailMembersLabel",
-        )}`}</AppText>
-        <AppText variant="caption" style={tabularNumberStyle}>{`${t(
-          "groupDetailCalculatedLabel",
-        )}: ${calculatedText}`}</AppText>
-      </AppCard>
+      <Stack.Screen options={{ headerShown: false, title: groupName }} />
 
-      <AppCard style={{ gap: spacing.sm }}>
-        <View
-          accessibilityRole="tablist"
-          style={{
-            flexDirection: "row",
-            gap: spacing.sm,
-          }}
-        >
-          <PeriodButton
-            testID="group-detail-period-week"
-            label={t("groupDetailWeek")}
-            selected={period === "week"}
-            onPress={() => switchPeriod("week")}
-          />
-          <PeriodButton
-            testID="group-detail-period-all-time"
-            label={t("groupDetailAllTime")}
-            selected={period === "all_time"}
-            onPress={() => switchPeriod("all_time")}
-          />
-        </View>
-      </AppCard>
+      {isOwner ? <View accessible accessibilityLabel={t("groupMembersOwner")} style={{ flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, backgroundColor: colors.accentMuted }}>
+        <Crown size={16} color={colors.goldText} />
+        <AppText variant="caption" style={{ color: colors.goldText }}>{t("groupMembersOwner")}</AppText>
+      </View> : null}
+      <SegmentedControl
+        onChange={(next) => switchPeriod(leaderboardPeriodFor(next))}
+        options={GROUP_PERIODS.map((value) => ({
+          value,
+          label: t(
+            value === "week"
+              ? "groupDetailWeek"
+              : value === "month"
+                ? "groupDetailMonth"
+                : "groupDetailAllTime",
+          ),
+        }))}
+        value={screenPeriod}
+      />
 
-      <AppCard style={{ gap: spacing.sm }}>
+      {insightsStatus?.errorCode ? (
+        <SyncNotice
+          body={t("groupDetailInsightsFailed")}
+          title={t("statePartialErrorTitle")}
+          tone="error"
+        />
+      ) : null}
+
+      {insights ? <GroupInsightsPanel
+        activeMembers={formatNumeric(
+          insights?.activeMembers ?? memberCountText,
+          localeTag,
+        )}
+        copy={{
+          goalPrefix: t("groupDetailGoalPrefix"),
+          remaining: t("groupDetailRemaining"),
+          noGoal: t("groupDetailNoGoal"),
+          groupPerDay: t("groupDetailGroupPerDay"),
+          youPerDay: t("groupDetailYouPerDay"),
+          activeMembers: t("groupDetailActiveMembersShort"),
+          updated: t("groupDetailUpdatedShort"),
+        }}
+        goalAmount={
+          insights?.goalAmount
+            ? formatNumeric(insights.goalAmount, localeTag)
+            : null
+        }
+        goalPercent={goalPercent}
+        groupPerDay={
+          insights?.groupPerDay
+            ? formatNumeric(insights.groupPerDay, localeTag)
+            : null
+        }
+        perPersonPerDay={
+          insights?.perPersonPerDay
+            ? formatNumeric(insights.perPersonPerDay, localeTag)
+            : null
+        }
+        periodTotal={formatNumeric(insights?.periodTotal ?? "0", localeTag)}
+        remaining={
+          insights?.remaining
+            ? formatNumeric(insights.remaining, localeTag)
+            : null
+        }
+        totalMembers={
+          insights?.totalMembers
+            ? formatNumeric(insights.totalMembers, localeTag)
+            : null
+        }
+        updatedHint={calculatedText}
+        updatedLabel={relativeCalculated ?? calculatedText}
+      /> : <StateCard
+        title={t(insightsStatus?.errorCode ? "groupDetailErrorTitle" : "groupDetailLoadingTitle")}
+        body={t(insightsStatus?.errorCode ? "groupDetailInsightsFailed" : "groupDetailLoadingBody")}
+        actionLabel={insightsStatus?.errorCode ? t("groupDetailRefresh") : undefined}
+        onAction={() => { if (groupId) void loadInsights(groupId, screenPeriod).catch(() => undefined); }}
+      />}
+      {screenPeriod === "month" && insights?.campaign ? <AppText variant="caption">{t("groupCampaignBounds", {
+        start: formatAppDate(new Date(`${insights.campaign.startDate}T12:00:00Z`), localeTag, "UTC"),
+        end: formatAppDate(new Date(`${insights.campaign.endDate}T12:00:00Z`), localeTag, "UTC"),
+      })}</AppText> : null}
+      {screenPeriod === "week" && insights?.goalSource === "campaign" ? <AppText variant="caption">{t("groupCampaignWeekly")}</AppText> : null}
+      {isOwner ? <AppButton
+        label={t("groupDetailGoalEdit")}
+        variant="secondary"
+        disabled={!online || typeof revision !== "number" || goalPending}
+        onPress={() => {
+          setGoalInput(insights?.goalSource === "campaign" && screenPeriod === "week" ? "" : insights?.goalAmount ?? "");
+          setCampaignMode(insights?.campaign?.mode ?? "gregorian");
+          setCampaignStart(insights?.campaign?.startDate ?? new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()));
+          setGoalError(null);
+          setGoalEditorOpen(true);
+        }}
+      /> : null}
+      <View style={{ padding: spacing.lg, borderTopLeftRadius: radius.card, borderTopRightRadius: radius.card, backgroundColor: colors.surface, borderBottomColor: colors.border, borderBottomWidth: 1, flexDirection: "row", justifyContent: "space-between", gap: spacing.sm }}>
+        <AppText variant="cardTitle">{t("groupDetailRankingTitle")}</AppText>
+        <SectionLabel>{t(anonymityEnabled ? "groupDetailAliasOn" : "groupDetailAliasOff")}</SectionLabel>
+      </View>
+    </View>
+  );
+
+  // The design puts the management actions below the ranking, so they
+  // live in the list footer rather than in its header.
+  const listFooter = (
+    <View style={{ gap: spacing.lg }}>
+      <View style={{ flexDirection: "row", gap: spacing.md, marginTop: spacing.lg }}>
+        {isOwner ? <AppButton
+          label={t("groupDetailInviteAction")}
+          variant="secondary"
+          style={{ flex: 1 }}
+          icon={<Users size={18} color={colors.primary} />}
+          onPress={() => { if (groupId) push({ pathname: "/groups/[id]/invites", params: { id: groupId } }); }}
+        /> : null}
+        <AppButton
+          label={t("groupDetailSettingsAction")}
+          variant="secondary"
+          style={{ flex: 1 }}
+          icon={<Settings size={18} color={colors.primary} />}
+          onPress={() => { setManagementMode(null); setSwitchErrorMessage(null); setManagementOpen(true); }}
+        />
+      </View>
+      <AppSheet
+        visible={managementOpen}
+        title={t("groupDetailSettingsAction")}
+        subtitle={groupName}
+        closeLabel={t("commonCancel")}
+        onClose={() => setManagementOpen(false)}
+        dismissible={!managementPending && !setAnonymityPending}
+      >
         <AppButton
           label={t("groupMembers")}
           variant="secondary"
           onPress={() => {
             if (!groupId) return;
+            setManagementOpen(false);
             push({ pathname: "/groups/[id]/members", params: { id: groupId } });
           }}
         />
@@ -600,7 +742,8 @@ export function GroupDetailScreen() {
               }}
             />
           </>
-        ) : (
+        ) : null}
+        {ownerLeaveBlocked ? <AppText variant="caption">{t("groupOwnerLeaveBlocked")}</AppText> : (
           <AppButton
             label={t("groupDetailLeaveAction")}
             variant="secondary"
@@ -638,7 +781,7 @@ export function GroupDetailScreen() {
         ) : null}
         {managementMode === "leave" ? (
           <View style={{ gap: spacing.sm }}>
-            <AppText>{t("groupDetailLeaveConfirmBody")}</AppText>
+            <AppText>{t(isOwner ? "groupOwnerLeaveLast" : "groupDetailLeaveConfirmBody")}</AppText>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
               <AppButton
                 label={t("commonCancel")}
@@ -689,18 +832,11 @@ export function GroupDetailScreen() {
                 value={anonymityEnabled}
                 disabled={setAnonymityPending}
                 label={t("groupDetailAnonymityOwnerLabel")}
+                modifiers={fullWidthToggleModifiers}
                 onValueChange={handleAnonymityToggle}
               />
             </Host>
             <AppText variant="caption">{t("groupDetailAnonymityOwnerHint")}</AppText>
-            <AppButton
-              label={t("groupDetailInviteAction")}
-              variant="secondary"
-              onPress={() => {
-                if (!groupId) return;
-                push({ pathname: "/groups/[id]/invites", params: { id: groupId } });
-              }}
-            />
           </>
         ) : (
           <AppText>
@@ -720,7 +856,7 @@ export function GroupDetailScreen() {
         {switchErrorMessage ? (
           <AppText accessibilityLiveRegion="polite">{switchErrorMessage}</AppText>
         ) : null}
-      </AppCard>
+      </AppSheet>
 
       {showPartialError && resolvedErrorCopy ? (
         <View style={{ gap: spacing.sm }}>
@@ -745,14 +881,20 @@ export function GroupDetailScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <AppHeader
+        backLabel={t("commonBack")}
+        onBack={() => replace("/groups")}
+        subtitle={groupName}
+        title={t("appName")}
+      />
       <FlatList
         testID="group-detail-list"
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{
           flexGrow: 1,
-          gap: spacing.lg,
           paddingHorizontal: spacing.lg,
           paddingVertical: spacing.xl,
+          paddingBottom: 120 + insets.bottom,
           width: "100%",
           maxWidth: width > 760 ? 720 : undefined,
           alignSelf: "center",
@@ -782,18 +924,21 @@ export function GroupDetailScreen() {
           ) : null
         }
         ListFooterComponent={
-          groupPeriodState.hasMore ? (
-            <AppButton
-              label={t("groupDetailLoadMore")}
-              loading={groupPeriodState.loadingMore}
-              variant="secondary"
-              onPress={() => {
-                void loadMore();
-              }}
-            />
-          ) : groupPeriodState.items.length > 0 ? (
-            <AppText variant="caption">{t("groupDetailEnd")}</AppText>
-          ) : null
+          <View style={{ gap: spacing.lg }}>
+            {groupPeriodState.hasMore ? (
+              <AppButton
+                label={t("groupDetailLoadMore")}
+                loading={groupPeriodState.loadingMore}
+                onPress={() => {
+                  void loadMore();
+                }}
+                variant="secondary"
+              />
+            ) : groupPeriodState.items.length > 0 ? (
+              <SectionLabel>{t("groupDetailEnd")}</SectionLabel>
+            ) : null}
+            {listFooter}
+          </View>
         }
         ListHeaderComponent={listHeader}
         onEndReached={() => {
@@ -808,6 +953,47 @@ export function GroupDetailScreen() {
         )}
         style={{ backgroundColor: colors.background }}
       />
+      <AppSheet
+        visible={goalEditorOpen}
+        title={t("groupDetailGoalEdit")}
+        subtitle={t(screenPeriod === "week" ? "groupDetailWeek" : screenPeriod === "month" ? "groupDetailMonth" : "groupDetailAllTime")}
+        closeLabel={t("commonCancel")}
+        onClose={() => setGoalEditorOpen(false)}
+        dismissible={!goalPending}
+        footer={<AppButton label={t("groupDetailGoalSave")} disabled={!validGoal || !isOwner} loading={goalPending} onPress={() => void saveGoal(goalAmount)} />}
+      >
+        {screenPeriod === "month" ? <>
+          <AppText variant="bodyStrong">{t("groupCampaignMode")}</AppText>
+          <Host matchContents style={{ minHeight: 44 }}>
+            <Picker testID="group-campaign-mode" selectedValue={campaignMode} onValueChange={setCampaignMode} enabled={!goalPending}>
+              <Picker.Item value="gregorian" label={t("groupCampaignGregorian")} />
+              <Picker.Item value="islamic" label={t("groupCampaignIslamic")} />
+              <Picker.Item value="custom" label={t("groupCampaignCustom")} />
+            </Picker>
+          </Host>
+          <CalendarDateField label={t(campaignMode === "custom" ? "groupCampaignStart" : "groupCampaignDate")} value={campaignStart} onChange={setCampaignStart} minimumDate="1900-01-01" maximumDate="2200-12-31" disabled={goalPending} />
+          {campaignMode !== "custom" ? <AppText variant="caption">{t("groupCampaignHint")}</AppText> : null}
+          <AppText variant="caption">{t("groupCampaignWeekly")}</AppText>
+        </> : null}
+        {screenPeriod === "week" ? <AppText variant="caption">{t("groupCampaignWeekly")}</AppText> : null}
+        <FormField
+          testID="group-goal-amount"
+          label={t("groupDetailGoalAmount")}
+          hint={t("groupDetailGoalHint")}
+          error={goalInput.length > 0 && !validGoal ? t("groupDetailGoalInvalid") : undefined}
+          keyboardType="number-pad"
+          value={goalInput}
+          editable={!goalPending}
+          onChangeText={setGoalInput}
+        />
+        {goalError ? <AppText accessibilityRole="alert">{goalError}</AppText> : null}
+        {insights?.goalAmount !== null && insights?.goalAmount !== undefined && insights?.goalSource !== "campaign" ? <AppButton
+          label={t(screenPeriod === "week" && insights?.campaign ? "groupWeeklyOverrideClear" : "groupDetailGoalClear")}
+          variant="destructive"
+          disabled={goalPending || !isOwner}
+          onPress={() => void saveGoal(null)}
+        /> : null}
+      </AppSheet>
     </View>
   );
 }

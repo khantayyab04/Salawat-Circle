@@ -1,18 +1,5 @@
-type Coordinates = { latitude: number; longitude: number };
+export type Coordinates = { latitude: number; longitude: number };
 
-const timezoneCoordinates: Record<string, Coordinates> = {
-  "Europe/Berlin": { latitude: 52.52, longitude: 13.405 },
-  "Europe/London": { latitude: 51.507, longitude: -0.128 },
-  "Europe/Istanbul": { latitude: 41.008, longitude: 28.978 },
-  "America/New_York": { latitude: 40.713, longitude: -74.006 },
-  "America/Los_Angeles": { latitude: 34.052, longitude: -118.244 },
-  "Asia/Karachi": { latitude: 24.86, longitude: 67.01 },
-  "Asia/Dubai": { latitude: 25.205, longitude: 55.271 },
-  "Asia/Jakarta": { latitude: -6.209, longitude: 106.846 },
-  "Africa/Cairo": { latitude: 30.044, longitude: 31.236 },
-};
-
-const fallbackSunsetMinutes = 18 * 60;
 const degrees = Math.PI / 180;
 
 function normaliseDegrees(value: number) {
@@ -42,9 +29,9 @@ function timeZoneOffsetMinutes(date: string, timezone: string) {
   return Math.round((localAsUtc - reference.getTime()) / 60_000);
 }
 
-export function getSunsetMinutes(date: string, timezone: string) {
-  const location = timezoneCoordinates[timezone];
-  if (!location) return fallbackSunsetMinutes;
+export function getSunsetMinutes(date: string, timezone: string, coordinates?: Coordinates | null) {
+  const location = coordinates;
+  if (!location) return null;
 
   const startOfYear = Date.UTC(Number(date.slice(0, 4)), 0, 0);
   const currentDay = new Date(`${date}T12:00:00.000Z`);
@@ -69,7 +56,7 @@ export function getSunsetMinutes(date: string, timezone: string) {
     (Math.cos(90.833 * degrees) -
       sinDeclination * Math.sin(location.latitude * degrees)) /
     (cosDeclination * Math.cos(location.latitude * degrees));
-  if (hourAngleCosine < -1 || hourAngleCosine > 1) return fallbackSunsetMinutes;
+  if (hourAngleCosine < -1 || hourAngleCosine > 1) return null;
   const localMeanTime =
     Math.acos(hourAngleCosine) / degrees / 15 +
     rightAscension -

@@ -47,7 +47,29 @@ function EnableConsumer() {
   );
 }
 
+function FailingEnableConsumer() {
+  const reminder = useReminder();
+  return (
+    <>
+      <Text>{`${reminder.busy ? "busy" : "idle"}:${reminder.error ? "error" : "ok"}`}</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="enable"
+        onPress={() => void reminder.enable()}
+      />
+    </>
+  );
+}
+
 describe("ReminderProvider", () => {
+  it("publishes a recoverable error when the initial local settings read fails", async () => {
+    const controller = new ReminderController(
+      { activate: async () => {}, getActiveAccount: async () => null, load: async () => { throw new Error("storage unavailable"); }, save: async () => {} },
+      { getPermission: async () => "granted", requestPermission: async () => "granted", scheduleDaily: async () => "daily", scheduleFriday: async () => "friday", cancel: async () => {}, list: async () => [] },
+    );
+    const view = await render(<ReminderProvider accountId="account-1" controller={controller}><FailingEnableConsumer /></ReminderProvider>);
+    await waitFor(() => expect(view.getByText("idle:error")).toBeTruthy());
+  });
   it("loads the account reminder state without requesting permission", async () => {
     const scheduler = {
       getPermission: jest.fn(async () => "not_asked" as const),
@@ -178,6 +200,39 @@ describe("ReminderProvider", () => {
 
     await act(async () => resolvePermission("granted"));
     await waitFor(() => expect(view.getByText("idle")).toBeTruthy());
+  });
+
+  it("catches a failed reminder action and publishes an idle error state", async () => {
+    const controller = new ReminderController(
+      {
+        activate: async () => undefined,
+        getActiveAccount: async () => null,
+        load: async () => null,
+        save: async () => undefined,
+      },
+      {
+        getPermission: async () => "granted",
+        requestPermission: async () => "granted",
+        scheduleDaily: async () => {
+          throw new Error("schedule failed");
+        },
+        scheduleFriday: async () => "friday-notification-1",
+        cancel: async () => undefined,
+        list: async () => [],
+      },
+    );
+    const view = await render(
+      <ReminderProvider accountId="account-1" controller={controller}>
+        <FailingEnableConsumer />
+      </ReminderProvider>,
+    );
+
+    await waitFor(() => expect(view.getByText("idle:ok")).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "enable" }));
+    });
+
+    await waitFor(() => expect(view.getByText("idle:error")).toBeTruthy());
   });
 
   it("forwards a local reminder tap to the supplied today navigation handler", async () => {

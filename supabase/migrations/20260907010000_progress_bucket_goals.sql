@@ -1,0 +1,160 @@
+-- Report elapsed historical goal totals for proportionate activity bars.
+-- Existing daily achievement counts retain their original day-by-day meaning.
+create or replace function public.get_progress_series(
+  p_timezone text,
+  p_range text default 'week'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_today date;
+  v_start date;
+  v_end date;
+  v_first_entry date;
+  v_bucket text;
+  v_label_format text;
+  v_buckets jsonb;
+  v_total bigint;
+  v_active_days integer;
+  v_goal_days integer;
+  v_achieved_goal_days integer;
+begin
+  if v_user_id is null then
+    raise exception using errcode = 'P0001', message = 'AUTH_REQUIRED';
+  end if;
+  perform private.require_active_core_user();
+
+  if not private.is_valid_timezone(p_timezone)
+     or p_range is null
+     or p_range not in ('week', 'month', 'year', 'all') then
+    raise exception using errcode = 'P0001', message = 'INVALID_INPUT';
+  end if;
+
+  v_today := (pg_catalog.now() at time zone p_timezone)::date;
+
+  select min(entry.entry_date)
+    into v_first_entry
+  from public.salawat_entries entry
+  where entry.user_id = v_user_id;
+
+  if p_range = 'week' then
+    v_start := v_today - (extract(isodow from v_today)::integer - 1);
+    v_end := v_start + 6;
+    v_bucket := 'day';
+    v_label_format := 'DY';
+  elsif p_range = 'month' then
+    v_start := pg_catalog.date_trunc('month', v_today::timestamp)::date;
+    v_end := (v_start + interval '1 month - 1 day')::date;
+    v_bucket := 'week';
+    v_label_format := '"W"W';
+  elsif p_range = 'year' then
+    v_start := pg_catalog.date_trunc('year', v_today::timestamp)::date;
+    v_end := (v_start + interval '1 year - 1 day')::date;
+    v_bucket := 'month';
+    v_label_format := 'MON';
+  else
+    v_start := pg_catalog.date_trunc(
+      'year',
+      least(coalesce(v_first_entry, v_today), v_today)::timestamp
+    )::date;
+    v_end := v_today;
+    v_bucket := 'year';
+    v_label_format := 'YYYY';
+  end if;
+
+  with days as (
+    select
+      day::date as entry_date,
+      coalesce((
+        select sum(entry.amount)::bigint
+        from public.salawat_entries entry
+        where entry.user_id = v_user_id
+          and entry.entry_date = day::date
+      ), 0) as total,
+      goal.amount as goal
+    from pg_catalog.generate_series(
+      v_start::timestamp,
+      v_end::timestamp,
+      interval '1 day'
+    ) day
+    left join lateral (
+      select amount
+      from public.daily_goal_versions
+      where user_id = v_user_id
+        and effective_from <= day::date
+      order by effective_from desc
+      limit 1
+    ) goal on true
+  ),
+  elapsed as (
+    select * from days where days.entry_date <= v_today
+  ),
+  bucketed as (
+    select
+      pg_catalog.date_trunc(v_bucket, days.entry_date::timestamp)::date as bucket_start,
+      sum(days.total) filter (where days.entry_date <= v_today)::bigint as bucket_total,
+      sum(days.goal) filter (where days.entry_date <= v_today)::bigint as bucket_goal_total,
+      count(*) filter (
+        where days.entry_date <= v_today
+          and days.goal is not null
+          and days.total >= days.goal
+      )::integer as bucket_achieved,
+      count(*) filter (
+        where days.entry_date <= v_today and days.goal is not null
+      )::integer as bucket_goal_days,
+      bool_and(days.entry_date > v_today) as bucket_is_future
+    from days
+    group by 1
+   )
+  select
+    coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'start', bucketed.bucket_start,
+          'label', trim(to_char(bucketed.bucket_start, v_label_format)),
+          'total', coalesce(bucketed.bucket_total, 0)::text,
+          'future', bucketed.bucket_is_future,
+          'goal_total', bucketed.bucket_goal_total::text,
+          'goal_reached', case
+            when bucketed.bucket_is_future then null
+            when bucketed.bucket_goal_days = 0 then null
+            else bucketed.bucket_achieved = bucketed.bucket_goal_days
+          end
+        )
+        order by bucketed.bucket_start
+      )
+      from bucketed
+    ), '[]'::jsonb),
+    (select coalesce(sum(elapsed.total), 0)::bigint from elapsed),
+    (select count(*) filter (where elapsed.total > 0)::integer from elapsed),
+    (select count(*) filter (where elapsed.goal is not null)::integer from elapsed),
+    (select count(*) filter (
+      where elapsed.goal is not null and elapsed.total >= elapsed.goal
+    )::integer from elapsed)
+  into
+    v_buckets,
+    v_total,
+    v_active_days,
+    v_goal_days,
+    v_achieved_goal_days;
+
+  return private.with_response_meta(jsonb_build_object(
+    'range', p_range,
+    'period_start', v_start,
+    'period_end', v_end,
+    'today', v_today,
+    'total', v_total::text,
+    'active_days', v_active_days::text,
+    'goal_days', v_goal_days::text,
+    'achieved_goal_days', v_achieved_goal_days::text,
+    'buckets', v_buckets
+  ));
+end;
+$$;
+
+revoke all on function public.get_progress_series(text, text) from public, anon;
+grant execute on function public.get_progress_series(text, text) to authenticated;

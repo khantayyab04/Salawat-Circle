@@ -20,6 +20,7 @@ import type { GroupsGateway } from "./groups-gateway";
 import { createSupabaseGroupsGateway } from "./groups-gateway";
 import { GroupsStore } from "./groups-store";
 import type {
+  GroupCampaignSelection,
   AcceptInviteResponse,
   AppLocale,
   CreateGroupResponse,
@@ -37,6 +38,7 @@ import type {
   UpdateGroupNameResponse,
 } from "./types";
 import type { GroupInsights } from "@/lib/group-insights";
+import type { GroupPeriod } from "./periods";
 
 type GroupsContextValue = ReturnType<GroupsStore["getSnapshot"]> & {
   revision: number;
@@ -52,7 +54,7 @@ type GroupsContextValue = ReturnType<GroupsStore["getSnapshot"]> & {
     period: LeaderboardPeriod,
     options?: LoadLeaderboardOptions,
   ): Promise<void>;
-  loadInsights(groupId: string): Promise<GroupInsights>;
+  loadInsights(groupId: string, period?: GroupPeriod): Promise<GroupInsights>;
   setAnonymity(
     groupId: string,
     anonymous: boolean,
@@ -60,9 +62,10 @@ type GroupsContextValue = ReturnType<GroupsStore["getSnapshot"]> & {
   ): Promise<SetLeaderboardAnonymityResponse>;
   setGroupGoal(
     groupId: string,
-    period: "week" | "month",
-    amount: number,
+    period: GroupPeriod,
+    amount: number | null,
     expectedRevision?: number,
+    campaign?: GroupCampaignSelection,
   ): Promise<SetGroupGoalResponse>;
   loadInvites(groupId: string): Promise<void>;
   loadMembers(
@@ -251,7 +254,8 @@ export function GroupsProvider({
     [controller],
   );
   const loadInsights = useCallback(
-    (groupId: string) => controller.loadInsights(groupId),
+    (groupId: string, period?: GroupPeriod) =>
+      controller.loadInsights(groupId, period),
     [controller],
   );
   const setAnonymity = useCallback(
@@ -262,10 +266,11 @@ export function GroupsProvider({
   const setGroupGoal = useCallback(
     (
       groupId: string,
-      period: "week" | "month",
-      amount: number,
+      period: GroupPeriod,
+      amount: number | null,
       expectedRevision?: number,
-    ) => controller.setGroupGoal(groupId, period, amount, expectedRevision),
+      campaign?: GroupCampaignSelection,
+    ) => controller.setGroupGoal(groupId, period, amount, expectedRevision, campaign),
     [controller],
   );
   const loadInvites = useCallback(

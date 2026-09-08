@@ -4,6 +4,7 @@ import {
   AppScreen,
   AppText,
   FormField,
+  StateCard,
 } from "@/components";
 import { parseDisplayName, parseTimeZone } from "@/lib/auth/validation";
 import { useAuth } from "@/lib/auth";
@@ -36,6 +37,7 @@ export function ProfileSettingsScreen({ gateway }: { gateway?: SettingsGateway }
   const [displayName, setDisplayName] = useState("");
   const [timeZone, setTimeZone] = useState(deviceTimeZone);
   const [loadError, setLoadError] = useState(false);
+  const [loading, setLoading] = useState(true);
   const activeGateway = useMemo(
     () => gateway ?? createSupabaseSettingsGateway(getSupabaseClient()),
     [gateway],
@@ -45,6 +47,21 @@ export function ProfileSettingsScreen({ gateway }: { gateway?: SettingsGateway }
     () => getTimeZoneOptions(detectedTimeZone, timeZone),
     [detectedTimeZone, timeZone],
   );
+
+  const retryProfile = async () => {
+    setLoadError(false);
+    setLoading(true);
+    try {
+      const profile = await activeGateway.loadProfile();
+      setLoaded(profile);
+      setDisplayName(profile.displayName);
+      setTimeZone(profile.timeZone);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -58,6 +75,9 @@ export function ProfileSettingsScreen({ gateway }: { gateway?: SettingsGateway }
       })
       .catch(() => {
         if (active) setLoadError(true);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
       });
     return () => {
       active = false;
@@ -86,11 +106,29 @@ export function ProfileSettingsScreen({ gateway }: { gateway?: SettingsGateway }
     }
   };
 
+  if (!loaded) {
+    return (
+      <AppScreen>
+        {loadError ? (
+          <StateCard
+            actionLabel={t("settingsProfileRetry")}
+            body={t("settingsProfileLoadFailed")}
+            busy={loading}
+            onAction={() => void retryProfile()}
+            title={t("settingsProfile")}
+          />
+        ) : (
+          <StateCard
+            body={t("stateLoadingBody")}
+            title={t("stateLoadingTitle")}
+          />
+        )}
+      </AppScreen>
+    );
+  }
+
   return (
     <AppScreen>
-      {loadError ? (
-        <AppText accessibilityLiveRegion="polite">{t("settingsProfileLoadFailed")}</AppText>
-      ) : null}
       {auth.errorCode === "PROFILE_SAVE_FAILED" ? (
         <AppText accessibilityLiveRegion="polite">{t("profileSaveFailed")}</AppText>
       ) : null}
