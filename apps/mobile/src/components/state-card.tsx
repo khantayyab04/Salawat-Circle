@@ -1,5 +1,4 @@
 import { AppButton } from "@/components/app-button";
-import { SectionLabel } from "@/components/section-label";
 import { Surface } from "@/components/surface";
 import { spacing, typography, useAppTheme } from "@/theme";
 import type { ReactNode } from "react";
@@ -31,16 +30,14 @@ export function StateCard({
 
   return (
     <Surface
-      accessibilityRole="alert"
-      accessible
       style={{ gap: spacing.lg, alignItems: "flex-start" }}
     >
       {icon ? <View>{icon}</View> : null}
-      <View style={{ gap: spacing.sm, width: "100%" }}>
+      <View accessible accessibilityRole="alert" style={{ gap: spacing.sm, width: "100%" }}>
         <Text style={[typography.cardTitle, { color: colors.textPrimary }]}>
           {title}
         </Text>
-        <SectionLabel>{body}</SectionLabel>
+        <Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>{body}</Text>
       </View>
       {actionLabel && onAction ? (
         <AppButton

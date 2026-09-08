@@ -18,7 +18,7 @@ import {
 import { useTranslation, type LanguagePreference } from "@/localization";
 import { radius, spacing, typography, useAppTheme } from "@/theme";
 import Constants from "expo-constants";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import Bell from "lucide-react-native/icons/bell";
 import Check from "lucide-react-native/icons/check";
 import FileText from "lucide-react-native/icons/file-text";
@@ -27,7 +27,7 @@ import LogOut from "lucide-react-native/icons/log-out";
 import Shield from "lucide-react-native/icons/shield";
 import Smartphone from "lucide-react-native/icons/smartphone";
 import User from "lucide-react-native/icons/user";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 
 const languageOptions: readonly {
@@ -71,9 +71,10 @@ export function SettingsScreen({ gateway }: { gateway?: SettingsGateway } = {}) 
     }
   }, [gateway]);
 
-  useEffect(() => {
-    if (!source) return;
+  useFocusEffect(useCallback(() => {
+    if (!source) return undefined;
     let active = true;
+    setLoadFailed(false);
     void source
       .loadProfile()
       .then((loaded) => {
@@ -87,7 +88,7 @@ export function SettingsScreen({ gateway }: { gateway?: SettingsGateway } = {}) 
     return () => {
       active = false;
     };
-  }, [source]);
+  }, [source]));
 
   const profileFailed = source === null || loadFailed;
 

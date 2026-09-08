@@ -3,6 +3,15 @@ import { fireEvent, render } from "@testing-library/react-native";
 import { Alert } from "react-native";
 import { TodayScreen } from "./index";
 
+const mockLocationPermission = jest.fn<() => Promise<{ granted: boolean }>>().mockResolvedValue({ granted: true });
+const mockGetLocation = jest.fn<() => Promise<{ coords: { latitude: number; longitude: number } }>>().mockResolvedValue({ coords: { latitude: 52.52, longitude: 13.405 } });
+jest.mock("expo-location", () => ({
+  requestForegroundPermissionsAsync: () => mockLocationPermission(),
+  getForegroundPermissionsAsync: async () => ({ granted: false }),
+  getCurrentPositionAsync: () => mockGetLocation(),
+  Accuracy: { Low: 2 },
+}));
+
 const mockCreate = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
 const mockEntries = jest.fn();
 
@@ -112,8 +121,44 @@ jest.mock("@/theme", () => {
 });
 
 describe("TodayScreen", () => {
+  it("shows general Salawat blessings on a Monday instead of the Friday card", async () => {
+    jest.useFakeTimers({ now: new Date("2026-09-07T10:00:00Z") });
+    try {
+      mockEntries.mockReturnValue(entries());
+      const view = await render(<TodayScreen />);
+      expect(view.getByText("blessingsLabel")).toBeTruthy();
+      expect(view.queryByText("jumuahLabel")).toBeNull();
+    } finally { jest.useRealTimers(); }
+  });
+  it("does not show zero totals or writable controls during initial loading", async () => {
+    mockEntries.mockReturnValue(entries({ viewState: "loading" }));
 
+    const view = await render(<TodayScreen />);
 
+    expect(view.getByText("stateLoadingTitle")).toBeTruthy();
+    expect(view.queryByTestId("today-total")).toBeNull();
+    expect(view.queryByRole("button", { name: "Eintragen" })).toBeNull();
+  });
+
+  it("does not show zero totals or writable controls when the initial load fails", async () => {
+    mockEntries.mockReturnValue(
+      entries({ viewState: "error", errorCode: "INTERNAL" }),
+    );
+
+    const view = await render(<TodayScreen />);
+
+    expect(view.getByText("stateErrorTitle")).toBeTruthy();
+    expect(view.queryByTestId("today-total")).toBeNull();
+    expect(view.queryByRole("button", { name: "Eintragen" })).toBeNull();
+  });
+
+  it("retries the initial failed load", async () => {
+    const refresh = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    mockEntries.mockReturnValue(entries({ viewState: "error", refresh }));
+    const view = await render(<TodayScreen />);
+    await fireEvent.press(view.getByRole("button", { name: "commonRetry" }));
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
 
   it("keeps failed offline changes visible and retryable", async () => {
     const retrySync = jest.fn();

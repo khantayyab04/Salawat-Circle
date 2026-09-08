@@ -34,7 +34,19 @@
       "expo-sqlite",
       "expo-secure-store",
       "expo-notifications",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Salawat Circle verwendet deinen ungefähren Standort, um den lokalen Sonnenuntergang für den Freitagsbereich zu berechnen.",
+          "locationAlwaysPermission": false,
+          "locationAlwaysAndWhenInUsePermission": false,
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false,
+          "motionUsagePermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

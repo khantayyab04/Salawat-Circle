@@ -123,11 +123,11 @@ describe("ProgressRing", () => {
     expect(view.getByTestId("ring").props.accessibilityValue.now).toBe(100);
   });
 
-  it("treats a missing goal as a complete ring", async () => {
+  it("keeps a missing goal neutral rather than implying completion", async () => {
     const view = await render(
       <ProgressRing progress={null} size={200} testID="ring" />,
     );
-    expect(view.getByTestId("ring").props.accessibilityValue.now).toBe(100);
+    expect(view.getByTestId("ring").props.accessibilityValue.now).toBe(0);
   });
 
   it("clamps negative progress to zero", async () => {

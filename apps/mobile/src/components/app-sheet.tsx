@@ -1,8 +1,11 @@
 import { SectionLabel } from "@/components/section-label";
+import { useAppReducedMotion } from "@/lib/use-app-reduced-motion";
 import { radius, spacing, typography, useAppTheme } from "@/theme";
 import type { PropsWithChildren, ReactNode } from "react";
 import {
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -26,6 +29,7 @@ export function AppSheet({
   closeLabel,
   footer,
   children,
+  dismissible = true,
 }: PropsWithChildren<{
   visible: boolean;
   onClose: () => void;
@@ -33,23 +37,32 @@ export function AppSheet({
   subtitle?: string;
   closeLabel: string;
   footer?: ReactNode;
+  dismissible?: boolean;
 }>) {
   const { colors } = useAppTheme();
+  const reducedMotion = useAppReducedMotion();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
+  const close = () => {
+    if (dismissible) onClose();
+  };
 
   return (
     <Modal
-      animationType="slide"
-      onRequestClose={onClose}
+      animationType={reducedMotion ? "fade" : "slide"}
+      onRequestClose={close}
       transparent
       visible={visible}
     >
-      <View style={{ flex: 1, justifyContent: "flex-end" }}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1, justifyContent: "flex-end" }}
+      >
         <Pressable
-          accessibilityLabel={closeLabel}
-          accessibilityRole="button"
-          onPress={onClose}
+          accessible={false}
+          importantForAccessibility="no"
+          disabled={!dismissible}
+          onPress={close}
           style={{
             position: "absolute",
             top: 0,
@@ -60,12 +73,18 @@ export function AppSheet({
           }}
         />
         <View
+          accessibilityViewIsModal
+          onAccessibilityEscape={close}
           style={{
             backgroundColor: colors.surface,
             borderTopLeftRadius: radius.sheet,
             borderTopRightRadius: radius.sheet,
             borderCurve: "continuous",
             maxHeight: height * 0.9,
+            flexShrink: 1,
+            width: "100%",
+            maxWidth: 720,
+            alignSelf: "center",
             paddingBottom: insets.bottom + spacing.lg,
           }}
         >
@@ -84,6 +103,7 @@ export function AppSheet({
           >
             <View style={{ flex: 1, gap: spacing.xs }}>
               <Text
+                accessibilityRole="header"
                 style={[typography.title, { color: colors.textPrimary }]}
               >
                 {title}
@@ -93,7 +113,9 @@ export function AppSheet({
             <Pressable
               accessibilityLabel={closeLabel}
               accessibilityRole="button"
-              onPress={onClose}
+              accessibilityState={{ disabled: !dismissible }}
+              disabled={!dismissible}
+              onPress={close}
               style={{
                 minHeight: 44,
                 minWidth: 44,
@@ -101,6 +123,7 @@ export function AppSheet({
                 justifyContent: "center",
                 borderRadius: radius.pill,
                 backgroundColor: colors.surfaceMuted,
+                opacity: dismissible ? 1 : 0.5,
               }}
             >
               <Text
@@ -112,6 +135,7 @@ export function AppSheet({
           </View>
 
           <ScrollView
+            style={{ flexShrink: 1 }}
             contentContainerStyle={{
               padding: spacing.xxl,
               gap: spacing.xxl,
@@ -119,12 +143,9 @@ export function AppSheet({
             keyboardShouldPersistTaps="handled"
           >
             {children}
-          </ScrollView>
-
           {footer ? (
             <View
               style={{
-                paddingHorizontal: spacing.xxl,
                 paddingTop: spacing.lg,
                 gap: spacing.md,
                 borderTopColor: colors.border,
@@ -134,8 +155,9 @@ export function AppSheet({
               {footer}
             </View>
           ) : null}
+          </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

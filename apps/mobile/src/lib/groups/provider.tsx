@@ -20,6 +20,7 @@ import type { GroupsGateway } from "./groups-gateway";
 import { createSupabaseGroupsGateway } from "./groups-gateway";
 import { GroupsStore } from "./groups-store";
 import type {
+  GroupCampaignSelection,
   AcceptInviteResponse,
   AppLocale,
   CreateGroupResponse,
@@ -62,8 +63,9 @@ type GroupsContextValue = ReturnType<GroupsStore["getSnapshot"]> & {
   setGroupGoal(
     groupId: string,
     period: GroupPeriod,
-    amount: number,
+    amount: number | null,
     expectedRevision?: number,
+    campaign?: GroupCampaignSelection,
   ): Promise<SetGroupGoalResponse>;
   loadInvites(groupId: string): Promise<void>;
   loadMembers(
@@ -264,10 +266,11 @@ export function GroupsProvider({
   const setGroupGoal = useCallback(
     (
       groupId: string,
-      period: "week" | "month",
-      amount: number,
+      period: GroupPeriod,
+      amount: number | null,
       expectedRevision?: number,
-    ) => controller.setGroupGoal(groupId, period, amount, expectedRevision),
+      campaign?: GroupCampaignSelection,
+    ) => controller.setGroupGoal(groupId, period, amount, expectedRevision, campaign),
     [controller],
   );
   const loadInvites = useCallback(

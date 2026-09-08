@@ -5,7 +5,19 @@ import { SectionLabel } from "@/components/section-label";
 import { Surface } from "@/components/surface";
 import { radius, spacing, typography, useAppTheme } from "@/theme";
 import { useState } from "react";
-import { Text, TextInput, View } from "react-native";
+import { Host, Slider } from "@expo/ui";
+import {
+  accessibilityHint as swiftAccessibilityHint,
+  accessibilityLabel as swiftAccessibilityLabel,
+  accessibilityValue as swiftAccessibilityValue,
+} from "@expo/ui/swift-ui/modifiers";
+import {
+  Platform,
+  Text,
+  TextInput,
+  View,
+  type AccessibilityActionEvent,
+} from "react-native";
 
 export type GoalSheetCopy = {
   title: string;
@@ -13,7 +25,12 @@ export type GoalSheetCopy = {
   enableLabel: string;
   enableHint: string;
   unit: string;
+  sliderLabel: string;
+  sliderHint: string;
+  amountLabel: string;
+  amountHint: string;
   save: string;
+  clear: string;
   close: string;
   invalid: string;
   failed: string;
@@ -26,7 +43,7 @@ const MAX_AMOUNT = 10_000_000;
  * The daily goal editor from the design.
  *
  * The design pairs a slider with a large number. The slider only covers the
- * common range up to ten thousand, so the number field stays authoritative and
+ * common range up to thirty thousand, so the number field stays authoritative and
  * accepts any permitted value; that way a user with a much larger goal is not
  * forced into the slider's range.
  */
@@ -43,7 +60,7 @@ export function GoalSheet(props: {
   // that writes state during render.
   return (
     <GoalSheetForm
-      key={`${props.visible}:${props.currentGoal ?? "none"}`}
+      key={String(props.visible)}
       {...props}
     />
   );
@@ -75,12 +92,54 @@ function GoalSheetForm({
   const parsed = Number(value);
   const valid =
     /^\d+$/.test(value) && parsed >= MIN_AMOUNT && parsed <= MAX_AMOUNT;
+  const sliderValue = Math.max(100, Math.min(30_000, Math.round((valid ? parsed : 100) / 100) * 100));
+  const updateSliderValue = (amount: number) =>
+    setValue(String(Math.round(Math.max(100, Math.min(30_000, amount)) / 100) * 100));
+  const handleAndroidAccessibilityAction = (event: AccessibilityActionEvent) => {
+    if (busy) return;
+    if (event.nativeEvent.actionName === "increment") {
+      updateSliderValue(sliderValue + 100);
+    } else if (event.nativeEvent.actionName === "decrement") {
+      updateSliderValue(sliderValue - 100);
+    }
+  };
+
+  const slider = (
+    <Host
+      accessibilityElementsHidden={Platform.OS === "android"}
+      importantForAccessibility={
+        Platform.OS === "android" ? "no-hide-descendants" : "auto"
+      }
+      matchContents={{ vertical: true }}
+      seedColor={colors.primary}
+      style={{ width: "100%", minHeight: 44 }}
+    >
+      <Slider
+        min={100}
+        max={30_000}
+        step={100}
+        value={sliderValue}
+        disabled={busy}
+        modifiers={
+          Platform.OS === "ios"
+            ? [
+                swiftAccessibilityLabel(copy.sliderLabel),
+                swiftAccessibilityHint(copy.sliderHint),
+                swiftAccessibilityValue(String(sliderValue)),
+              ]
+            : undefined
+        }
+        onValueChange={updateSliderValue}
+        testID="goal-quick-slider"
+      />
+    </Host>
+  );
 
   return (
     <AppSheet
+      dismissible={!busy}
       closeLabel={copy.close}
       onClose={onClose}
-      subtitle={copy.subtitle}
       title={copy.title}
       visible={visible}
     >
@@ -96,9 +155,9 @@ function GoalSheetForm({
           <Text style={[typography.bodyStrong, { color: colors.textPrimary }]}>
             {copy.enableLabel}
           </Text>
-          <SectionLabel size="small">{copy.enableHint}</SectionLabel>
         </View>
         <AppToggle
+          disabled={busy}
           accessibilityLabel={copy.enableLabel}
           onChange={setEnabled}
           value={enabled}
@@ -108,16 +167,21 @@ function GoalSheetForm({
       {enabled ? (
         <View style={{ gap: spacing.md, alignItems: "center" }}>
           <TextInput
-            accessibilityLabel={copy.title}
+            editable={!busy}
+            accessibilityHint={copy.amountHint}
+            accessibilityLabel={copy.amountLabel}
             inputMode="numeric"
             keyboardType="number-pad"
             maxLength={8}
-            onChangeText={(next) => setValue(next.replace(/[^\d]/g, ""))}
+            onChangeText={setValue}
             style={[
               typography.display,
               {
                 color: colors.textPrimary,
                 textAlign: "center",
+                lineHeight: undefined,
+                textAlignVertical: "center",
+                includeFontPadding: false,
                 minWidth: 160,
                 paddingVertical: spacing.sm,
                 paddingHorizontal: spacing.lg,
@@ -130,6 +194,31 @@ function GoalSheetForm({
             value={value}
           />
           <SectionLabel tone="gold">{copy.unit}</SectionLabel>
+          {Platform.OS === "android" ? (
+            <View
+              accessible
+              accessibilityActions={[
+                { name: "increment" },
+                { name: "decrement" },
+              ]}
+              accessibilityHint={copy.sliderHint}
+              accessibilityLabel={copy.sliderLabel}
+              accessibilityRole="adjustable"
+              accessibilityState={{ disabled: busy }}
+              accessibilityValue={{
+                min: 100,
+                max: 30_000,
+                now: sliderValue,
+                text: String(sliderValue),
+              }}
+              onAccessibilityAction={handleAndroidAccessibilityAction}
+              style={{ width: "100%" }}
+            >
+              {slider}
+            </View>
+          ) : (
+            slider
+          )}
           {valid ? null : (
             <SectionLabel tone="gold">{copy.invalid}</SectionLabel>
           )}
@@ -139,8 +228,8 @@ function GoalSheetForm({
       {failed ? <SectionLabel tone="gold">{copy.failed}</SectionLabel> : null}
 
       <AppButton
-        disabled={enabled && !valid}
-        label={copy.save}
+        disabled={enabled ? !valid : currentGoal === null}
+        label={!enabled && currentGoal !== null ? copy.clear : copy.save}
         loading={busy}
         onPress={() => onSave(enabled ? parsed : null)}
       />

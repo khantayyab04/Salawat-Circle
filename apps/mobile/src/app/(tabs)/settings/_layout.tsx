@@ -1,5 +1,7 @@
 import { useTranslation } from "@/localization";
 import { Stack } from "expo-router/stack";
+
+export const unstable_settings = { initialRouteName: "index" };
 export default function SettingsLayout() {
   const { t } = useTranslation();
   return (

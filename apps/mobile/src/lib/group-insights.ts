@@ -1,5 +1,9 @@
+import type { GroupCampaignSelection } from "./groups/types";
+
 export type GroupInsights = {
   groupId: string;
+  campaign?: GroupCampaignSelection & { endDate: string };
+  goalSource?: "explicit" | "campaign" | null;
   /** The period these figures were calculated for. */
   period: "week" | "month" | "all";
   /** Total for the selected period. */
@@ -43,6 +47,10 @@ export function parseGroupInsights(raw: unknown): GroupInsights {
   const period = data.period;
 
   return {
+    ...(data.campaign_mode === "gregorian" || data.campaign_mode === "islamic" || data.campaign_mode === "custom" ? {
+      campaign: { mode: data.campaign_mode, startDate: readString(data, "campaign_start")!, endDate: readString(data, "campaign_end")! },
+    } : {}),
+    ...(data.goal_source === "campaign" || data.goal_source === "explicit" || data.goal_source === null ? { goalSource: data.goal_source } : {}),
     groupId: readString(data, "group_id")!,
     // A payload from before periods existed always described the week.
     period:

@@ -3,6 +3,7 @@ import {
   AppCard,
   AppScreen,
   AppText,
+  AppSheet,
   StatusBanner,
 } from "@/components";
 import {
@@ -19,7 +20,10 @@ import {
   type TranslationKey,
   useTranslation,
 } from "@/localization";
-import { spacing } from "@/theme";
+import { spacing, typography, useAppTheme } from "@/theme";
+import Copy from "lucide-react-native/icons/copy";
+import LinkIcon from "lucide-react-native/icons/link";
+import ShareIcon from "lucide-react-native/icons/share-2";
 import * as Clipboard from "expo-clipboard";
 import { Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -210,6 +214,7 @@ function StateCard({
 }
 
 export function GroupInvitesScreen() {
+  const { colors } = useAppTheme();
   const { t, localeTag } = useTranslation();
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
   const {
@@ -228,6 +233,7 @@ export function GroupInvitesScreen() {
     null,
   );
   const [pendingRevoke, setPendingRevoke] = useState<PendingRevokeState | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const group = useMemo(() => {
     if (!groupId) return null;
@@ -245,6 +251,7 @@ export function GroupInvitesScreen() {
     useCallback(() => {
       return () => {
         setSecretCard(null);
+        setCopied(false);
         setActionError(null);
         setPendingRevoke(null);
       };
@@ -285,6 +292,7 @@ export function GroupInvitesScreen() {
   const handleCreateInvite = useCallback(async () => {
     if (!groupId || !isOwner) return;
     setActionError(null);
+    setCopied(false);
     try {
       const response = await createInvite(groupId, { expiresInDays: 7, maxUses: 25 });
       setSecretCard({
@@ -321,6 +329,7 @@ export function GroupInvitesScreen() {
     setActionError(null);
     try {
       await Clipboard.setStringAsync(visibleSecretCard.link);
+      setCopied(true);
     } catch (error) {
       setActionError({ groupId, code: toGroupsError(error).code });
     }
@@ -331,6 +340,7 @@ export function GroupInvitesScreen() {
     setActionError(null);
     try {
       await Clipboard.setStringAsync(visibleSecretCard.code);
+      setCopied(true);
     } catch (error) {
       setActionError({ groupId, code: toGroupsError(error).code });
     }
@@ -394,7 +404,7 @@ export function GroupInvitesScreen() {
   const notOwner = group !== null && !isOwner;
 
   return (
-    <AppScreen>
+    <AppScreen floatingTabBar>
       <Stack.Screen options={{ title: group?.name ?? t("groupInvitesTitle") }} />
       <AppButton
         label={t("groupInvitesCreateAction")}
@@ -420,27 +430,33 @@ export function GroupInvitesScreen() {
         </View>
       ) : null}
       {visibleSecretCard ? (
-        <AppCard style={{ gap: spacing.sm }}>
-          <AppText variant="title">{t("groupInvitesSecretTitle")}</AppText>
+        <AppSheet
+          visible
+          title={t("groupInvitesSecretTitle")}
+          closeLabel={t("commonCancel")}
+          onClose={() => setSecretCard(null)}
+          dismissible={!pendingRevokeInviteId}
+        >
           <AppText variant="caption">{t("groupInvitesSecretBody")}</AppText>
           <AppText variant="caption">{t("groupInvitesSecretLinkLabel")}</AppText>
           <AppText selectable style={tabularNumberStyle}>
             {visibleSecretCard.link}
           </AppText>
           <AppText variant="caption">{t("groupInvitesSecretCodeLabel")}</AppText>
-          <AppText selectable style={tabularNumberStyle}>
+          <AppText selectable style={[typography.statNumber, { textAlign: "center", letterSpacing: 2 }]}>
             {visibleSecretCard.code}
           </AppText>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
             <AppButton
               label={t("groupInvitesShareAction")}
-              variant="secondary"
+              icon={<ShareIcon size={18} color={colors.textOnPrimary} />}
               onPress={() => {
                 void handleShare();
               }}
             />
             <AppButton
               label={t("groupInvitesCopyLinkAction")}
+              icon={<LinkIcon size={18} color={colors.primary} />}
               variant="secondary"
               onPress={() => {
                 void handleCopyLink();
@@ -448,12 +464,14 @@ export function GroupInvitesScreen() {
             />
             <AppButton
               label={t("groupInvitesCopyCodeAction")}
+              icon={<Copy size={18} color={colors.primary} />}
               variant="secondary"
               onPress={() => {
                 void handleCopyCode();
               }}
             />
           </View>
+          {copied ? <AppText accessible accessibilityLiveRegion="polite">{t("groupInvitesCopied")}</AppText> : null}
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
             <AppButton
               label={t("groupInvitesDismissSecretAction")}
@@ -467,7 +485,7 @@ export function GroupInvitesScreen() {
               onPress={() => confirmRevoke(visibleSecretCard.inviteId)}
             />
           </View>
-        </AppCard>
+        </AppSheet>
       ) : null}
 
       {showPartialError && errorCopy ? (

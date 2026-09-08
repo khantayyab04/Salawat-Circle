@@ -20,12 +20,13 @@ import type { ProgressRange } from "@/lib/progress-series";
 
 type EntriesContextValue = EntriesStore["snapshot"] & {
   revision: number;
-  create(amount: number): Promise<void>;
+  create(amount: number): Promise<boolean>;
   update(id: string, amount: number, entryDate: string): Promise<void>;
   delete(id: string): Promise<void>;
   setGoal(amount: number): Promise<void>;
   clearGoal(): Promise<void>;
   loadMore(): Promise<void>;
+  refresh(): Promise<void>;
   retrySync(): Promise<void>;
   retryOfflineLoad(): Promise<void>;
   resetOfflineState(): Promise<void>;
@@ -192,6 +193,7 @@ export function EntriesProvider({
       setGoal: (amount: number) => store.setGoal(amount),
       clearGoal: () => store.clearGoal(),
       loadMore: () => store.loadMore(),
+      refresh: () => store.load(),
       retrySync: () => store.retrySync(),
       retryOfflineLoad: () => store.retryOfflineLoad(),
       resetOfflineState: () => store.resetOfflineState(),

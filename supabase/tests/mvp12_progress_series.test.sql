@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(15);
+select plan(18);
 
 -- Owner of the series under test.
 insert into auth.users (
@@ -64,7 +64,9 @@ insert into public.salawat_entries (
 
 insert into public.daily_goal_versions (user_id, effective_from, amount)
 values ('33333333-3333-4333-8333-333333333331',
-        (now() at time zone 'UTC')::date - 10, 400);
+        (now() at time zone 'UTC')::date - 10, 400),
+       ('33333333-3333-4333-8333-333333333332',
+        (now() at time zone 'UTC')::date - 10, 9999);
 
 set local role authenticated;
 set local "request.jwt.claim.sub" = '33333333-3333-4333-8333-333333333331';
@@ -122,7 +124,7 @@ select ok(
 
 select is(
   (public.get_progress_series('UTC', 'week')->>'total'),
-  '800',
+  case when extract(isodow from (now() at time zone 'UTC')) = 1 then '500' else '800' end,
   'the week total sums only the caller''s own entries'
 );
 
@@ -132,50 +134,11 @@ select is(
   'the all time total includes entries older than a year'
 );
 
--- Streaks -------------------------------------------------------------------
-
-select is(
-  (public.get_progress_series('UTC', 'week')->>'current_streak')::integer,
-  2,
-  'the current streak counts consecutive active days up to today'
-);
-
-select is(
-  (public.get_progress_series('UTC', 'all')->>'longest_streak')::integer,
-  2,
-  'the longest streak is reported alongside the current one'
-);
-
--- Streaks deliberately span the chart's selected range. This 35-day run
--- crosses the start of the current month, so calculating against the month
--- buckets alone would truncate it to the days after the month began.
-set local role postgres;
-
-insert into public.salawat_entries (
-  id, user_id, amount, entry_date, timezone, recorded_at_client
-)
-select
-  gen_random_uuid(),
-  '33333333-3333-4333-8333-333333333331',
-  1,
-  (now() at time zone 'UTC')::date - day_offset,
-  'UTC',
-  now() - make_interval(days => day_offset)
-from generate_series(0, 34) as day_offset;
-
-set local role authenticated;
-
-select is(
-  (public.get_progress_series('UTC', 'month')->>'current_streak')::integer,
-  35,
-  'the active streak continues before the selected chart range'
-);
-
-select is(
-  (public.get_progress_series('UTC', 'month')->>'longest_streak')::integer,
-  35,
-  'the longest streak is not truncated by the selected chart range'
-);
+-- Excluded metrics must not cross the API boundary.
+select ok(not (public.get_progress_series('UTC', 'week') ? 'current_streak'),
+  'the MVP response excludes the current streak');
+select ok(not (public.get_progress_series('UTC', 'all') ? 'longest_streak'),
+  'the MVP response excludes the longest streak');
 
 -- Goal accounting -----------------------------------------------------------
 
@@ -183,6 +146,14 @@ select is(
   (public.get_progress_series('UTC', 'week')->>'achieved_goal_days')::integer,
   1,
   'only days at or above the goal count as achieved'
+);
+
+select is(
+  (select bucket->>'goal_total'
+   from jsonb_array_elements(public.get_progress_series('UTC', 'week')->'buckets') bucket
+   where (bucket->>'start')::date = (now() at time zone 'UTC')::date),
+  '400',
+  'today reports the caller historical goal amount for proportional fill'
 );
 
 -- Validation ----------------------------------------------------------------
@@ -199,5 +170,34 @@ select throws_ok(
   'an invalid timezone is rejected'
 );
 
+-- Historical changes and deactivation apply to their dates, never today's goal retroactively.
+reset role;
+insert into public.daily_goal_versions (user_id, effective_from, amount) values
+  ('33333333-3333-4333-8333-333333333331', (now() at time zone 'UTC')::date - 1, 200),
+  ('33333333-3333-4333-8333-333333333331', (now() at time zone 'UTC')::date, null);
+set local role authenticated;
+select is(
+  (select sum((bucket->>'goal_total')::bigint)::text
+   from jsonb_array_elements(public.get_progress_series('UTC', 'all')->'buckets') bucket),
+  '3800',
+  'aggregate goals include nine days at 400 and one at 200, excluding foreign goals'
+);
+select is(
+  (select bucket->>'goal_total'
+   from jsonb_array_elements(public.get_progress_series('UTC', 'week')->'buckets') bucket
+   where (bucket->>'start')::date = (now() at time zone 'UTC')::date),
+  null, 'deactivation leaves today without an invented denominator'
+);
+select ok(
+  not exists (select 1
+    from jsonb_array_elements(public.get_progress_series('UTC', 'year')->'buckets') bucket
+    where (bucket->>'future')::boolean and bucket->>'goal_total' is not null),
+  'future periods never include projected goal amounts'
+);
+set local "request.jwt.claim.sub" = '';
+select throws_ok(
+  $$select public.get_progress_series('UTC', 'week')$$,
+  'AUTH_REQUIRED', 'personal series require an authenticated caller'
+);
 select * from finish();
 rollback;

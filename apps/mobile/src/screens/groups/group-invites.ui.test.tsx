@@ -173,6 +173,14 @@ function createGroupsState(overrides: Record<string, unknown> = {}) {
 }
 
 describe("Task 15 owner invite screen", () => {
+  it("confirms that the invitation code was copied", async () => {
+    const view = await render(<GroupInvitesRoute />);
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "Neue Einladung erstellen" })));
+    await waitFor(() => expect(view.getByText("ABCD2345EF")).toBeTruthy());
+    await act(async () => fireEvent.press(view.getByRole("button", { name: "Code kopieren" })));
+    await waitFor(() => expect(view.getByText("groupInvitesCopied")).toBeTruthy());
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     previousJoinBaseUrl = process.env.EXPO_PUBLIC_JOIN_BASE_URL;
@@ -426,7 +434,10 @@ describe("Task 15 owner invite screen", () => {
     try {
       await waitFor(() => expect(mockRevokeInvite).toHaveBeenCalledWith("group-1", "invite-a"));
       await waitFor(() => {
-        expect(view.getAllByRole("button", { name: "Widerrufen" })).toHaveLength(1);
+        const actions = view.getAllByRole("button", { name: "Widerrufen" });
+        expect(actions).toHaveLength(2);
+        expect(actions[0]?.props.accessibilityState.busy).toBe(true);
+        expect(actions[1]?.props.accessibilityState.disabled).toBe(false);
       });
     } finally {
       await act(async () => {

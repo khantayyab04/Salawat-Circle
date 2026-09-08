@@ -33,3 +33,14 @@ describe("local UI demo gateways", () => {
     });
   });
 });
+
+ test("demo monthly edits persist calendar bounds and derive a weekly goal", async () => {
+    const gateway = demo.createDemoGroupsGateway();
+    await gateway.setGroupGoal!("familienkreis", "month", 3000, 7, { mode: "custom", startDate: "2026-09-01" });
+    expect(await gateway.getInsights!("familienkreis", "month")).toMatchObject({ goalAmount: "3000", campaign: { mode: "custom", startDate: "2026-09-01", endDate: "2026-09-30" } });
+    expect(await gateway.getInsights!("familienkreis", "week")).toMatchObject({ goalAmount: "600", goalSource: "campaign" });
+    await gateway.setGroupGoal!("familienkreis", "week", 777, 8);
+    expect(await gateway.getInsights!("familienkreis", "week")).toMatchObject({ goalAmount: "777", goalSource: "explicit" });
+    await gateway.setGroupGoal!("familienkreis", "week", null, 9);
+    expect(await gateway.getInsights!("familienkreis", "week")).toMatchObject({ goalAmount: "600" });
+  });

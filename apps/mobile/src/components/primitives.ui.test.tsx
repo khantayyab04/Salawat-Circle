@@ -20,6 +20,17 @@ jest.mock("@/theme", () => {
 });
 
 describe("AppButton", () => {
+  it("keeps the action named and unavailable while saving", async () => {
+    const onPress = jest.fn();
+    const view = await render(
+      <AppButton label="Änderungen speichern" loading onPress={onPress} />,
+    );
+    const action = view.getByRole("button", { name: "Änderungen speichern" });
+    expect(action.props.accessibilityState).toMatchObject({ disabled: true, busy: true });
+    fireEvent.press(action);
+    expect(onPress).not.toHaveBeenCalled();
+  });
+
   it("provides an accessible 48dp primary action with pressed behavior", async () => {
     const onPress = jest.fn();
     const view = await render(
@@ -51,7 +62,14 @@ describe("AppButton", () => {
 });
 
 describe("FormField", () => {
-  it("connects its visible label and hint to a 48dp input", async () => {
+  it("names the input directly for iOS accessibility and preserves caller styling", async () => {
+    const view = await render(<FormField label="Einladungscode" style={{ textAlign: "center" }} />);
+    const field = view.getByLabelText("Einladungscode");
+    expect(field.props.accessibilityLabel).toBe("Einladungscode");
+    expect(field).toHaveStyle({ minHeight: 56, textAlign: "center" });
+  });
+
+  it("connects its visible label and hint to the full-height input", async () => {
     const view = await render(
       <FormField
         hint="Wir senden dir einen einmaligen Code."
@@ -60,7 +78,7 @@ describe("FormField", () => {
     );
     const input = view.getByLabelText("E-Mail-Adresse");
 
-    expect(input).toHaveStyle({ minHeight: 48 });
+    expect(input).toHaveStyle({ minHeight: 56 });
     expect(input.props.accessibilityHint).toBe(
       "Wir senden dir einen einmaligen Code.",
     );

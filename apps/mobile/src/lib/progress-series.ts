@@ -17,6 +17,8 @@ export type ProgressBucket = {
   start: string;
   label: string;
   total: string;
+  /** Sum of elapsed historical goals in this bucket, null when no goal applies. */
+  goalTotal: string | null;
   /** Null when no goal applied, or when the bucket lies ahead of today. */
   goalReached: boolean | null;
   /** True for buckets after today, which are empty rather than missed. */
@@ -32,18 +34,23 @@ export type ProgressSeries = {
   activeDays: string;
   goalDays: string;
   achievedGoalDays: string;
-  currentStreak: number;
-  longestStreak: number;
   buckets: ProgressBucket[];
 };
 
-type RawBucket = {
-  start: string;
-  label: string;
-  total: string;
-  goal_reached: boolean | null;
-  future: boolean;
-};
+function readRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("INVALID_RESPONSE");
+  return value as Record<string, unknown>;
+}
+function readTotal(value: unknown): string {
+  if (typeof value !== "string" || !/^\d+$/.test(value)) throw new Error("INVALID_RESPONSE");
+  return value;
+}
+function readDate(value: unknown): string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error("INVALID_RESPONSE");
+  const date = new Date(`${value}T00:00:00Z`);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) throw new Error("INVALID_RESPONSE");
+  return value;
+}
 
 export function parseProgressSeries(raw: unknown): ProgressSeries {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
@@ -60,21 +67,31 @@ export function parseProgressSeries(raw: unknown): ProgressSeries {
 
   return {
     range: value.range,
-    periodStart: String(value.period_start),
-    periodEnd: String(value.period_end),
-    today: String(value.today),
-    total: String(value.total),
-    activeDays: String(value.active_days),
-    goalDays: String(value.goal_days),
-    achievedGoalDays: String(value.achieved_goal_days),
-    currentStreak: Number(value.current_streak ?? 0),
-    longestStreak: Number(value.longest_streak ?? 0),
-    buckets: (value.buckets as RawBucket[]).map((bucket) => ({
-      start: String(bucket.start),
-      label: String(bucket.label),
-      total: String(bucket.total),
-      goalReached: bucket.goal_reached ?? null,
-      future: Boolean(bucket.future),
-    })),
+    periodStart: readDate(value.period_start),
+    periodEnd: readDate(value.period_end),
+    today: readDate(value.today),
+    total: readTotal(value.total),
+    activeDays: readTotal(value.active_days),
+    goalDays: readTotal(value.goal_days),
+    achievedGoalDays: readTotal(value.achieved_goal_days),
+    buckets: value.buckets.map((rawBucket) => {
+      const bucket = readRecord(rawBucket);
+      if (typeof bucket.label !== "string" || typeof bucket.future !== "boolean" ||
+          (bucket.goal_reached !== null && typeof bucket.goal_reached !== "boolean")) throw new Error("INVALID_RESPONSE");
+      const goalTotal = bucket.goal_total === null ? null : readTotal(bucket.goal_total);
+      if (goalTotal !== null && BigInt(goalTotal) === 0n) throw new Error("INVALID_RESPONSE");
+      return {
+        start: readDate(bucket.start), label: bucket.label, total: readTotal(bucket.total),
+        goalTotal,
+        goalReached: bucket.goal_reached, future: bucket.future,
+      };
+    }),
   };
+}
+
+export function formatProgressBucketLabel(start: string, range: ProgressRange, locale: string) {
+  const options: Intl.DateTimeFormatOptions = range === "week" ? { weekday: "short" }
+    : range === "month" ? { day: "numeric", month: "short" }
+    : range === "year" ? { month: "short" } : { year: "numeric" };
+  return new Date(`${start}T12:00:00Z`).toLocaleDateString(locale, { ...options, timeZone: "UTC" });
 }

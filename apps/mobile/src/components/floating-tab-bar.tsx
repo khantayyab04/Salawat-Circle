@@ -89,7 +89,7 @@ export function FloatingTabBar({
               }}
             >
               <Icon
-                color={selected ? colors.textOnPrimary : colors.primarySoft}
+                color={selected ? colors.textOnGold : colors.primarySoft}
                 size={22}
               />
             </Pressable>

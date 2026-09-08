@@ -12,6 +12,7 @@ import type {
   PreviewInviteResponse,
 } from "./types";
 import type { GroupInsights } from "@/lib/group-insights";
+import type { GroupPeriod } from "./periods";
 
 export type GroupsLoadStatus = "idle" | "loading" | "ready" | "error";
 
@@ -101,9 +102,14 @@ export type GroupsSnapshot = {
   invites: GroupsInvitesState;
   members: GroupsMembersState;
   invitePreview: GroupsInvitePreviewState;
-  insightsByGroup: Record<string, GroupInsights | null>;
-  /** Set when the last insights request failed; previous figures stay visible. */
-  insightsFailed: boolean;
+  insightsByGroup: Record<
+    string,
+    Partial<Record<GroupPeriod, GroupInsights | null>>
+  >;
+  insightsStatusByGroup: Record<string, Partial<Record<GroupPeriod, {
+    loading: boolean;
+    errorCode: GroupsErrorCode | null;
+  }>>>;
   mutation: GroupsMutationState;
 };
 
@@ -165,7 +171,7 @@ export function createGroupsSnapshot(
       errorCode: null,
     },
     insightsByGroup: {},
-    insightsFailed: false,
+    insightsStatusByGroup: {},
     mutation: {
       pending: false,
       kind: null,

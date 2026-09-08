@@ -68,7 +68,7 @@ export function AppHeader({
         >
           {title}
         </Text>
-        <SectionLabel numberOfLines={1} tone="gold">
+        <SectionLabel tone="gold">
           {subtitle}
         </SectionLabel>
       </View>

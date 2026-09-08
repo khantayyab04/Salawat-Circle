@@ -9,11 +9,13 @@ import {
   OfflineRecoveryCard,
   ProgressRing,
   SectionLabel,
+  StateFeedback,
   Surface,
   SyncNotice,
   type SyncTone,
 } from "@/components";
 import { AppHeader } from "@/components/app-header";
+import { BlessingsCard } from "@/components/blessings-card";
 import { useEntries } from "@/lib/entries";
 import { addTallyAmount, createTally, resetTally } from "@/lib/entries/tally";
 import { formatAppNumber, useTranslation } from "@/localization";
@@ -21,17 +23,15 @@ import {
   fitNumericFontSize,
   pickBySize,
   radius,
-  shadows,
   sizeClassFor,
   spacing,
   typography,
   useAppTheme,
 } from "@/theme";
-import Heart from "lucide-react-native/icons/heart";
 import Pencil from "lucide-react-native/icons/pencil";
 import Plus from "lucide-react-native/icons/plus";
 import X from "lucide-react-native/icons/x";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Pressable,
   Text,
@@ -48,6 +48,9 @@ export function TodayScreen() {
   const { width } = useWindowDimensions();
   const entries = useEntries();
 
+  const savingRef = useRef(false);
+  const [saving, setSaving] = useState(false);
+  const recordingLocked = entries.busy || saving;
   const [tally, setTally] = useState(createTally());
   const [saveFailed, setSaveFailed] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
@@ -73,6 +76,33 @@ export function TodayScreen() {
           busy={entries.busy}
           onRetry={entries.retryOfflineLoad}
         />
+      </AppScreen>
+    );
+  }
+
+  if (entries.viewState === "loading") {
+    return (
+      <AppScreen
+        floatingTabBar
+        header={
+          <AppHeader subtitle={t("headerTodayEyebrow")} title={t("appName")} />
+        }
+      >
+        <StateFeedback state="loading" />
+      </AppScreen>
+    );
+  }
+
+  if (entries.viewState === "error") {
+    return (
+      <AppScreen
+        floatingTabBar
+        header={
+          <AppHeader subtitle={t("headerTodayEyebrow")} title={t("appName")} />
+        }
+      >
+        <StateFeedback state="error" />
+        <AppButton label={t("commonRetry")} onPress={() => void entries.refresh()} />
       </AppScreen>
     );
   }
@@ -125,17 +155,22 @@ export function TodayScreen() {
   };
 
   const commit = async () => {
-    if (tally.amount <= 0) return;
+    if (tally.amount <= 0 || entries.busy || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     setSaveFailed(false);
     try {
       // One commit is exactly one call: the store owns id generation, the
       // offline queue, retries and idempotency.
-      await entries.create(tally.amount);
-      setTally(resetTally(tally));
+      const accepted = await entries.create(tally.amount);
+      if (accepted) setTally(resetTally(tally));
     } catch {
       // The staged amount deliberately survives a failure so the user does not
       // have to tap it together again.
       setSaveFailed(true);
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   };
 
@@ -156,6 +191,7 @@ export function TodayScreen() {
       <Surface style={{ alignItems: "center", padding: cardPadding }}>
         <SectionLabel style={{ marginBottom: spacing.xl }}>
           {new Date().toLocaleDateString(localeTag, {
+            timeZone: entries.timeZone || undefined,
             weekday: "long",
             month: "long",
             day: "numeric",
@@ -230,6 +266,7 @@ export function TodayScreen() {
           <View style={{ flexDirection: "row", gap: spacing.sm }}>
             {quickAmounts.map((amount) => (
               <AmountChip
+                disabled={recordingLocked}
                 amount={amount}
                 key={amount}
                 onPress={(value) =>
@@ -242,9 +279,9 @@ export function TodayScreen() {
           <View style={{ flexDirection: "row", gap: spacing.md }}>
             <View
               style={{
-                flex: 2,
-                flexDirection: "row",
-                alignItems: "center",
+                flex: 1,
+                flexDirection: "column",
+                alignItems: "stretch",
                 justifyContent: "space-between",
                 gap: spacing.sm,
                 padding: spacing.lg,
@@ -255,10 +292,9 @@ export function TodayScreen() {
                 backgroundColor: colors.surfaceSubtle,
               }}
             >
-              <View style={{ flex: 1, gap: spacing.xxs }}>
-                <SectionLabel size="small" tone="gold">
-                  {t("todayStagedLabel")}
-                </SectionLabel>
+              <SectionLabel size="small" tone="gold">{t("todayStagedLabel")}</SectionLabel>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>
+              <View style={{ flex: 1 }}>
                 <Text
                   adjustsFontSizeToFit
                   maxFontSizeMultiplier={1.3}
@@ -271,6 +307,8 @@ export function TodayScreen() {
               </View>
               {tally.amount > 0 ? (
                 <Pressable
+                  disabled={recordingLocked}
+                  accessibilityState={{ disabled: recordingLocked }}
                   accessibilityLabel={t("todayResetTally")}
                   accessibilityRole="button"
                   onPress={() => setTally((current) => resetTally(current))}
@@ -287,6 +325,8 @@ export function TodayScreen() {
                 </Pressable>
               ) : (
                 <Pressable
+                  disabled={recordingLocked}
+                  accessibilityState={{ disabled: recordingLocked }}
                   accessibilityLabel={t("todayCustomAmount")}
                   accessibilityRole="button"
                   onPress={() => setCustomAmountOpen(true)}
@@ -305,51 +345,17 @@ export function TodayScreen() {
                   <Plus color={colors.textSecondary} size={14} />
                 </Pressable>
               )}
+              </View>
             </View>
 
-            <Pressable
-              accessibilityLabel={
-                tally.amount > 0
-                  ? t("todayCommit", { amount: stagedText })
-                  : t("todaySubmit")
-              }
-              accessibilityRole="button"
-              accessibilityState={{ disabled: tally.amount <= 0 }}
-              disabled={tally.amount <= 0}
-              onPress={commit}
-              style={({ pressed }) => ({
-                flex: 3,
-                minHeight: 56,
-                alignItems: "center",
-                justifyContent: "center",
-                paddingHorizontal: spacing.md,
-                borderRadius: radius.xl,
-                borderCurve: "continuous",
-                backgroundColor:
-                  tally.amount > 0 ? colors.primary : colors.surfaceMuted,
-                opacity: tally.amount > 0 ? (pressed ? 0.85 : 1) : 0.55,
-                boxShadow: tally.amount > 0 ? shadows.raised : undefined,
-              })}
-            >
-              <Text
-                adjustsFontSizeToFit
-                maxFontSizeMultiplier={1.3}
-                numberOfLines={1}
-                style={[
-                  typography.button,
-                  {
-                    color:
-                      tally.amount > 0
-                        ? colors.textOnPrimary
-                        : colors.textSecondary,
-                  },
-                ]}
-              >
-                {tally.amount > 0
-                  ? t("todayCommit", { amount: stagedText })
-                  : t("todaySubmit")}
-              </Text>
-            </Pressable>
+            <AppButton
+              label={tally.amount > 0 ? t("todayCommit", { amount: stagedText }) : t("todaySubmit")}
+              disabled={tally.amount <= 0 || entries.busy}
+              loading={saving}
+              onPress={() => void commit()}
+              static
+              style={{ flex: 1 }}
+            />
           </View>
 
           {tally.limitReached ? (
@@ -372,7 +378,7 @@ export function TodayScreen() {
         />
       ) : null}
 
-      <JumuahCard />
+      <BlessingsCard timeZone={entries.timeZone || "UTC"} />
 
       <GoalSheet
         busy={entries.busy}
@@ -382,7 +388,12 @@ export function TodayScreen() {
           enableLabel: t("goalEnableLabel"),
           enableHint: t("goalEnableHint"),
           unit: t("goalUnit"),
+          sliderLabel: t("goalSliderLabel"),
+          sliderHint: t("goalSliderHint"),
+          amountLabel: t("goalAmountLabel"),
+          amountHint: t("goalAmountHint"),
           save: t("goalSave"),
+          clear: t("goalClear"),
           close: t("commonCancel"),
           invalid: t("entryAmountInvalid"),
           failed: t("goalSaveFailed"),
@@ -406,7 +417,7 @@ export function TodayScreen() {
           inputMode="numeric"
           keyboardType="number-pad"
           maxLength={8}
-          onChangeText={(value) => setCustomAmount(value.replace(/[^\d]/g, ""))}
+          onChangeText={setCustomAmount}
           placeholder="0"
           placeholderTextColor={colors.textDisabled}
           style={[
@@ -414,6 +425,9 @@ export function TodayScreen() {
             {
               color: colors.textPrimary,
               textAlign: "center",
+              lineHeight: undefined,
+              textAlignVertical: "center",
+              includeFontPadding: false,
               padding: spacing.lg,
               borderRadius: radius.xl,
               borderCurve: "continuous",
@@ -423,6 +437,11 @@ export function TodayScreen() {
           testID="custom-amount-input"
           value={customAmount}
         />
+        {customAmount.length > 0 && !isCustomAmountValid ? (
+          <Text accessibilityLiveRegion="polite" style={[typography.bodyMedium, { color: colors.error }]}>
+            {t("entryAmountInvalid")}
+          </Text>
+        ) : null}
         <AppButton
           disabled={!isCustomAmountValid}
           label={t("todayApplyCustom")}
@@ -430,53 +449,6 @@ export function TodayScreen() {
         />
       </AppSheet>
     </AppScreen>
-  );
-}
-
-function JumuahCard() {
-  const { t } = useTranslation();
-  const { colors } = useAppTheme();
-
-  return (
-    <Surface
-      style={{
-        backgroundColor: colors.primary,
-        borderWidth: 0,
-        flexDirection: "row",
-        gap: spacing.lg,
-        boxShadow: shadows.raised,
-      }}
-      tone="plain"
-    >
-      <View
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: radius.pill,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: "rgba(197, 160, 89, 0.3)",
-        }}
-      >
-        <Heart color={colors.gold} fill={colors.gold} size={18} />
-      </View>
-      <View style={{ flex: 1, gap: spacing.md }}>
-        <Text style={[typography.cardTitle, { color: colors.gold }]}>
-          {t("jumuahLabel")}
-        </Text>
-        <Text
-          style={[
-            typography.bodyMedium,
-            { color: colors.textOnPrimary, fontStyle: "italic" },
-          ]}
-        >
-          {t("jumuahQuote")}
-        </Text>
-        <SectionLabel size="small" tone="onPrimary">
-          {t("jumuahQuoteSource")}
-        </SectionLabel>
-      </View>
-    </Surface>
   );
 }
 

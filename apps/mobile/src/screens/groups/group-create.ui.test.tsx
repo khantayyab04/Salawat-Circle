@@ -20,6 +20,7 @@ const mockCreateGroup = jest.fn<
 >();
 const mockUseGroups = jest.fn();
 const mockUseEntries = jest.fn();
+const mockSwitchProps = jest.fn();
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush, replace: mockReplace }),
@@ -46,23 +47,30 @@ jest.mock("@expo/ui", () => {
       label,
       disabled,
       testID,
+      modifiers,
     }: {
       value: boolean;
       onValueChange(value: boolean): void;
       label?: string;
       disabled?: boolean;
       testID?: string;
+      modifiers?: unknown[];
     }) => (
-      <Pressable
-        testID={testID}
-        accessibilityRole="switch"
-        accessibilityLabel={label}
-        accessibilityState={{ checked: value, disabled: Boolean(disabled) }}
-        disabled={disabled}
-        onPress={() => onValueChange(!value)}
-      >
-        {label ? <Text>{label}</Text> : null}
-      </Pressable>
+      (() => {
+        mockSwitchProps({ modifiers, testID });
+        return (
+          <Pressable
+            testID={testID}
+            accessibilityRole="switch"
+            accessibilityLabel={label}
+            accessibilityState={{ checked: value, disabled: Boolean(disabled) }}
+            disabled={disabled}
+            onPress={() => onValueChange(!value)}
+          >
+            {label ? <Text>{label}</Text> : null}
+          </Pressable>
+        );
+      })()
     ),
   };
 });
@@ -202,12 +210,30 @@ async function fillValidCreateForm(view: Awaited<ReturnType<typeof render>>) {
 beforeEach(() => {
   jest.clearAllMocks();
   mockPush.mockClear();
+  mockSwitchProps.mockClear();
   mockCreateGroup.mockResolvedValue({ group: { id: "group-123" } });
   mockUseEntries.mockReturnValue({ timeZone: "Europe/Berlin" });
   mockUseGroups.mockReturnValue(createGroupsState());
 });
 
 describe("MVP08 group create screen", () => {
+  it("puts both native group toggles at the trailing card edge", async () => {
+    await render(<GroupCreateScreen />);
+
+    const anonymous = mockSwitchProps.mock.calls
+      .map(([props]) => props as { testID?: string; modifiers?: unknown[] })
+      .find((props) => props.testID === "group-create-anonymous-switch");
+    const rules = mockSwitchProps.mock.calls
+      .map(([props]) => props as { testID?: string; modifiers?: unknown[] })
+      .find((props) => props.testID === "group-create-rules-switch");
+
+    expect(anonymous?.modifiers).toBeDefined();
+    expect(anonymous?.modifiers).toEqual([
+      { $type: "frame", maxWidth: 10_000, alignment: "leading" },
+    ]);
+    expect(rules?.modifiers).toBe(anonymous?.modifiers);
+  });
+
   it("prefills timezone, validates input, and requires explicit rules acceptance", async () => {
     const view = await render(<GroupCreateScreen />);
 

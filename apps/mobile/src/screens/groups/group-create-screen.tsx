@@ -10,6 +10,7 @@ import { useGroups } from "@/lib/groups";
 import { useTranslation, type TranslationKey } from "@/localization";
 import { spacing } from "@/theme";
 import { Host, Switch } from "@expo/ui";
+import { frame } from "@expo/ui/swift-ui/modifiers";
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import { type ViewStyle } from "react-native";
@@ -18,6 +19,10 @@ const legalActionButtonStyle: ViewStyle = {
   alignSelf: "flex-start",
   paddingHorizontal: 0,
 };
+
+const groupCreateToggleModifiers = [
+  frame({ maxWidth: 10_000, alignment: "leading" }),
+];
 
 function normalizeGroupName(value: string) {
   return value.normalize("NFC").trim().replace(/\s+/gu, " ");
@@ -165,7 +170,8 @@ export function GroupCreateScreen() {
   };
 
   return (
-    <AppScreen>
+    <AppScreen floatingTabBar>
+      <AppCard style={{ gap: spacing.lg }}>
       <FormField
         testID="group-create-name-input"
         accessibilityLabel={t("groupNameLabel")}
@@ -194,6 +200,7 @@ export function GroupCreateScreen() {
           setTimeZone(value);
         }}
       />
+      </AppCard>
       <AppCard style={{ gap: spacing.sm }}>
         <Host matchContents>
           <Switch
@@ -201,6 +208,7 @@ export function GroupCreateScreen() {
             value={leaderboardAnonymous}
             disabled={submitting}
             label={t("groupCreateAnonymousLabel")}
+            modifiers={groupCreateToggleModifiers}
             onValueChange={(value) => {
               setSubmitErrorCode(null);
               setLeaderboardAnonymous(value);
@@ -217,6 +225,7 @@ export function GroupCreateScreen() {
             value={rulesAccepted}
             disabled={submitting}
             label={t("groupCreateRulesLabel")}
+            modifiers={groupCreateToggleModifiers}
             onValueChange={(value) => {
               setSubmitErrorCode(null);
               setRulesAccepted(value);

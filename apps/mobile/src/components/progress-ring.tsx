@@ -11,7 +11,7 @@ const STROKE_RATIO = 0.075;
  * `size` is passed in by the screen from the measured width rather than being
  * hard coded, so the ring keeps its proportions on every phone. Progress is
  * clamped: a day far past its goal still draws a full ring, and a day with no
- * goal at all is shown as complete rather than empty.
+ * goal at all has a neutral, empty track.
  */
 export function ProgressRing({
   progress,
@@ -27,7 +27,7 @@ export function ProgressRing({
 }>) {
   const { colors } = useAppTheme();
 
-  const ratio = progress === null ? 1 : Math.min(1, Math.max(0, progress));
+  const ratio = progress === null ? 0 : Math.min(1, Math.max(0, progress));
   const percent = Math.round(ratio * 100);
 
   const strokeWidth = Math.max(6, Math.round(size * STROKE_RATIO));
@@ -64,17 +64,17 @@ export function ProgressRing({
           stroke={colors.surfaceMuted}
           strokeWidth={strokeWidth}
         />
-        <Circle
+        {ratio > 0 ? <Circle
           cx={size / 2}
           cy={size / 2}
           fill="none"
           r={radius}
-          stroke={colors.gold}
+          stroke={ratio >= 1 ? colors.gold : colors.primary}
           strokeDasharray={circumference}
           strokeDashoffset={circumference * (1 - ratio)}
           strokeLinecap="round"
           strokeWidth={strokeWidth}
-        />
+        /> : null}
       </Svg>
       {children}
     </View>

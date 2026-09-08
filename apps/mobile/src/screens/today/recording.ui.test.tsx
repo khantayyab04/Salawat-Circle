@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { act, fireEvent, render } from "@testing-library/react-native";
 import { TodayScreen } from "./index";
 
-const mockCreate = jest.fn<(amount: number) => Promise<void>>();
+const mockCreate = jest.fn<(amount: number) => Promise<boolean>>();
 const mockEntries = jest.fn();
 
 jest.mock("@/lib/entries", () => {
@@ -30,7 +30,7 @@ jest.mock("@/theme", () => {
 
 function entriesValue(overrides: Record<string, unknown> = {}) {
   return {
-    status: "content",
+    viewState: "content",
     busy: false,
     online: true,
     offlineLoadErrorCode: null,
@@ -52,7 +52,7 @@ function entriesValue(overrides: Record<string, unknown> = {}) {
 describe("TodayScreen recording", () => {
   beforeEach(() => {
     mockCreate.mockReset();
-    mockCreate.mockResolvedValue(undefined);
+    mockCreate.mockResolvedValue(true);
     mockEntries.mockReturnValue(entriesValue());
   });
 
@@ -111,6 +111,31 @@ describe("TodayScreen recording", () => {
     expect(view.getByText("todaySaveFailed")).toBeTruthy();
   });
 
+  it("keeps the staged amount when the store ignores a write already in progress", async () => {
+    mockCreate.mockResolvedValue(false);
+    const view = await render(<TodayScreen />);
+
+    await fireEvent.press(view.getByRole("button", { name: "+500" }));
+    await act(async () => {
+      fireEvent.press(view.getByRole("button", { name: "todayCommit:500" }));
+    });
+
+    expect(view.getByTestId("staged-amount").props.children).toBe("500");
+    expect(view.queryByText("todaySaveFailed")).toBeNull();
+  });
+
+  it("keeps staged input unchanged while an entry mutation is busy", async () => {
+    const view = await render(<TodayScreen />);
+    await fireEvent.press(view.getByRole("button", { name: "+100" }));
+    mockEntries.mockReturnValue(entriesValue({ busy: true }));
+    await view.rerender(<TodayScreen />);
+    await fireEvent.press(view.getByRole("button", { name: "+200" }));
+    await fireEvent.press(view.getByRole("button", { name: "todayResetTally" }));
+    expect(view.getByTestId("staged-amount").props.children).toBe("100");
+    await fireEvent.press(view.getByRole("button", { name: "todayCommit:100" }));
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
   it("clears the staged amount on request", async () => {
     const view = await render(<TodayScreen />);
 
@@ -133,6 +158,20 @@ describe("TodayScreen recording", () => {
 
     expect(view.getByTestId("staged-amount").props.children).toBe("313");
     expect(view.queryByTestId("custom-amount-input")).toBeNull();
+  });
+
+  it("preserves invalid pasted text instead of recording a different number", async () => {
+    const view = await render(<TodayScreen />);
+    await fireEvent.press(view.getByRole("button", { name: "todayCustomAmount" }));
+    for (const raw of ["1.5", "-10", "1e3", ","]) {
+      await fireEvent.changeText(view.getByTestId("custom-amount-input"), raw);
+      expect(view.getByTestId("custom-amount-input").props.value).toBe(raw);
+      expect(view.getByRole("button", { name: "todayApplyCustom" })).toBeDisabled();
+      expect(view.getByText("entryAmountInvalid")).toBeTruthy();
+    }
+    await fireEvent.changeText(view.getByTestId("custom-amount-input"), "00333");
+    await fireEvent.press(view.getByRole("button", { name: "todayApplyCustom" }));
+    expect(view.getByTestId("staged-amount").props.children).toBe("333");
   });
 
   it("does not stage an invalid custom amount", async () => {

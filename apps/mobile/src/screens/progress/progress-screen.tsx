@@ -1,8 +1,9 @@
 import {
   ActivityChart,
-  AmountText,
   AppScreen,
+  AppButton,
   GoalSheet,
+  StateFeedback,
   SectionLabel,
   SegmentedControl,
   StatCard,
@@ -10,17 +11,16 @@ import {
 } from "@/components";
 import { AppHeader } from "@/components/app-header";
 import { useEntries } from "@/lib/entries";
-import { PROGRESS_RANGES, type ProgressRange } from "@/lib/progress-series";
+import { formatProgressBucketLabel, PROGRESS_RANGES, type ProgressRange } from "@/lib/progress-series";
 import { formatAppNumber, useTranslation } from "@/localization";
 import { radius, spacing, typography, useAppTheme } from "@/theme";
-import Activity from "lucide-react-native/icons/activity";
 import Calendar from "lucide-react-native/icons/calendar";
-import Flame from "lucide-react-native/icons/flame";
 import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import Target from "lucide-react-native/icons/target";
 import Trophy from "lucide-react-native/icons/trophy";
-import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { AppState, Pressable, Text, View } from "react-native";
 
 const rangeLabels = {
   week: "progressRangeWeek",
@@ -47,20 +47,31 @@ export function ProgressScreen() {
   const { t, localeTag } = useTranslation();
   const { colors } = useAppTheme();
   const entries = useEntries();
+  const router = useRouter();
 
-  const [range, setRange] = useState<ProgressRange>("week");
+  const [range, setRange] = useState<ProgressRange>(entries.progressRange ?? "week");
   const [goalOpen, setGoalOpen] = useState(false);
   const [goalFailed, setGoalFailed] = useState(false);
 
-  const series = entries.progressSeries;
+  const pending = entries.pendingCount > 0 || entries.failedCount > 0 || entries.syncState === "conflict";
+  const series = !pending && entries.progressSeries?.range === range ? entries.progressSeries : null;
   const failed = entries.progressFailed;
   const loadSeries = entries.loadProgressSeries;
 
+  const refresh = entries.refresh;
+  useFocusEffect(useCallback(() => {
+    void refresh();
+    const subscription = AppState.addEventListener("change", state => {
+      if (state === "active") void refresh();
+    });
+    return () => subscription.remove();
+  }, [refresh]));
+
   useEffect(() => {
-    // A failed load keeps the previous series on screen; the store records the
-    // failure so the notice below can explain that it may be out of date.
+    if (!entries.timeZone || entries.viewState === "loading" || entries.viewState === "error" ||
+        entries.busy || !entries.online || pending) return;
     void loadSeries(range).catch(() => {});
-  }, [loadSeries, range]);
+  }, [loadSeries, range, entries.timeZone, entries.viewState, entries.progressRevision, entries.busy, entries.online, pending]);
 
   // Totals travel as strings so lifetime sums stay exact; BigInt keeps that
   // exactness all the way into the formatter.
@@ -69,8 +80,6 @@ export function ProgressScreen() {
     try {
       await (amount === null ? entries.clearGoal() : entries.setGoal(amount));
       setGoalOpen(false);
-      // The goal changes which days count as achieved, so the series is stale.
-      void loadSeries(range).catch(() => {});
     } catch {
       setGoalFailed(true);
     }
@@ -78,6 +87,13 @@ export function ProgressScreen() {
 
   const number = (value: string) => formatAppNumber(BigInt(value), localeTag);
   const hasGoalDays = Boolean(series && series.goalDays !== "0");
+
+  if (entries.viewState === "loading" || entries.viewState === "error") {
+    return <AppScreen floatingTabBar header={<AppHeader subtitle={t("headerProgressEyebrow")} title={t("appName")} />}>
+      <StateFeedback state={entries.viewState} />
+      {entries.viewState === "error" ? <AppButton label={t("commonRetry")} onPress={() => void refresh()} /> : null}
+    </AppScreen>;
+  }
 
   return (
     <AppScreen
@@ -114,27 +130,11 @@ export function ProgressScreen() {
         </Pressable>
       </View>
 
-      {failed ? (
-        <Surface tone="muted">
-          <SectionLabel tone="gold">{t("progressSeriesFailed")}</SectionLabel>
-        </Surface>
-      ) : null}
-
       <View style={{ flexDirection: "row", gap: spacing.md }}>
         <StatCard
-          caption={
-            range === "week"
-              ? t("progressActiveStreak")
-              : t("progressLongestStreak")
-          }
-          icon={<Flame color={colors.gold} size={20} />}
-          value={t("progressStreakDays", {
-            count: String(
-              range === "week"
-                ? (series?.currentStreak ?? 0)
-                : (series?.longestStreak ?? 0),
-            ),
-          })}
+          caption={t("todayGoal")}
+          icon={<Target color={colors.gold} size={20} />}
+          value={entries.summary.todayGoal ? number(entries.summary.todayGoal) : "—"}
         />
         <StatCard
           caption={t("progressAllTimeTotal")}
@@ -143,6 +143,15 @@ export function ProgressScreen() {
         />
       </View>
 
+      {pending ? (
+        <Surface tone="muted">
+          <Text style={[typography.cardTitle, { color: colors.textPrimary }]}>{t("progressAwaitingSyncTitle")}</Text>
+          <Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>{t("progressAwaitingSyncBody")}</Text>
+        </Surface>
+      ) : !entries.online && series ? <Surface tone="muted"><Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>{t("progressSyncNotice")}</Text></Surface> : null}
+      {failed ? <Surface tone="muted"><Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>{t("progressSeriesFailed")}</Text><AppButton label={t("commonRetry")} variant="secondary" onPress={() => void loadSeries(range).catch(() => {})} /></Surface> : null}
+      {!series && !failed && !pending ? <StateFeedback state={entries.online ? "loading" : "offlineEmpty"} /> : null}
+      {series ? <>
       <View style={{ flexDirection: "row", gap: spacing.md }}>
         <StatCard
           caption={t(periodLabels[range])}
@@ -188,81 +197,22 @@ export function ProgressScreen() {
         </View>
 
         <ActivityChart
+          statusLabels={{ reached: t("progressReachedGoal"), below: t("progressBelowGoal"), recorded: t("progressRecorded"), future: t("progressFuture"), current: t("progressCurrentPeriod") }}
           bars={(series?.buckets ?? []).map((bucket) => ({
-            label: bucket.label,
+            label: formatProgressBucketLabel(bucket.start < series.periodStart ? series.periodStart : bucket.start, range, localeTag),
             total: bucket.total,
+            goalTotal: bucket.goalTotal,
             goalReached: bucket.goalReached,
-            current: bucket.future,
+            future: bucket.future,
+            current: bucket.start === series.today,
           }))}
           emptyLabel={t("progressChartEmpty")}
         />
       </Surface>
 
-      <Surface padding="none" style={{ overflow: "hidden" }}>
-        <View style={{ padding: spacing.xl, paddingBottom: spacing.md }}>
-          <Text style={[typography.cardTitle, { color: colors.textPrimary }]}>
-            {t("progressHistoryTitle")}
-          </Text>
-        </View>
+      </> : null}
 
-        {(series?.buckets ?? [])
-          .filter((bucket) => !bucket.future)
-          .slice()
-          .reverse()
-          .map((bucket) => (
-            <View
-              key={bucket.start}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: spacing.lg,
-                paddingHorizontal: spacing.xl,
-                paddingVertical: spacing.lg,
-                borderTopColor: colors.border,
-                borderTopWidth: 1,
-              }}
-            >
-              <View
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: radius.pill,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor:
-                    bucket.goalReached === true
-                      ? colors.primarySoft
-                      : colors.surfaceMuted,
-                }}
-              >
-                <Activity
-                  color={
-                    bucket.goalReached === true
-                      ? colors.primary
-                      : colors.textSecondary
-                  }
-                  size={14}
-                />
-              </View>
-              <View style={{ flex: 1, gap: spacing.xxs }}>
-                <Text
-                  numberOfLines={1}
-                  style={[typography.bodyStrong, { color: colors.textPrimary }]}
-                >
-                  {bucket.label}
-                </Text>
-                <SectionLabel size="small">
-                  {bucket.goalReached === null
-                    ? t("progressRecorded")
-                    : bucket.goalReached
-                      ? t("progressGoalReached")
-                      : t("progressBelowGoal")}
-                </SectionLabel>
-              </View>
-              <AmountText value={number(bucket.total)} variant="amount" />
-            </View>
-          ))}
-      </Surface>
+      <AppButton label={t("todayHistory")} variant="secondary" onPress={() => router.push("/progress/history")} />
 
       <GoalSheet
         busy={entries.busy}
@@ -272,7 +222,12 @@ export function ProgressScreen() {
           enableLabel: t("goalEnableLabel"),
           enableHint: t("goalEnableHint"),
           unit: t("goalUnit"),
+          sliderLabel: t("goalSliderLabel"),
+          sliderHint: t("goalSliderHint"),
+          amountLabel: t("goalAmountLabel"),
+          amountHint: t("goalAmountHint"),
           save: t("goalSave"),
+          clear: t("goalClear"),
           close: t("commonCancel"),
           invalid: t("entryAmountInvalid"),
           failed: t("goalSaveFailed"),

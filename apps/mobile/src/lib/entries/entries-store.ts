@@ -52,11 +52,21 @@ export class EntriesStore {
     progressRange: "week" as ProgressRange,
     progressLoading: false,
     progressFailed: false,
+    progressRevision: 0,
   };
 
   private readonly listeners = new Set<() => void>();
   private version = 0;
   private syncing = false;
+  private progressRequestId = 0;
+
+  private invalidateProgress() {
+    this.progressRequestId += 1;
+    this.snapshot.progressSeries = null;
+    this.snapshot.progressLoading = false;
+    this.snapshot.progressFailed = false;
+    this.snapshot.progressRevision += 1;
+  }
 
   constructor(
     private readonly gateway: EntriesGateway,
@@ -98,6 +108,10 @@ export class EntriesStore {
   private applyOfflineState() {
     if (!this.offline) return;
     const state = this.offline.state;
+    if (JSON.stringify(this.snapshot.summary) !== JSON.stringify(state.summary) ||
+        this.snapshot.timeZone !== (state.timeZone || this.fallbackTimeZone)) {
+      this.invalidateProgress();
+    }
     this.snapshot.entries = state.entries.filter(
       (entry) => entry.localState !== "pending_delete",
     );
@@ -165,6 +179,7 @@ export class EntriesStore {
         this.gateway.getSummary(this.snapshot.timeZone),
         this.gateway.list(null, 30),
       ]);
+      this.invalidateProgress();
       if (this.offline) {
         await this.offline.hydrate({
           entries: page.items,
@@ -221,25 +236,36 @@ export class EntriesStore {
    */
   async loadProgressSeries(range: ProgressRange) {
     if (!this.gateway.getProgressSeries || !this.snapshot.timeZone) return;
+    const requestId = ++this.progressRequestId;
+    const timeZone = this.snapshot.timeZone;
+    const isCurrent = () => requestId === this.progressRequestId && timeZone === this.snapshot.timeZone;
+    if (this.snapshot.progressSeries?.range !== range) this.snapshot.progressSeries = null;
     this.snapshot.progressRange = range;
     this.snapshot.progressLoading = true;
     this.snapshot.progressFailed = false;
     this.notify();
     try {
-      this.snapshot.progressSeries = await this.gateway.getProgressSeries(
-        this.snapshot.timeZone,
+      const series = await this.gateway.getProgressSeries(
+        timeZone,
         range,
       );
+      if (!isCurrent()) return;
+      if (series.range !== range) throw new Error("INVALID_RESPONSE");
+      this.snapshot.progressSeries = series;
     } catch (error) {
+      if (!isCurrent()) return;
       this.snapshot.progressFailed = true;
       throw error;
     } finally {
-      this.snapshot.progressLoading = false;
-      this.notify();
+      if (isCurrent()) {
+        this.snapshot.progressLoading = false;
+        this.notify();
+      }
     }
   }
 
   private applyAmount(entry: Entry, amount: string, direction: "add" | "subtract") {
+    this.invalidateProgress();
     const operation = direction === "add" ? addTotal : subtractTotal;
     this.snapshot.summary.allTimeTotal = operation(
       this.snapshot.summary.allTimeTotal,
@@ -274,7 +300,7 @@ export class EntriesStore {
   }
 
   async create(amount: number) {
-    if (this.snapshot.busy) return;
+    if (this.snapshot.busy) return false;
     const recordedAtClient = this.now().toISOString();
     const timeZone = this.snapshot.timeZone || this.fallbackTimeZone;
     const optimistic: Entry = {
@@ -327,7 +353,7 @@ export class EntriesStore {
         this.snapshot.busy = false;
         this.notify();
       }
-      return;
+      return true;
     }
     try {
       const entry = await this.gateway.create({
@@ -342,6 +368,7 @@ export class EntriesStore {
       );
       this.sortEntries();
       await this.refreshSummary();
+      return true;
     } catch (error) {
       this.snapshot.entries = this.snapshot.entries.filter(
         (entry) => entry.id !== optimistic.id,
@@ -522,6 +549,7 @@ export class EntriesStore {
 
   async setGoal(amount: number) {
     if (this.snapshot.busy) return;
+    this.invalidateProgress();
     const before = { ...this.snapshot.summary };
     this.snapshot.busy = true;
     this.snapshot.errorCode = null;
@@ -568,6 +596,7 @@ export class EntriesStore {
 
   async clearGoal() {
     if (this.snapshot.busy) return;
+    this.invalidateProgress();
     const before = { ...this.snapshot.summary };
     this.snapshot.busy = true;
     this.snapshot.errorCode = null;

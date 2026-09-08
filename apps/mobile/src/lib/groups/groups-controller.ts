@@ -11,6 +11,7 @@ import {
 import type { GroupInsights } from "@/lib/group-insights";
 import type { GroupPeriod } from "./periods";
 import type {
+  GroupCampaignSelection,
   AppLocale,
   CreateInviteOptions,
   GroupInvite,
@@ -52,6 +53,9 @@ export class GroupsController {
   private readonly membersPageSize: number;
   private readonly inflight = new Map<string, Promise<unknown>>();
   private readonly leaderboardRequestIds = new Map<string, number>();
+  private nextLeaderboardRequestId = 0;
+  private nextInsightsRequestId = 0;
+  private readonly insightsRequestIds = new Map<string, number>();
   private session = 0;
   private groupsRequestId = 0;
   private invitesRequestId = 0;
@@ -111,6 +115,7 @@ export class GroupsController {
     this.session += 1;
     this.inflight.clear();
     this.leaderboardRequestIds.clear();
+    this.insightsRequestIds.clear();
     this.groupsRequestId = 0;
     this.invitesRequestId = 0;
     this.membersRequestId = 0;
@@ -124,6 +129,7 @@ export class GroupsController {
     this.session += 1;
     this.inflight.clear();
     this.leaderboardRequestIds.clear();
+    this.insightsRequestIds.clear();
     this.groupsRequestId = 0;
     this.invitesRequestId = 0;
     this.membersRequestId = 0;
@@ -163,6 +169,10 @@ export class GroupsController {
           return;
         }
         this.store.update((state) => {
+          const activeIds = new Set(response.items.map((group) => group.id));
+          for (const previous of state.groups.items) {
+            if (!activeIds.has(previous.id)) this.removeGroupState(state, previous.id);
+          }
           state.groups.items = response.items;
           state.groups.status = "ready";
           state.groups.errorCode = null;
@@ -267,7 +277,7 @@ export class GroupsController {
     }
 
     const scope = `${groupId}:${period}`;
-    const requestId = (this.leaderboardRequestIds.get(scope) ?? 0) + 1;
+    const requestId = ++this.nextLeaderboardRequestId;
     this.leaderboardRequestIds.set(scope, requestId);
 
     this.store.update((state) => {
@@ -329,6 +339,9 @@ export class GroupsController {
           return;
         }
         this.store.update((state) => {
+          if (groupsError.code === "NOT_FOUND" || groupsError.code === "FORBIDDEN") {
+            this.removeGroupState(state, groupId);
+          }
           const target = ensureLeaderboardState(state, groupId, period);
           target.loading = false;
           target.loadingMore = false;
@@ -370,6 +383,7 @@ export class GroupsController {
         }
         if (state.leaderboard.byGroup[groupId]) {
           state.leaderboard.byGroup[groupId].week = createEmptyLeaderboardState("week");
+          state.leaderboard.byGroup[groupId].month = createEmptyLeaderboardState("month");
           state.leaderboard.byGroup[groupId].all_time = createEmptyLeaderboardState(
             "all_time",
           );
@@ -390,9 +404,10 @@ export class GroupsController {
 
   async setGroupGoal(
     groupId: string,
-    period: "week" | "month",
-    amount: number,
+    period: GroupPeriod,
+    amount: number | null,
     expectedRevision?: number,
+    campaign?: GroupCampaignSelection,
   ) {
     this.requireAccountId();
     if (!this.gateway.setGroupGoal) {
@@ -409,6 +424,7 @@ export class GroupsController {
         period,
         amount,
         resolvedRevision,
+        campaign,
       );
       if (!this.isSessionCurrent(session)) return response;
       this.store.update((state) => {
@@ -417,7 +433,22 @@ export class GroupsController {
             ? { ...group, revision: response.revision }
             : group,
         );
+        for (const cached of Object.values(state.leaderboard.byGroup[groupId] ?? {})) {
+          if (cached.group) cached.group = { ...cached.group, revision: response.revision };
+        }
+        if (state.members.groupId === groupId && state.members.group) {
+          state.members.group = { ...state.members.group, revision: response.revision };
+        }
+        if (state.insightsByGroup[groupId]) {
+          delete state.insightsByGroup[groupId][period];
+          if (period === "month") delete state.insightsByGroup[groupId].week;
+        }
       });
+      await this.loadInsights(groupId, period).catch(() => undefined);
+      if (period === "month") {
+        await this.loadInsights(groupId, "week").catch(() => undefined);
+        await this.loadLeaderboard(groupId, "month", { mode: "reset" }).catch(() => undefined);
+      }
       return response;
     });
   }
@@ -427,22 +458,41 @@ export class GroupsController {
     period: GroupPeriod = "week",
   ): Promise<GroupInsights> {
     this.requireAccountId();
-    if (!this.gateway.getInsights) {
-      throw new Error("INTERNAL");
-    }
-    await this.requireOnline();
+    const session = this.session;
+    const scope = `${groupId}:${period}`;
+    const requestId = ++this.nextInsightsRequestId;
+    this.insightsRequestIds.set(scope, requestId);
+    const isCurrent = () => this.isSessionCurrent(session)
+      && this.insightsRequestIds.get(scope) === requestId;
+    this.store.update((state) => {
+      state.insightsStatusByGroup[groupId] ??= {};
+      state.insightsStatusByGroup[groupId][period] = { loading: true, errorCode: null };
+    });
     try {
+      if (!this.gateway.getInsights) throw new GroupsError("INTERNAL");
+      await this.requireOnline();
       const insights = await this.gateway.getInsights(groupId, period);
+      if (!isCurrent()) return insights;
+      if (insights.groupId !== groupId || insights.period !== period) {
+        throw new GroupsError("INVALID_RESPONSE");
+      }
       this.store.update((state) => {
-        state.insightsByGroup[groupId] = insights;
-        state.insightsFailed = false;
+        state.insightsByGroup[groupId] ??= {};
+        state.insightsByGroup[groupId][period] = insights;
+        state.insightsStatusByGroup[groupId][period] = { loading: false, errorCode: null };
       });
       return insights;
     } catch (error) {
+      if (!isCurrent()) throw error;
       // The previously loaded figures stay on screen; the flag lets the screen
       // explain that they may be out of date.
       this.store.update((state) => {
-        state.insightsFailed = true;
+        const code = toGroupsError(error).code;
+        if (code === "NOT_FOUND" || code === "FORBIDDEN") this.removeGroupState(state, groupId);
+        state.insightsStatusByGroup[groupId] ??= {};
+        state.insightsStatusByGroup[groupId][period] = {
+          loading: false, errorCode: code,
+        };
       });
       throw error;
     }
@@ -871,6 +921,17 @@ export class GroupsController {
     group: GroupSnapshot,
     role?: GroupListItem["role"],
   ) {
+    for (const periodState of Object.values(state.leaderboard.byGroup[group.id] ?? {})) {
+      if (!periodState.group) continue;
+      periodState.group = {
+        ...periodState.group,
+        name: group.name,
+        timezone: group.timezone,
+        leaderboardAnonymous: group.leaderboardAnonymous,
+        revision: group.revision,
+        ...(role ? { role, isOwner: role === "owner" } : {}),
+      };
+    }
     const index = state.groups.items.findIndex(({ id }) => id === group.id);
     if (index >= 0) {
       state.groups.items[index] = {
@@ -895,6 +956,17 @@ export class GroupsController {
   }
 
   private removeGroupState(state: GroupsSnapshot, groupId: string) {
+    for (const key of this.inflight.keys()) {
+      if (key.startsWith(`leaderboard:${this.session}:${groupId}:`)) this.inflight.delete(key);
+    }
+    for (const scope of this.insightsRequestIds.keys()) {
+      if (scope.startsWith(`${groupId}:`)) this.insightsRequestIds.delete(scope);
+    }
+    for (const scope of this.leaderboardRequestIds.keys()) {
+      if (scope.startsWith(`${groupId}:`)) this.leaderboardRequestIds.delete(scope);
+    }
+    delete state.insightsByGroup[groupId];
+    delete state.insightsStatusByGroup[groupId];
     state.groups.items = state.groups.items.filter((group) => group.id !== groupId);
     delete state.leaderboard.byGroup[groupId];
     if (state.leaderboard.selectedGroupId === groupId) {

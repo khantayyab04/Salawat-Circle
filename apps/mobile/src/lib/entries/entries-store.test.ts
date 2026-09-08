@@ -130,10 +130,10 @@ describe("EntriesStore", () => {
     expect(store.snapshot.entries).toHaveLength(2);
     expect(store.snapshot.summary.todayTotal).toBe("47");
     expect(create).toHaveBeenCalledTimes(1);
-    await expect(second).resolves.toBeUndefined();
+    await expect(second).resolves.toBe(false);
 
     resolveCreate({ ...existingEntry, id: "00000000-0000-4000-8000-000000000002", amount: "42" });
-    await first;
+    await expect(first).resolves.toBe(true);
   });
 
   it("preserves an optimistic entry when the initial history page finishes later", async () => {
@@ -1406,6 +1406,21 @@ describe("EntriesStore", () => {
 });
 
 describe("progress series", () => {
+  it("does not let a slower previous range replace the latest selection", async () => {
+    let finishWeek!: (value: typeof series) => void;
+    const store = await readyStore({
+      getProgressSeries: vi.fn().mockImplementation((_zone, range) =>
+        range === "week" ? new Promise((resolve) => { finishWeek = resolve; }) :
+          Promise.resolve({ ...series, range: "month", total: "9000" })),
+    });
+    const week = store.loadProgressSeries("week");
+    await store.loadProgressSeries("month");
+    finishWeek(series);
+    await week;
+    expect(store.snapshot.progressSeries).toMatchObject({ range: "month", total: "9000" });
+    expect(store.snapshot.progressLoading).toBe(false);
+  });
+
   const series = {
     range: "week" as const,
     periodStart: "2026-08-31",
@@ -1439,7 +1454,7 @@ describe("progress series", () => {
 
     expect(getProgressSeries).toHaveBeenCalledWith("Europe/Berlin", "week");
     expect(store.snapshot.progressRange).toBe("week");
-    expect(store.snapshot.progressSeries?.longestStreak).toBe(12);
+    expect(store.snapshot.progressSeries?.achievedGoalDays).toBe("4");
   });
 
   it("switches range without leaving the previous one selected", async () => {
@@ -1461,7 +1476,7 @@ describe("progress series", () => {
     expect(store.snapshot.progressLoading).toBe(false);
   });
 
-  it("keeps the previous series visible when a refresh fails", async () => {
+  it("keeps the same range visible when a refresh fails", async () => {
     const getProgressSeries = vi
       .fn()
       .mockResolvedValueOnce(series)
@@ -1469,9 +1484,33 @@ describe("progress series", () => {
     const store = await readyStore({ getProgressSeries });
 
     await store.loadProgressSeries("week");
-    await expect(store.loadProgressSeries("month")).rejects.toThrow("OFFLINE");
+    await expect(store.loadProgressSeries("week")).rejects.toThrow("OFFLINE");
 
     expect(store.snapshot.progressSeries?.total).toBe("5450");
+  });
+
+  it("clears an old range before loading another and never restores it on failure", async () => {
+    const store = await readyStore({ getProgressSeries: vi.fn()
+      .mockResolvedValueOnce(series).mockRejectedValueOnce(new Error("OFFLINE")) });
+    await store.loadProgressSeries("week");
+    await expect(store.loadProgressSeries("month")).rejects.toThrow("OFFLINE");
+    expect(store.snapshot.progressSeries).toBeNull();
+    expect(store.snapshot.progressFailed).toBe(true);
+  });
+
+  it("invalidates an already loaded chart after recording changes", async () => {
+    const store = await readyStore({ getProgressSeries: vi.fn().mockResolvedValue(series) });
+    await store.loadProgressSeries("week");
+    const revision = store.snapshot.progressRevision;
+    await store.create(333);
+    expect(store.snapshot.progressSeries).toBeNull();
+    expect(store.snapshot.progressRevision).toBeGreaterThan(revision);
+  });
+
+  it("rejects a server series for the wrong requested range", async () => {
+    const store = await readyStore({ getProgressSeries: vi.fn().mockResolvedValue(series) });
+    await expect(store.loadProgressSeries("month")).rejects.toThrow("INVALID_RESPONSE");
+    expect(store.snapshot.progressSeries).toBeNull();
   });
 
   it("does nothing when the gateway cannot provide a series", async () => {

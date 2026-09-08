@@ -1,21 +1,25 @@
 import { radius, shadows, spacing, typography, useAppTheme } from "@/theme";
+import { useAppReducedMotion } from "@/lib/use-app-reduced-motion";
+import { useState, type ReactNode } from "react";
+import Animated from "react-native-reanimated";
 import {
   ActivityIndicator,
   Pressable,
   Text,
+  View,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
 
 type Variant = "primary" | "secondary" | "ghost" | "destructive";
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 /**
  * The primary action style from the design: a tall, very round button with a
  * bold label, a soft coloured shadow on the primary variant and a hairline
  * outline on the secondary one.
  *
- * Labels shrink slightly rather than truncate, so a long translation still
- * fits on a narrow phone.
+ * Labels can wrap at their normal size so translated actions stay readable.
  */
 export function AppButton({
   label,
@@ -25,6 +29,8 @@ export function AppButton({
   variant = "primary",
   style,
   accessibilityHint,
+  icon,
+  static: isStatic = false,
 }: {
   label: string;
   onPress?: () => void;
@@ -33,8 +39,12 @@ export function AppButton({
   variant?: Variant;
   style?: StyleProp<ViewStyle>;
   accessibilityHint?: string;
+  icon?: ReactNode;
+  static?: boolean;
 }) {
   const { colors } = useAppTheme();
+  const reducedMotion = useAppReducedMotion();
+  const [pressed, setPressed] = useState(false);
   const palette =
     variant === "primary"
       ? {
@@ -65,16 +75,23 @@ export function AppButton({
             };
   const inactive = disabled || loading;
   return (
-    <Pressable
+    <AnimatedPressable
+      accessibilityLabel={label}
       accessibilityHint={accessibilityHint}
       accessibilityRole="button"
-      accessibilityState={{ disabled: inactive }}
+      accessibilityState={{ disabled: inactive, ...(loading ? { busy: true } : {}) }}
       disabled={inactive}
       onPress={onPress}
-      style={({ pressed }) => [
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+      pressRetentionOffset={16}
+      style={[
         {
           minHeight: 56,
           minWidth: 48,
+          flexShrink: 1,
+          flexDirection: "row",
+          gap: spacing.sm,
           borderRadius: radius.xl,
           borderCurve: "continuous",
           borderColor: palette.border,
@@ -86,6 +103,10 @@ export function AppButton({
           backgroundColor: palette.background,
           boxShadow: inactive ? undefined : palette.shadow,
           opacity: inactive ? 0.55 : pressed ? 0.85 : 1,
+          transform: [{ scale: pressed && !inactive && !isStatic && !reducedMotion ? 0.96 : 1 }],
+          transitionProperty: ["transform", "opacity"],
+          transitionDuration: reducedMotion ? 0 : 120,
+          transitionTimingFunction: "ease-out",
         },
         style,
       ]}
@@ -93,15 +114,15 @@ export function AppButton({
       {loading ? (
         <ActivityIndicator color={palette.foreground} />
       ) : (
+        <>
+        {icon ? <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">{icon}</View> : null}
         <Text
-          adjustsFontSizeToFit
-          maxFontSizeMultiplier={1.4}
-          numberOfLines={1}
-          style={[typography.button, { color: palette.foreground }]}
+          style={[typography.button, { color: palette.foreground, flexShrink: 1, textAlign: "center" }]}
         >
           {label}
         </Text>
+        </>
       )}
-    </Pressable>
+    </AnimatedPressable>
   );
 }

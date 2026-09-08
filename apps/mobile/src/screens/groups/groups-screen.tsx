@@ -13,10 +13,12 @@ import {
   formatAppTime,
   useTranslation,
 } from "@/localization";
-import { spacing } from "@/theme";
+import { spacing, useAppTheme } from "@/theme";
+import Plus from "lucide-react-native/icons/plus";
+import Users from "lucide-react-native/icons/users";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { RefreshControl, View } from "react-native";
+import { RefreshControl, View, useWindowDimensions } from "react-native";
 
 function formatServerTimestamp(
   value: string,
@@ -41,6 +43,9 @@ function formatNumeric(value: string, localeTag: string) {
 }
 
 export function GroupsScreen() {
+  const { colors } = useAppTheme();
+  const { width, fontScale } = useWindowDimensions();
+  const stackActions = width / fontScale < 560;
   const { t, localeTag } = useTranslation();
   const { push } = useRouter();
   const { groups, online, refreshGroups } = useGroups();
@@ -170,16 +175,18 @@ export function GroupsScreen() {
         </View>
       )}
 
-      <View style={{ flexDirection: "row", gap: spacing.md }}>
+      <View testID="group-actions" style={{ flexDirection: stackActions ? "column" : "row", gap: spacing.md }}>
         <AppButton
           label={t("groupsCreate")}
+          icon={<Plus size={20} color={colors.textOnPrimary} />}
           onPress={() => push("/groups/create")}
-          style={{ flex: 1 }}
+          style={stackActions ? undefined : { flex: 1 }}
         />
         <AppButton
           label={t("groupsJoinManualCode")}
+          icon={<Users size={20} color={colors.goldText} />}
           onPress={() => push("/join")}
-          style={{ flex: 1 }}
+          style={stackActions ? undefined : { flex: 1 }}
           variant="secondary"
         />
       </View>

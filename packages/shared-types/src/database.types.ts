@@ -36,6 +36,35 @@ export type Database = {
         }
         Relationships: []
       }
+      group_goal_campaigns: {
+        Row: {
+          end_date: string
+          group_id: string
+          mode: string
+          start_date: string
+        }
+        Insert: {
+          end_date: string
+          group_id: string
+          mode: string
+          start_date: string
+        }
+        Update: {
+          end_date?: string
+          group_id?: string
+          mode?: string
+          start_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_goal_campaigns_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: true
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       group_goal_versions: {
         Row: {
           amount: number | null
@@ -380,9 +409,11 @@ export type Database = {
       set_group_goal: {
         Args: {
           p_amount: number
+          p_campaign_mode?: string
           p_expected_revision: number
           p_group_id: string
           p_period: string
+          p_start_date?: string
         }
         Returns: Json
       }

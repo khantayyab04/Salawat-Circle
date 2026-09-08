@@ -33,6 +33,24 @@ const DEFAULT_NOTIFICATION_CONTENT: ReminderNotificationContent = {
   title: "Salawat Circle",
   body: "Zeit für deine heutige Salawat.",
 };
+const DEFAULT_JUMUAH_NOTIFICATION_CONTENT: ReminderNotificationContent = {
+  title: "Salawat Circle",
+  body: "Freitag ist da – nimm dir Zeit für Salawat.",
+};
+type ReminderNotificationCopy = {
+  daily: ReminderNotificationContent;
+  jumuah: ReminderNotificationContent;
+};
+
+function sameCopy(
+  first: ReminderNotificationCopy,
+  second: ReminderNotificationCopy,
+) {
+  return first.daily.title === second.daily.title &&
+    first.daily.body === second.daily.body &&
+    first.jumuah.title === second.jumuah.title &&
+    first.jumuah.body === second.jumuah.body;
+}
 
 type ReminderSnapshot = {
   accountId: string | null;
@@ -41,6 +59,7 @@ type ReminderSnapshot = {
   time: ReminderTime;
   jumuah: StoredJumuahReminder;
   busy: boolean;
+  error: boolean;
 };
 
 export class ReminderController {
@@ -55,8 +74,15 @@ export class ReminderController {
       notificationId: null,
     },
     busy: false,
+    error: false,
   };
-  private notificationContent = DEFAULT_NOTIFICATION_CONTENT;
+  private notificationContent: ReminderNotificationCopy = {
+    daily: DEFAULT_NOTIFICATION_CONTENT,
+    jumuah: DEFAULT_JUMUAH_NOTIFICATION_CONTENT,
+  };
+  private requestedNotificationContent = this.notificationContent;
+  private mutationTail: Promise<void> = Promise.resolve();
+  private pendingMutations = 0;
 
   constructor(
     private readonly store: ReminderStore,
@@ -64,6 +90,10 @@ export class ReminderController {
   ) {}
 
   async initialize(accountId: string) {
+    return this.enqueueMutation(() => this.initializeNow(accountId));
+  }
+
+  private async initializeNow(accountId: string) {
     const previousAccountId = await this.store.getActiveAccount();
     if (previousAccountId && previousAccountId !== accountId) {
       const previousReminder = await this.store.load(previousAccountId);
@@ -102,7 +132,7 @@ export class ReminderController {
       if (!scheduled.some(({ identifier }) => identifier === stored.notificationId)) {
         dailyNotificationId = await this.scheduler.scheduleDaily(
           this.snapshot.time,
-          this.notificationContent,
+          this.notificationContent.daily,
         );
         await this.store.save(
           accountId,
@@ -126,7 +156,7 @@ export class ReminderController {
       ) {
         const jumuahNotificationId = await this.scheduler.scheduleFriday(
           parseReminderTime(this.snapshot.jumuah),
-          this.notificationContent,
+          this.notificationContent.jumuah,
         );
         jumuah = {
           ...this.snapshot.jumuah,
@@ -149,25 +179,28 @@ export class ReminderController {
   }
 
   async enable() {
+    return this.enqueueMutation(() => this.enableNow());
+  }
+
+  private async enableNow() {
     const accountId = this.requireAccountId();
-    if (this.snapshot.permission === "blocked" || this.snapshot.busy) return;
-    this.snapshot.busy = true;
+    if (this.snapshot.permission === "blocked" || this.snapshot.enabled) return;
+    const permission =
+      this.snapshot.permission === "granted"
+        ? "granted"
+        : await this.scheduler.requestPermission();
+    this.snapshot.permission = permission;
+    if (permission !== "granted") {
+      this.snapshot.enabled = false;
+      return;
+    }
+    const current = await this.store.load(accountId);
+    const notificationId = await this.scheduler.scheduleDaily(
+      this.snapshot.time,
+      this.notificationContent.daily,
+    );
+    let saved = false;
     try {
-      const permission =
-        this.snapshot.permission === "granted"
-          ? "granted"
-          : await this.scheduler.requestPermission();
-      this.snapshot.permission = permission;
-      if (permission !== "granted") {
-        this.snapshot.enabled = false;
-        return;
-      }
-      const current = await this.store.load(accountId);
-      if (current?.notificationId) await this.scheduler.cancel(current.notificationId);
-      const notificationId = await this.scheduler.scheduleDaily(
-        this.snapshot.time,
-        this.notificationContent,
-      );
       await this.store.save(
         accountId,
         this.withJumuah(
@@ -179,15 +212,27 @@ export class ReminderController {
           current?.jumuah,
         ),
       );
+      saved = true;
+      if (current?.notificationId) {
+        await this.scheduler.cancel(current.notificationId);
+      }
       this.snapshot.enabled = true;
-    } finally {
-      this.snapshot.busy = false;
+    } catch (error) {
+      await this.scheduler.cancel(notificationId).catch(() => undefined);
+      if (saved && current) {
+        await this.store.save(accountId, current).catch(() => undefined);
+      }
+      throw error;
     }
   }
 
   async setTime(value: ReminderTime) {
-    const accountId = this.requireAccountId();
     const time = parseReminderTime(value);
+    return this.enqueueMutation(() => this.setTimeNow(time));
+  }
+
+  private async setTimeNow(time: ReminderTime) {
+    const accountId = this.requireAccountId();
     const current = await this.store.load(accountId);
     if (!this.snapshot.enabled) {
       await this.store.save(
@@ -204,13 +249,12 @@ export class ReminderController {
       this.snapshot.time = time;
       return;
     }
-    this.snapshot.busy = true;
+    const notificationId = await this.scheduler.scheduleDaily(
+      time,
+      this.notificationContent.daily,
+    );
+    let saved = false;
     try {
-      if (current?.notificationId) await this.scheduler.cancel(current.notificationId);
-      const notificationId = await this.scheduler.scheduleDaily(
-        time,
-        this.notificationContent,
-      );
       await this.store.save(
         accountId,
         this.withJumuah(
@@ -222,14 +266,27 @@ export class ReminderController {
           current?.jumuah,
         ),
       );
+      saved = true;
+      if (current?.notificationId) {
+        await this.scheduler.cancel(current.notificationId);
+      }
       this.snapshot.time = time;
-    } finally {
-      this.snapshot.busy = false;
+    } catch (error) {
+      await this.scheduler.cancel(notificationId).catch(() => undefined);
+      if (saved && current) {
+        await this.store.save(accountId, current).catch(() => undefined);
+      }
+      throw error;
     }
   }
 
   async disable() {
+    return this.enqueueMutation(() => this.disableNow());
+  }
+
+  private async disableNow() {
     const accountId = this.requireAccountId();
+    if (!this.snapshot.enabled) return;
     const current = await this.store.load(accountId);
     if (current?.notificationId) await this.scheduler.cancel(current.notificationId);
     await this.store.save(
@@ -266,7 +323,7 @@ export class ReminderController {
       }
       const notificationId = await this.scheduler.scheduleFriday(
         parseReminderTime(this.snapshot.jumuah),
-        this.notificationContent,
+        this.notificationContent.jumuah,
       );
       this.snapshot.jumuah = {
         ...this.snapshot.jumuah,
@@ -319,7 +376,7 @@ export class ReminderController {
       }
       const notificationId = await this.scheduler.scheduleFriday(
         time,
-        this.notificationContent,
+        this.notificationContent.jumuah,
       );
       this.snapshot.jumuah = {
         ...time,
@@ -396,56 +453,60 @@ export class ReminderController {
     this.snapshot.accountId = null;
   }
 
-  async setNotificationContent(content: ReminderNotificationContent) {
-    if (
-      this.notificationContent.title === content.title &&
-      this.notificationContent.body === content.body
-    ) {
-      return;
-    }
-    this.notificationContent = content;
-    if (
-      !this.snapshot.accountId ||
-      (!this.snapshot.enabled && !this.snapshot.jumuah.enabled)
-    ) {
-      return;
-    }
-    const current = await this.store.load(this.snapshot.accountId);
-    let notificationId = current?.notificationId ?? null;
-    let jumuah = current?.jumuah;
-    if (this.snapshot.enabled) {
-      if (current?.notificationId) await this.scheduler.cancel(current.notificationId);
-      notificationId = await this.scheduler.scheduleDaily(
-        this.snapshot.time,
-        this.notificationContent,
-      );
-    }
-    if (this.snapshot.jumuah.enabled) {
-      if (current?.jumuah?.notificationId) {
-        await this.scheduler.cancel(current.jumuah.notificationId);
+  async setNotificationContent(
+    daily: ReminderNotificationContent,
+    jumuah: ReminderNotificationContent = daily,
+  ) {
+    const content: ReminderNotificationCopy = { daily, jumuah };
+    if (sameCopy(this.requestedNotificationContent, content)) return;
+    this.requestedNotificationContent = content;
+    return this.enqueueMutation(async () => {
+      if (sameCopy(this.notificationContent, content)) return;
+      const accountId = this.snapshot.accountId;
+      if (!accountId || (!this.snapshot.enabled && !this.snapshot.jumuah.enabled)) {
+        this.notificationContent = content;
+        return;
       }
-      const jumuahNotificationId = await this.scheduler.scheduleFriday(
-        parseReminderTime(this.snapshot.jumuah),
-        this.notificationContent,
-      );
-      jumuah = {
-        ...this.snapshot.jumuah,
-        enabled: true,
-        notificationId: jumuahNotificationId,
-      };
-      this.snapshot.jumuah = jumuah;
-    }
-    await this.store.save(
-      this.snapshot.accountId,
-      this.withJumuah(
-        {
-          ...this.snapshot.time,
-          enabled: this.snapshot.enabled,
-          notificationId,
-        },
-        jumuah,
-      ),
-    );
+      const current = await this.store.load(accountId);
+      const replacements: string[] = [];
+      let saved = false;
+      try {
+        let notificationId = current?.notificationId ?? null;
+        let jumuah = current?.jumuah;
+        if (this.snapshot.enabled) {
+          notificationId = await this.scheduler.scheduleDaily(this.snapshot.time, content.daily);
+          replacements.push(notificationId);
+        }
+        if (this.snapshot.jumuah.enabled) {
+          const fridayId = await this.scheduler.scheduleFriday(parseReminderTime(this.snapshot.jumuah), content.jumuah);
+          replacements.push(fridayId);
+          jumuah = { ...this.snapshot.jumuah, notificationId: fridayId };
+        }
+        await this.store.save(accountId, this.withJumuah({
+          ...this.snapshot.time, enabled: this.snapshot.enabled, notificationId,
+        }, jumuah));
+        saved = true;
+        if (this.snapshot.enabled && current?.notificationId) {
+          await this.scheduler.cancel(current.notificationId);
+        }
+        if (this.snapshot.jumuah.enabled && current?.jumuah?.notificationId) {
+          await this.scheduler.cancel(current.jumuah.notificationId);
+        }
+        if (jumuah) this.snapshot.jumuah = jumuah;
+        this.notificationContent = content;
+      } catch (error) {
+        for (const identifier of replacements) {
+          await this.scheduler.cancel(identifier).catch(() => undefined);
+        }
+        if (saved && current) await this.store.save(accountId, current).catch(() => undefined);
+        throw error;
+      }
+    }).catch((error: unknown) => {
+      if (this.requestedNotificationContent === content) {
+        this.requestedNotificationContent = this.notificationContent;
+      }
+      throw error;
+    });
   }
 
   private withJumuah(
@@ -458,5 +519,26 @@ export class ReminderController {
   private requireAccountId() {
     if (!this.snapshot.accountId) throw new Error("ACCOUNT_REQUIRED");
     return this.snapshot.accountId;
+  }
+
+  private enqueueMutation(action: () => Promise<void>) {
+    this.pendingMutations += 1;
+    this.snapshot.busy = true;
+    const execute = async () => {
+      this.snapshot.error = false;
+      await action();
+    };
+    const operation =
+      this.pendingMutations === 1 ? execute() : this.mutationTail.then(execute);
+    this.mutationTail = operation.catch(() => undefined);
+    return operation
+      .catch((error: unknown) => {
+        this.snapshot.error = true;
+        throw error;
+      })
+      .finally(() => {
+        this.pendingMutations -= 1;
+        this.snapshot.busy = this.pendingMutations > 0;
+      });
   }
 }

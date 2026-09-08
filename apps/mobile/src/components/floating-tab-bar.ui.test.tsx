@@ -1,12 +1,22 @@
-import { describe, expect, it, jest } from "@jest/globals";
+import { afterEach, describe, expect, it, jest } from "@jest/globals";
 import { fireEvent, render } from "@testing-library/react-native";
 import { FloatingTabBar } from "./floating-tab-bar";
+
+let mockDarkMode = false;
+
+jest.mock("lucide-react-native/icons/house", () => {
+  const { Text } = jest.requireActual<typeof import("react-native")>("react-native");
+  return {
+    __esModule: true,
+    default: ({ color }: { color: string }) => <Text testID="today-tab-icon">{color}</Text>,
+  };
+});
 
 jest.mock("@/theme", () => {
   const actual = jest.requireActual<typeof import("@/theme")>("@/theme");
   return {
     ...actual,
-    useAppTheme: () => ({ colors: actual.lightColors, isDark: false }),
+    useAppTheme: () => ({ colors: mockDarkMode ? actual.darkColors : actual.lightColors, isDark: mockDarkMode }),
   };
 });
 
@@ -22,6 +32,9 @@ const tabs = [
 ] as const;
 
 describe("FloatingTabBar", () => {
+  afterEach(() => {
+    mockDarkMode = false;
+  });
   it("offers every destination as a labelled tab", async () => {
     const view = await render(
       <FloatingTabBar activeName="today" onSelect={() => {}} tabs={tabs} />,
@@ -43,6 +56,23 @@ describe("FloatingTabBar", () => {
       view.getByRole("tab", { name: "Today" }).props.accessibilityState
         .selected,
     ).toBe(false);
+  });
+
+  it("uses the gold-surface foreground for the selected tab icon", async () => {
+    const view = await render(
+      <FloatingTabBar activeName="today" onSelect={() => {}} tabs={tabs} />,
+    );
+
+    expect(view.getByTestId("today-tab-icon")).toHaveTextContent("#3A2B08");
+  });
+
+  it("keeps the selected tab icon readable in dark mode", async () => {
+    mockDarkMode = true;
+    const view = await render(
+      <FloatingTabBar activeName="today" onSelect={() => {}} tabs={tabs} />,
+    );
+
+    expect(view.getByTestId("today-tab-icon")).toHaveTextContent("#2A1E05");
   });
 
   it("reports the chosen destination", async () => {

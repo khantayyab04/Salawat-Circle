@@ -1,3 +1,5 @@
+export type GroupCampaignSelection = { mode: "gregorian" | "islamic" | "custom"; startDate: string };
+
 export type GroupRole = "owner" | "member";
 export type LeaderboardPeriod = "week" | "month" | "all_time";
 export type InviteKind = "token" | "code";
@@ -139,9 +141,9 @@ export type SetLeaderboardAnonymityResponse = {
 
 export type SetGroupGoalResponse = {
   groupId: string;
-  period: "week" | "month";
+  period: "week" | "month" | "all";
   effectiveFrom: string;
-  amount: string;
+  amount: string | null;
   revision: number;
 };
 

@@ -5,6 +5,7 @@ export function FormField({
   label,
   hint,
   error,
+  style,
   ...props
 }: TextInputProps & { label: string; hint?: string; error?: string }) {
   const { colors } = useAppTheme();
@@ -18,22 +19,27 @@ export function FormField({
         {label}
       </Text>
       <TextInput
+        accessibilityLabel={label}
         accessibilityLabelledBy={`${id}-label`}
         accessibilityHint={error ?? hint}
         placeholderTextColor={colors.textDisabled}
         style={[
           typography.body,
           {
-            minHeight: 48,
+            minHeight: 56,
+            lineHeight: undefined,
+            textAlignVertical: "center",
+            includeFontPadding: false,
             color: colors.textPrimary,
             backgroundColor: colors.surface,
-            borderColor: error ? colors.error : colors.borderStrong,
+            borderColor: error ? colors.error : colors.border,
             borderWidth: 1,
-            borderRadius: radius.md,
+            borderRadius: radius.xl,
             borderCurve: "continuous",
-            paddingHorizontal: spacing.md,
+            paddingHorizontal: spacing.lg,
             paddingVertical: spacing.sm,
           },
+          style,
         ]}
         {...props}
       />

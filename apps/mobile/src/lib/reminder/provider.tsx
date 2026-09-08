@@ -29,6 +29,7 @@ type ReminderContextValue = {
     time: ReminderTime;
   };
   busy: boolean;
+  error: boolean;
   enable(): Promise<void>;
   disable(): Promise<void>;
   setTime(time: ReminderTime): Promise<void>;
@@ -68,6 +69,9 @@ export function ReminderProvider({
       .setNotificationContent({
         title: t("appName"),
         body: t("reminderNotificationBody"),
+      }, {
+        title: t("appName"),
+        body: t("reminderJumuahNotificationBody"),
       })
       .catch(() => undefined);
   }, [controller, locale, t]);
@@ -75,7 +79,7 @@ export function ReminderProvider({
   useEffect(() => {
     if (!accountId) return;
     let active = true;
-    void controller.initialize(accountId).finally(() => {
+    void controller.initialize(accountId).catch(() => undefined).finally(() => {
       if (active) refresh();
     });
     return () => {
@@ -102,7 +106,7 @@ export function ReminderProvider({
     if (!accountId) return;
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") {
-        void controller.initialize(accountId).finally(refresh);
+        void controller.initialize(accountId).catch(() => undefined).finally(refresh);
       }
     });
     return () => subscription.remove();
@@ -110,34 +114,46 @@ export function ReminderProvider({
 
   const run = useCallback(
     async (action: () => Promise<void>) => {
-      const pending = action();
-      refresh();
-      await pending;
-      refresh();
+      try {
+        const pending = action();
+        refresh();
+        await pending;
+      } catch {
+        // The controller retains the last recoverable state and exposes only
+        // a stable boolean error to the UI.
+      } finally {
+        refresh();
+      }
     },
     [refresh],
   );
 
   const value = useMemo<ReminderContextValue>(
-    () => ({
-      permission: controller.snapshot.permission,
-      enabled: controller.snapshot.enabled,
-      time: controller.snapshot.time,
-      jumuah: {
-        enabled: controller.snapshot.jumuah.enabled,
-        time: {
-          hour: controller.snapshot.jumuah.hour,
-          minute: controller.snapshot.jumuah.minute,
+    () => {
+      // Reading the counter makes each explicit controller refresh publish a
+      // new context value even though the controller snapshot is mutable.
+      void revision;
+      return {
+        permission: controller.snapshot.permission,
+        enabled: controller.snapshot.enabled,
+        time: controller.snapshot.time,
+        jumuah: {
+          enabled: controller.snapshot.jumuah.enabled,
+          time: {
+            hour: controller.snapshot.jumuah.hour,
+            minute: controller.snapshot.jumuah.minute,
+          },
         },
-      },
-      busy: controller.snapshot.busy,
-      enable: () => run(() => controller.enable()),
-      disable: () => run(() => controller.disable()),
-      setTime: (time) => run(() => controller.setTime(time)),
-      enableJumuah: () => run(() => controller.enableJumuah()),
-      disableJumuah: () => run(() => controller.disableJumuah()),
-      setJumuahTime: (time) => run(() => controller.setJumuahTime(time)),
-    }),
+        busy: controller.snapshot.busy,
+        error: controller.snapshot.error,
+        enable: () => run(() => controller.enable()),
+        disable: () => run(() => controller.disable()),
+        setTime: (time) => run(() => controller.setTime(time)),
+        enableJumuah: () => run(() => controller.enableJumuah()),
+        disableJumuah: () => run(() => controller.disableJumuah()),
+        setJumuahTime: (time) => run(() => controller.setJumuahTime(time)),
+      };
+    },
     [controller, revision, run],
   );
 

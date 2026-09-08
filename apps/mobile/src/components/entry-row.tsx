@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { Entry } from "@/lib/entries";
 import { formatAppNumber, formatAppTime, useTranslation } from "@/localization";
 import { spacing } from "@/theme";
@@ -11,8 +12,12 @@ export function EntryRow({
   showTime,
   onEdit,
   onDelete,
+  disabled = false,
+  editor,
 }: {
   entry: Entry;
+  editor?: ReactNode;
+  disabled?: boolean;
   showTime: boolean;
   onEdit(id: string): void;
   onDelete(id: string): void;
@@ -20,9 +25,7 @@ export function EntryRow({
   const { t, localeTag } = useTranslation();
   const hasConflict = entry.localState === "conflict";
   const syncLabel =
-    entry.localState === "synced"
-      ? t("entrySyncSynced")
-      : entry.localState === "failed"
+    entry.localState === "failed"
       ? t("entrySyncFailed")
       : entry.localState === "conflict"
         ? t("entrySyncConflict")
@@ -41,13 +44,13 @@ export function EntryRow({
 
   return (
     <AppCard>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", gap: spacing.md }}>
+      {editor ?? <View style={{ gap: spacing.md }}>
         <View style={{ flex: 1, gap: spacing.xs }}>
           <AppText variant="bodyStrong">
             {formatAppNumber(BigInt(entry.amount), localeTag)}
           </AppText>
           <AppText variant="caption">
-            {entry.entryDate}
+            {new Date(`${entry.entryDate}T12:00:00Z`).toLocaleDateString(localeTag, { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}
             {showTime
               ? ` · ${formatAppTime(
                   new Date(entry.recordedAtClient),
@@ -62,20 +65,23 @@ export function EntryRow({
             </AppText>
           ) : null}
         </View>
-        <View style={{ gap: spacing.sm }}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
           <AppButton
+            disabled={disabled}
+            style={{ flex: 1 }}
             label={hasConflict ? t("entryResolveConflict") : t("entryEdit")}
             variant="secondary"
             onPress={() => onEdit(entry.id)}
           />
           <AppButton
-            disabled={hasConflict}
+            disabled={disabled || hasConflict}
+            style={{ flex: 1 }}
             label={t("entryDelete")}
             variant="destructive"
             onPress={requestDelete}
           />
         </View>
-      </View>
+      </View>}
     </AppCard>
   );
 }

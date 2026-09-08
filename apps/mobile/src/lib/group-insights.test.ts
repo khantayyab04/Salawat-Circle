@@ -76,3 +76,8 @@ describe("period aware insights", () => {
     expect(insights.totalMembers).toBeNull();
   });
 });
+
+test("preserves server-authoritative campaign dates and derived goal provenance", () => {
+  const result = parseGroupInsights({ group_id: "g", period: "month", week_total: "0", active_members: "1", weekly_average: null, goal_amount: "3000", remaining: "3000", days_remaining: 30, per_person_remaining: "3000", per_person_per_day: "100", campaign_mode: "custom", campaign_start: "2026-09-17", campaign_end: "2026-10-16", goal_source: "campaign" });
+  expect(result).toMatchObject({ campaign: { mode: "custom", startDate: "2026-09-17", endDate: "2026-10-16" }, goalSource: "campaign" });
+});

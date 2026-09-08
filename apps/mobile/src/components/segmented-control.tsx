@@ -59,7 +59,7 @@ export function SegmentedControl<T extends string>({
             }}
           >
             <SectionLabel
-              numberOfLines={1}
+              style={{ textAlign: "center" }}
               tone={selected ? "primary" : "muted"}
             >
               {option.label}

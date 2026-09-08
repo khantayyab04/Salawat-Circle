@@ -85,8 +85,6 @@ describe("EntriesProvider action identity", () => {
         activeDays: "0",
         goalDays: "0",
         achievedGoalDays: "0",
-        currentStreak: 0,
-        longestStreak: 0,
         buckets: [],
       });
 
